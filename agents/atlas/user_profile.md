@@ -1,0 +1,1 @@
+Tushar; focus includes London hospitality and Software Engineering (India/Remote). Currently exploring barista and hospitality roles in the West Midlands.
