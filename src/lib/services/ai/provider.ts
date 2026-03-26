@@ -43,10 +43,43 @@ type GeminiResponse = {
   candidates?: GeminiCandidate[];
 };
 
+// Fallback chain: if preferred model is rate-limited (429/503), try these in order
+// All confirmed available via ListModels API as of 2026-03-25
+const GEMINI_FALLBACK_MODELS = [
+  "gemini-3.1-flash-lite-preview",  // same 3.1 family, confirmed working
+  "gemini-3-flash-preview",          // 3.x family, confirmed working
+  "gemini-2.5-pro",                  // stable, confirmed working
+  "gemini-2.5-flash",                // fast stable fallback
+];
+
+async function callGemini(
+  apiKey: string,
+  model: string,
+  body: object,
+): Promise<{ ok: boolean; text?: string; status?: number; errorText?: string }> {
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    },
+  );
+
+  if (response.ok) {
+    const json = (await response.json()) as GeminiResponse;
+    const text = json.candidates?.[0]?.content?.parts?.map((p) => p.text ?? "").join(" ").trim();
+    return { ok: true, text: text || "I received an empty response from Gemini." };
+  }
+
+  const errorText = await response.text();
+  return { ok: false, status: response.status, errorText };
+}
+
 class GeminiApiProvider implements AiProvider {
   async chat(request: AiChatRequest): Promise<AiChatResponse> {
     const apiKey = request.apiKey || env.GEMINI_API_KEY;
-    const model = request.model ?? "gemini-3.1-flash-lite-preview";
+    const preferredModel = request.model ?? env.DEFAULT_AI_MODEL ?? "gemini-3.1-pro-preview";
 
     if (!apiKey) {
       const fallback = await new MockAiProvider("gemini").chat(request);
@@ -56,63 +89,62 @@ class GeminiApiProvider implements AiProvider {
       };
     }
 
-    let lastResponse: Response | null = null;
-    let attempts = 0;
-    const maxAttempts = 4;
-
-    while (attempts < maxAttempts) {
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`,
+    const requestBody = {
+      contents: [
         {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            contents: [
-              {
-                role: "user",
-                parts: [
-                  {
-                    text: `${request.systemPrompt}\n\nUser: ${request.userPrompt}`,
-                  },
-                ],
-              },
-            ],
-            generationConfig: {
-              temperature: request.temperature ?? 0.4,
-            },
-          }),
+          role: "user",
+          parts: [{ text: `${request.systemPrompt}\n\nUser: ${request.userPrompt}` }],
         },
-      );
+      ],
+      generationConfig: { temperature: request.temperature ?? 0.4 },
+    };
 
-      if (response.ok) {
-        const json = (await response.json()) as GeminiResponse;
-        const text = json.candidates?.[0]?.content?.parts?.map((part) => part.text ?? "").join(" ").trim();
+    // Try preferred model first with backoff, then fall through to fallbacks
+    const modelsToTry = [preferredModel, ...GEMINI_FALLBACK_MODELS.filter((m) => m !== preferredModel)];
 
+    for (const model of modelsToTry) {
+      let lastStatus = 0;
+      let lastError = "";
+
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const result = await callGemini(apiKey, model, requestBody);
+        if (result.ok) {
+          if (model !== preferredModel) {
+            console.warn(`[GeminiProvider] Fell back to ${model} (preferred: ${preferredModel})`);
+          }
+          return { text: result.text!, provider: "gemini", model };
+        }
+
+        lastStatus = result.status ?? 0;
+        lastError = result.errorText ?? "";
+
+        // Only retry on 429 (rate limit) or 503 (overloaded)
+        if ((lastStatus === 429 || lastStatus === 503) && attempt < 2) {
+          const delay = Math.pow(2, attempt) * 2000 + Math.random() * 500;
+          console.warn(`[GeminiProvider] ${model} returned ${lastStatus}, retrying in ${Math.round(delay)}ms...`);
+          await new Promise((resolve) => setTimeout(resolve, delay));
+          continue;
+        }
+        break;
+      }
+
+      // Hard error on the PREFERRED model (not a rate-limit) — stop immediately
+      if (model === preferredModel && lastStatus !== 429 && lastStatus !== 503 && lastStatus >= 400 && lastStatus < 500) {
         return {
-          text: text || "I received an empty response from Gemini.",
+          text: `Gemini request failed (${lastStatus}): ${lastError.slice(0, 300)}`,
           provider: "gemini",
-          model,
+          model: preferredModel,
         };
       }
 
-      lastResponse = response;
-      if (response.status === 429 && attempts < maxAttempts - 1) {
-        // Exponential backoff: base * 2^attempts + jitter
-        const delay = Math.pow(2, attempts) * 3000 + Math.random() * 1000;
-        await new Promise((resolve) => setTimeout(resolve, delay));
-        attempts += 1;
-        continue;
-      }
-      break;
+      // Rate-limited or bad fallback model — try the next one
+      console.warn(`[GeminiProvider] ${model} failed (${lastStatus}), trying next fallback...`);
     }
 
-    const errorText = await lastResponse!.text();
     return {
-      text: `Gemini request failed: ${lastResponse!.status}. ${errorText.slice(0, 300)}`,
+      text: `Gemini is currently overloaded or rate-limited. Please try again in a moment.`,
       provider: "gemini",
-      model,
+      model: preferredModel,
     };
   }
 }

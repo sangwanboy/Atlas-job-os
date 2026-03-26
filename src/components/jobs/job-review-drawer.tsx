@@ -48,7 +48,7 @@ export function JobReviewDrawer({ job, onClose }: JobReviewDrawerProps) {
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-slate-950/40 backdrop-blur-sm" onClick={onClose}>
       <div
-        className="h-full w-full max-w-2xl overflow-y-auto bg-white/95 p-6 shadow-2xl backdrop-blur-xl border-l border-white/60 flex flex-col"
+        className="h-full w-full overflow-y-auto bg-white/95 p-4 shadow-2xl backdrop-blur-xl border-l border-white/60 flex flex-col sm:p-6 sm:max-w-xl md:max-w-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-4 mb-6 sticky top-0 bg-white/95 p-2 -mx-2 backdrop-blur-xl rounded-b-xl z-10 border-b border-white/60">
@@ -61,7 +61,7 @@ export function JobReviewDrawer({ job, onClose }: JobReviewDrawerProps) {
           </button>
         </div>
 
-        <div className="grid grid-cols-2 gap-4 text-sm mb-8">
+        <div className="grid grid-cols-1 gap-3 text-sm mb-8 sm:grid-cols-2 sm:gap-4">
           <div className="rounded-xl border border-white/60 bg-white/80 p-4">
             <p className="font-semibold mb-1">Status & Score</p>
             <div className="text-muted flex justify-between items-baseline">
@@ -143,7 +143,7 @@ export function JobReviewDrawer({ job, onClose }: JobReviewDrawerProps) {
                 <div className="mt-4 pt-4 border-t border-slate-200/50 flex items-center justify-between text-xs">
                   <span className="font-medium text-slate-600">{thread.messageCount} messages in thread</span>
                   
-                  <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className="flex gap-2 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                      <button className="flex items-center gap-1 hover:text-danger text-muted transition-colors px-2 py-1">
                         <Unplug className="w-3 h-3" /> Detach
                      </button>

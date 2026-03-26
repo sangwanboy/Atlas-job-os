@@ -5,10 +5,13 @@ export interface HydratedLayers {
   identity?: string;
   operatingRules?: string;
   userProfile?: string;
+  profileMini?: string;   // 2-line mini profile injected on non-reinjection turns
   preferences?: string;
   mind?: string;
   searchGuidelines?: string;
   recentContext?: string;
+  cvContext?: string;
+  cvSummary?: string;     // Upgrade tips and CV quality analysis
 }
 
 export function composeAgentSystemPrompt(agent: RegisteredAgent, layers: HydratedLayers): string {
@@ -19,6 +22,9 @@ export function composeAgentSystemPrompt(agent: RegisteredAgent, layers: Hydrate
     if (nameMatch && nameMatch[1]) {
       userName = nameMatch[1].trim();
     }
+  } else if (layers.profileMini) {
+    const nameMatch = layers.profileMini.match(/^([^,\n]+)/);
+    if (nameMatch) userName = nameMatch[1].trim();
   }
 
   const promptParts: string[] = [
@@ -55,7 +61,7 @@ export function composeAgentSystemPrompt(agent: RegisteredAgent, layers: Hydrate
     promptParts.push("");
   }
 
-  // Common instructions that should always be present
+  // Common instructions
   promptParts.push(`AUTONOMY PROTOCOL (CRITICAL):
 - DO NOT stop to summarize or ask for feedback between internal tool steps.
 - Continue executing tool loops until the higher-level goal is met or a blocker requires human consent.
@@ -81,6 +87,23 @@ Step 1 — PREVIEW: After extraction, you MUST call 'preview_jobs'.
 Step 2 — WAIT: Ask the user to review.
 Step 3 — IMPORT: Only call 'import_pending_jobs' after confirmation.
 
+CV-BASED JOB SCORING (MANDATORY WHEN USER PROFILE EXISTS):
+When previewing or importing jobs and the user has a CV profile loaded:
+1. Score each job 1-100 against the user's profile using this breakdown:
+   - Technical skill match: 40 pts (does the job require skills the user has?)
+   - Experience level match: 25 pts (seniority level aligned?)
+   - Location/remote preference match: 20 pts (matches user preferences?)
+   - Salary alignment: 15 pts (within expected range?)
+2. In your final message, include a score badge like "⭐ Match: 82/100" for every job.
+3. Set 'priority' HIGH for jobs scoring 75+, MEDIUM for 50-74, LOW for below 50.
+
+UPGRADE RECOMMENDATIONS (AFTER EVERY JOB SEARCH):
+After every job search or import, include a "🔼 CV Upgrade Tips" block in your reply:
+- Identify 2-3 specific skills, tools, or certifications that appear frequently in the discovered jobs but are MISSING from the user's CV/profile.
+- Format: "X out of Y matched roles ask for [skill/cert]. Consider adding this to your CV."
+- Keep it concise — max 3 bullet points.
+- If no gaps exist, say: "✅ Your profile is well-aligned with these roles."
+
 TOOL CALL FORMAT:
 Output ONLY the JSON object. Do NOT wrap in markdown code fences.
 Example: { "tool": "browser_navigate", "parameters": { "url": "...", "sessionId": "..." } }
@@ -100,12 +123,24 @@ Continuity Sync Protocol (CRITICAL):
 - MANDATORY: If the user expresses a preference (salary, remote, location), update "preferences".
 `);
 
+  // Full profile on first turn or re-injection turns
   if (layers.userProfile) {
-    promptParts.push(`[USER PROFILE]\n${layers.userProfile}\n`);
+    promptParts.push(`[USER PROFILE - FULL]\n${layers.userProfile}\n`);
+  } else if (layers.profileMini) {
+    // Compact mini-profile for intermediate turns (saves tokens)
+    promptParts.push(`[USER PROFILE - SUMMARY]\n${layers.profileMini}\n`);
   }
 
   if (layers.preferences) {
     promptParts.push(`[PREFERENCES]\n${layers.preferences}\n`);
+  }
+
+  if (layers.cvSummary) {
+    promptParts.push(`[CV ANALYSIS & UPGRADE TIPS]\n${layers.cvSummary}\n`);
+  }
+
+  if (layers.cvContext) {
+    promptParts.push(`[CV FILES - USER UPLOADED RESUMES]\n${layers.cvContext}\n`);
   }
 
   if (layers.mind) {

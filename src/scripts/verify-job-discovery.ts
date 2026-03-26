@@ -1,55 +1,36 @@
-import { browserService } from "@/lib/services/browser/service/browser-service";
-import { continuitySyncService } from "@/lib/services/agent/continuity-sync-service";
+import { ScraperService } from "@/lib/services/scraper/scraper-service";
 
 async function verifyDiscovery() {
-  console.log("🚀 Starting Atlas Job Discovery Verification...");
-  const sessionId = "discovery-verify-" + Date.now();
+  console.log("🚀 Starting Atlas Job Discovery Verification (Crawl4AI)...");
   const jobs: any[] = [];
 
-  try {
-    // 1. Verify File-Based State
-    console.log("📂 Verifying file-based state...");
-    const layers = await continuitySyncService.hydrateTurnContext("test-agent", sessionId, "search");
-    if (layers.soul && layers.mind) {
-        console.log("✅ Selective hydration confirmed. Soul and Mind layers loaded.");
-    } else {
-        console.error("❌ Selective hydration failed. Check agents/atlas directory.");
+  const sources = [
+    { name: "LinkedIn", url: "https://www.linkedin.com/jobs/search/?keywords=software+engineer&location=london" },
+    { name: "Indeed", url: "https://uk.indeed.com/jobs?q=software+engineer&l=london" },
+  ];
+
+  for (const source of sources) {
+    console.log(`🔍 Scraping ${source.name}...`);
+    try {
+      const result = await ScraperService.scrape(source.url);
+      if (result.success && result.jobs && result.jobs.length > 0) {
+        console.log(`✅ Found ${result.jobs.length} jobs from ${source.name}.`);
+        jobs.push(...result.jobs.map((j: any) => ({ ...j, source: source.name })));
+      } else {
+        console.warn(`⚠️ ${source.name} scrape failed: ${result.error || "No jobs found"}`);
+      }
+    } catch (error) {
+      console.error(`❌ ${source.name} error:`, error);
     }
-
-    // 2. Launch Browser
-    await browserService.launchBrowser({ headless: true });
-
-    for (let p = 1; p <= 3; p++) {
-        console.log(`🔍 Navigating to Adzuna Page ${p}...`);
-        await browserService.navigate({
-          sessionId,
-          url: `https://www.adzuna.co.uk/jobs/search?q=animator+graphic+designer&l=london&p=${p}`
-        });
-
-        console.log(`📥 Extracting jobs from Page ${p}...`);
-        const result = await browserService.extractJobs({ sessionId });
-        if (result.status === "ok" && result.data) {
-            const newJobs = result.data.jobs || [];
-            console.log(`✅ Found ${newJobs.length} jobs on Page ${p}.`);
-            jobs.push(...newJobs);
-        } else {
-            console.warn(`⚠️ Failed to extract from page ${p}:`, result.error);
-        }
-    }
-
-    // 4. Print results
-    console.log(`\n📊 Total: ${jobs.length} jobs.`);
-    console.log("\n--- Combined Extracted Jobs ---");
-    jobs.slice(0, 30).forEach((j, i) => {
-      console.log(`${i + 1}. ${j.title} at ${j.company} (${j.location})`);
-    });
-
-  } catch (error) {
-    console.error("❌ Verification failed:", error);
-  } finally {
-    await browserService.shutdownBrowser();
-    console.log("👋 Browser shutdown complete.");
   }
+
+  console.log(`\n📊 Total: ${jobs.length} jobs.`);
+  console.log("\n--- Combined Extracted Jobs ---");
+  jobs.slice(0, 30).forEach((j, i) => {
+    console.log(`${i + 1}. ${j.title} at ${j.company} (${j.location}) [${j.source}]`);
+  });
+
+  console.log("👋 Verification complete.");
 }
 
 verifyDiscovery();

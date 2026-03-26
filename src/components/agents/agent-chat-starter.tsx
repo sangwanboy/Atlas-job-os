@@ -67,24 +67,14 @@ const ChatMessageItem = React.memo(({
     return null;
   }, [message.content, previewJobs]);
 
-  if (!content && message.role === "ASSISTANT" && !(message as any).toolLogs?.length) return null;
+  const toolLogs = (message as any).toolLogs as Array<{ tool: string; parameters: any; result: string }> | undefined;
+  const hasToolLogs = toolLogs && toolLogs.length > 0;
+  const isStreaming = message.role === "ASSISTANT" && !content && hasToolLogs;
+
+  if (!content && message.role === "ASSISTANT" && !hasToolLogs) return null;
 
   return (
     <div className="space-y-2">
-      {showToolUse && (message as any).toolLogs?.length > 0 && (
-        <div className="mx-4 rounded-lg border border-dashed border-cyan-500/30 bg-cyan-500/5 p-2 text-[10px] font-mono text-cyan-700/70 max-h-[200px] overflow-y-auto break-all custom-scrollbar">
-          <p className="mb-1 uppercase tracking-wider font-bold sticky top-0 bg-white/80 backdrop-blur-sm p-1 z-10">Internal Operator Logs:</p>
-          {(message as any).toolLogs.map((log: any, idx: number) => (
-            <div key={idx} className="mb-2 last:mb-0 border-l-2 border-cyan-500/20 pl-2">
-              <p className="font-bold">→ Executed: {log.tool}</p>
-              <p className="mt-0.5 opacity-80 italic">Params: {JSON.stringify(log.parameters)}</p>
-              <div className="mt-1 bg-white/30 p-1 rounded overflow-x-auto max-h-24">
-                {log.result}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
       <div
         className={`max-w-[85%] w-fit rounded-xl px-4 py-2 text-sm shadow-sm leading-snug break-words overflow-hidden ${
           message.role === "USER"
@@ -94,18 +84,64 @@ const ChatMessageItem = React.memo(({
       >
         {message.role === "ASSISTANT" ? (
           <div className="space-y-3">
-            <div className="prose prose-sm max-w-none prose-headings:font-bold prose-headings:mt-3 prose-headings:mb-1 prose-strong:font-bold prose-p:my-0 prose-p:leading-snug prose-ul:my-0 prose-ol:my-0 prose-li:my-0 prose-li:leading-snug">
-              <ReactMarkdown
-                components={{
-                  a: ({ node, ...props }) => <a {...props} target="_blank" rel="noopener noreferrer" className="text-cyan-600 hover:underline" />
-                }}
-              >
-                {content}
-              </ReactMarkdown>
-            </div>
-            
+            {/* Show Atlas thought process while streaming (before final reply) */}
+            {isStreaming && (
+              <div className="space-y-2">
+                {toolLogs.map((log, idx) => (
+                  <div key={idx} className="flex items-start gap-2 text-xs">
+                    <span className={`mt-0.5 h-2 w-2 flex-none rounded-full ${log.result === "Executing..." ? "bg-amber-400 animate-pulse" : "bg-emerald-500"}`} />
+                    <div className="min-w-0">
+                      <span className="font-semibold text-slate-700">{log.tool}</span>
+                      <span className="text-slate-400 ml-1.5">
+                        {log.result === "Executing..." ? "Running..." : "Done"}
+                      </span>
+                      {log.parameters && (
+                        <p className="text-[10px] text-slate-400 mt-0.5 truncate">{JSON.stringify(log.parameters).slice(0, 120)}</p>
+                      )}
+                    </div>
+                  </div>
+                ))}
+                <div className="flex items-center gap-1.5 pt-1">
+                  <div className="h-1 w-1 animate-bounce rounded-full bg-cyan-500" />
+                  <div className="h-1 w-1 animate-bounce rounded-full bg-cyan-500 [animation-delay:-0.15s]" />
+                  <div className="h-1 w-1 animate-bounce rounded-full bg-cyan-500 [animation-delay:-0.3s]" />
+                  <span className="text-[10px] text-slate-400 italic ml-1">Atlas is thinking...</span>
+                </div>
+              </div>
+            )}
+
+            {content && (
+              <div className="prose prose-sm max-w-none prose-headings:font-bold prose-headings:mt-3 prose-headings:mb-1 prose-strong:font-bold prose-p:my-0 prose-p:leading-snug prose-ul:my-0 prose-ol:my-0 prose-li:my-0 prose-li:leading-snug">
+                <ReactMarkdown
+                  components={{
+                    a: ({ node, ...props }) => <a {...props} target="_blank" rel="noopener noreferrer" className="text-cyan-600 hover:underline" />
+                  }}
+                >
+                  {content}
+                </ReactMarkdown>
+              </div>
+            )}
+
+            {/* Collapsible tool logs after final reply */}
+            {showToolUse && hasToolLogs && content && (
+              <details className="group">
+                <summary className="cursor-pointer text-[10px] font-semibold text-cyan-600 hover:text-cyan-800 uppercase tracking-wider select-none">
+                  Show operator logs ({toolLogs.length})
+                </summary>
+                <div className="mt-1.5 rounded-lg border border-dashed border-cyan-500/30 bg-cyan-500/5 p-2 text-[10px] font-mono text-cyan-700/70 max-h-[200px] overflow-y-auto break-all custom-scrollbar">
+                  {toolLogs.map((log, idx) => (
+                    <div key={idx} className="mb-2 last:mb-0 border-l-2 border-cyan-500/20 pl-2">
+                      <p className="font-bold">→ {log.tool}</p>
+                      <p className="mt-0.5 opacity-80 italic">Params: {JSON.stringify(log.parameters)}</p>
+                      <div className="mt-1 bg-white/30 p-1 rounded overflow-x-auto max-h-24">{log.result}</div>
+                    </div>
+                  ))}
+                </div>
+              </details>
+            )}
+
             {extractedJobs && extractedJobs.length > 0 && (
-              <JobPreviewBox 
+              <JobPreviewBox
                 jobs={extractedJobs}
                 onImportAll={onImportAll!}
                 onImportSingle={onImportSingle!}
@@ -248,11 +284,25 @@ const JobPreviewBox = ({
                   {job.source && (
                     <span className="text-[10px] text-slate-400 font-medium bg-slate-50/50 px-1.5 py-0.5 rounded border border-slate-100/50">{job.source}</span>
                   )}
-                  {job.url && (
-                    <a href={job.url} target="_blank" rel="noopener noreferrer" className="text-[10px] font-bold text-cyan-600 hover:text-cyan-800 hover:underline transition-all">
-                      View listing ↗
-                    </a>
-                  )}
+                  {(() => {
+                    const hasUrl = job.url && job.url !== "#" && job.url.trim() !== "";
+                    const href = hasUrl
+                      ? (job.url!.startsWith("http") ? job.url! : `https://www.linkedin.com${job.url}`)
+                      : `https://www.linkedin.com/jobs/search/?keywords=${encodeURIComponent(`${job.title} ${job.company}`)}&location=${encodeURIComponent(job.location || "")}`;
+                    return (
+                      <a
+                        href={href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 rounded-md border border-cyan-200 bg-cyan-50 px-2 py-0.5 text-[10px] font-bold text-cyan-700 hover:bg-cyan-100 hover:border-cyan-300 transition-all active:scale-95"
+                        onClick={(e) => e.stopPropagation()}
+                        title={hasUrl ? "Open job listing" : "Search on LinkedIn"}
+                      >
+                        <Eye className="h-3 w-3" />
+                        {hasUrl ? "View listing ↗" : "Search LinkedIn ↗"}
+                      </a>
+                    );
+                  })()}
                 </div>
                 {job.description && (
                   <p className="mt-2 text-xs text-slate-500 line-clamp-2 leading-relaxed">{job.description}</p>
@@ -677,15 +727,18 @@ export function AgentChatStarter() {
       ];
 
   return (
-    <div className="flex h-full min-h-0 w-full gap-5 overflow-hidden xl:flex-row flex-col lg:gap-6">
-      <aside className="panel flex flex-col xl:w-[320px] xl:flex-none p-5 custom-scrollbar scroll-well overflow-y-auto max-h-[40vh] xl:max-h-full">
-        <div className="flex-none pb-2 border-b border-white/20">
-          <p className="text-xs font-semibold uppercase tracking-widest text-muted">Agent Profile</p>
-          <h3 className="mt-2 text-2xl font-extrabold">{profile.name}</h3>
-          <p className="mt-1 text-sm text-muted">{profile.roleTitle}</p>
+    <div className="flex h-full min-h-0 w-full gap-3 overflow-hidden xl:flex-row flex-col sm:gap-5 lg:gap-6">
+      <aside className="panel flex-none xl:flex xl:flex-col xl:w-[320px] p-4 sm:p-5 custom-scrollbar scroll-well overflow-y-auto max-h-[150px] sm:max-h-[200px] xl:max-h-full xl:overflow-y-auto">
+        {/* Compact mobile header, full profile on xl */}
+        <div className="flex items-center gap-3 xl:block xl:pb-2 xl:border-b xl:border-white/20">
+          <p className="hidden text-xs font-semibold uppercase tracking-widest text-muted xl:block">Agent Profile</p>
+          <h3 className="text-lg font-extrabold xl:mt-2 xl:text-2xl">{profile.name}</h3>
+          <span className="text-xs text-muted xl:mt-1 xl:block">·</span>
+          <p className="text-xs text-muted xl:mt-1">{profile.roleTitle}</p>
+          <span className="ml-auto text-[10px] text-muted xl:hidden">{profile.mindModel}</span>
         </div>
-        
-        <div className="flex-none space-y-4 py-4 text-sm">
+
+        <div className="hidden xl:block flex-none space-y-4 py-4 text-sm">
           <div>
             <span className="font-semibold block mb-1">Soul Mission:</span>
             <p className="text-muted leading-tight">{profile.soulMission}</p>
@@ -704,7 +757,7 @@ export function AgentChatStarter() {
           </div>
         </div>
 
-        <div className="flex-none pt-4 border-t border-white/20 space-y-3">
+        <div className="hidden xl:block flex-none pt-4 border-t border-white/20 space-y-3">
             <div className={`rounded-xl border border-white/60 bg-white/75 p-3 text-xs`}>
               <div className="flex items-center justify-between">
                 <p className="font-semibold">Tool Use</p>
@@ -773,14 +826,14 @@ export function AgentChatStarter() {
         </div>
       </aside>
 
-      <section className="panel flex h-full min-h-0 flex-1 flex-col overflow-hidden p-4 md:p-5 pb-3 md:pb-4 shadow-well">
+      <section className="panel flex min-h-0 flex-1 flex-col overflow-hidden p-3 pb-2 sm:p-4 sm:pb-3 md:p-5 md:pb-4 shadow-well">
         {/* Chat Header with Session Management */}
-        <div className="mb-4 flex flex-none items-center justify-between gap-4 border-b border-white/20 pb-4">
-          <div className="flex flex-1 items-center gap-2 overflow-hidden">
+        <div className="mb-3 flex flex-none items-center justify-between gap-2 border-b border-white/20 pb-3 sm:mb-4 sm:gap-4 sm:pb-4">
+          <div className="flex flex-1 items-center gap-2 overflow-hidden min-w-0">
             <select
               value={sessionId || "new"}
               onChange={(e) => void switchSession(e.target.value)}
-              className="field text-xs font-medium bg-white/50 py-1.5 focus:bg-white"
+              className="field text-xs font-medium bg-white/50 py-1.5 focus:bg-white min-w-0"
             >
               <option value="new">Current Conversation</option>
               {sessions?.map((s) => (
@@ -792,14 +845,15 @@ export function AgentChatStarter() {
           </div>
           <button
             onClick={() => void switchSession("new")}
-            className="btn-secondary whitespace-nowrap px-3 py-1.5 text-xs flex items-center gap-1.5"
+            className="btn-secondary whitespace-nowrap px-2.5 py-1.5 text-xs flex items-center gap-1 sm:px-3 sm:gap-1.5"
           >
             <span className="text-base leading-none font-bold">+</span>
-            New Chat
+            <span className="hidden sm:inline">New Chat</span>
+            <span className="sm:hidden">New</span>
           </button>
         </div>
 
-        <div className="flex-1 min-h-0 overflow-y-auto px-4 pt-4 pb-0 custom-scrollbar scroll-well shadow-well relative">
+        <div className="flex-1 min-h-0 overflow-y-auto px-2 pt-2 pb-0 custom-scrollbar scroll-well shadow-well relative sm:px-4 sm:pt-4">
           <div className="flex flex-col gap-4 pb-4">
             {initialLoading ? (
               <div className="flex flex-col gap-4 animate-pulse">
@@ -842,19 +896,12 @@ export function AgentChatStarter() {
                 );
               })
             )}
-            {loading && !initialLoading ? (
-              <div className="flex items-center gap-2 pl-2">
-                <div className="h-1.5 w-1.5 animate-bounce rounded-full bg-cyan-600" />
-                <div className="h-1.5 w-1.5 animate-bounce rounded-full bg-cyan-600 [animation-delay:-0.15s]" />
-                <div className="h-1.5 w-1.5 animate-bounce rounded-full bg-cyan-600 [animation-delay:-0.3s]" />
-                <p className="text-xs text-muted italic">{importingJobs ? "Atlas is importing jobs..." : processingSteps[loadingTextIndex]}</p>
-              </div>
-            ) : null}
+            {/* Loading state is now shown inside the assistant message bubble */}
           </div>
           <div id="chat-bottom" className="h-px w-full opacity-0" ref={chatBottomRef} />
         </div>
 
-        <div className="mt-2 flex-none flex items-center gap-2 rounded-2xl border border-white/60 bg-white/80 p-3 shadow-sm transition-all duration-300 focus-within:ring-1 focus-within:ring-cyan-500/30">
+        <div className="mt-2 flex-none flex items-center gap-2 rounded-xl border border-white/60 bg-white/80 p-2 shadow-sm transition-all duration-300 focus-within:ring-1 focus-within:ring-cyan-500/30 sm:rounded-2xl sm:p-3">
           <input
             autoFocus
             value={input}

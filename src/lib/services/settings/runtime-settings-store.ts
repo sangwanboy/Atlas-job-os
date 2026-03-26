@@ -19,6 +19,7 @@ type RuntimeState = {
   monthlyTokenBudget: number;
   softLimitPercent: number;
   perResponseTokenCap: number;
+  maxJobsPerSearch: number;
   autoSummarizeOnHighUsage: boolean;
   strictLoopProtection: boolean;
   strictAgentResponseMode: boolean;
@@ -81,6 +82,7 @@ function createDefaultState(): RuntimeState {
     monthlyTokenBudget: 1_000_000,
     softLimitPercent: 85,
     perResponseTokenCap: 8_192,
+    maxJobsPerSearch: 20,
     autoSummarizeOnHighUsage: true,
     strictLoopProtection: true,
     strictAgentResponseMode: true,
@@ -97,8 +99,17 @@ function resolveState(userId: string): RuntimeState {
 
   const existing = store.get(userId);
   if (existing) {
+    // Migrate fields added after initial release
+    let dirty = false;
     if (existing.strictAgentResponseMode === undefined) {
       existing.strictAgentResponseMode = true;
+      dirty = true;
+    }
+    if ((existing as any).maxJobsPerSearch === undefined) {
+      (existing as any).maxJobsPerSearch = 20;
+      dirty = true;
+    }
+    if (dirty) {
       existing.updatedAt = new Date().toISOString();
       store.set(userId, existing);
     }
@@ -144,6 +155,7 @@ function toResponse(state: RuntimeState): RuntimeSettingsResponse {
       monthlyTokenBudget: state.monthlyTokenBudget,
       softLimitPercent: state.softLimitPercent,
       perResponseTokenCap: state.perResponseTokenCap,
+      maxJobsPerSearch: state.maxJobsPerSearch ?? 20,
       autoSummarizeOnHighUsage: state.autoSummarizeOnHighUsage,
       strictLoopProtection: state.strictLoopProtection,
       strictAgentResponseMode: state.strictAgentResponseMode ?? true,
@@ -166,6 +178,7 @@ export class RuntimeSettingsStore {
     state.monthlyTokenBudget = payload.monthlyTokenBudget;
     state.softLimitPercent = payload.softLimitPercent;
     state.perResponseTokenCap = payload.perResponseTokenCap;
+    state.maxJobsPerSearch = payload.maxJobsPerSearch ?? 20;
     state.autoSummarizeOnHighUsage = payload.autoSummarizeOnHighUsage;
     state.strictLoopProtection = payload.strictLoopProtection;
     state.strictAgentResponseMode = payload.strictAgentResponseMode;

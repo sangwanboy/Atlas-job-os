@@ -1,6 +1,8 @@
 import { atlasState, ATLAS_FILES } from "./atlas-state-manager";
 import { prisma } from "@/lib/db";
 import { HydratedLayers } from "./prompt-composer";
+import * as fs from "node:fs/promises";
+import * as path from "node:path";
 
 // ─── Layers & Types ─────────────────────────────────────────────────────────
 
@@ -33,8 +35,9 @@ export class ContinuitySyncService {
 
   /**
    * interval 1: Selective Hydration based on hydration triggers
+   * @param msgCount - Number of messages in the current session (used for smart profile injection)
    */
-  async hydrateTurnContext(agentId: string, sessionId: string, taskType?: string): Promise<HydratedLayers> {
+  async hydrateTurnContext(agentId: string, sessionId: string, taskType?: string, msgCount = 0): Promise<HydratedLayers> {
     const now = new Date();
     const syncState = await atlasState.readJson<SyncState>(ATLAS_FILES.syncState, { 
       lastHydratedAt: now.toISOString(), 
@@ -46,7 +49,11 @@ export class ContinuitySyncService {
     const diffMinutes = (now.getTime() - lastSync.getTime()) / (1000 * 60);
     const isNewSession = sessionId === "new" || sessionId === "default";
     const isLongInactivity = diffMinutes > 45;
-    const isPruneOccurred = syncState.healthMarkers.includes("prune_occurred");
+
+    // Smart profile injection: full profile at turn 0 and every 7 messages
+    const isFirstTurn = msgCount === 0;
+    const isReinjectionTurn = msgCount > 0 && msgCount % 7 === 0;
+    const shouldInjectFullProfile = isFirstTurn || isReinjectionTurn || isLongInactivity;
 
     const layers: HydratedLayers = {};
 
@@ -59,14 +66,56 @@ export class ContinuitySyncService {
     layers.identity = await atlasState.readText(ATLAS_FILES.identity, "");
     layers.operatingRules = await atlasState.readText(ATLAS_FILES.operatingRules, "");
     layers.searchGuidelines = await atlasState.readText(ATLAS_FILES.search, "");
-    layers.userProfile = await atlasState.readText(ATLAS_FILES.userProfile, "");
-    
+
+    // Smart profile injection
+    const fullProfile = await atlasState.readText(ATLAS_FILES.userProfile, "");
+    if (shouldInjectFullProfile) {
+      layers.userProfile = fullProfile;
+      layers.profileMini = undefined;
+    } else if (fullProfile.length > 50) {
+      // Extract a compact 2-line summary from the profile for intermediate turns
+      const nameMatch = fullProfile.match(/(?:# User Profile:\s*|Name:\s*)([^\n]+)/i);
+      const roleMatch = fullProfile.match(/(?:Current Role|Target Role|## Overview)[\s\S]*?([^\n]{10,80})/i);
+      const name = nameMatch?.[1]?.trim() ?? "User";
+      const role = roleMatch?.[1]?.trim() ?? "Job seeker";
+      layers.profileMini = `${name} — ${role}\n[Full profile injected every 7 messages to save tokens. Turn ${msgCount}/${Math.ceil(msgCount / 7) * 7}]`;
+      layers.userProfile = undefined;
+    }
+
     const prefs = await atlasState.readJson(ATLAS_FILES.preferences, {});
     layers.preferences = JSON.stringify(prefs, null, 2);
+
+    // CV Summary (upgrade tips) — always inject when available
+    const cvSummary = await atlasState.readText(ATLAS_FILES.cvSummary, "");
+    if (cvSummary.length > 20) {
+      layers.cvSummary = cvSummary;
+    }
+
+    // Load CV context — list uploaded CVs from disk so Atlas is aware of them
+    try {
+      const cvDir = path.join(process.cwd(), "uploads", "cv");
+      const entries = await fs.readdir(cvDir, { withFileTypes: true }).catch(() => []);
+      const cvFiles = entries
+        .filter((e) => e.isFile())
+        .map((e) => {
+          const ext = path.extname(e.name).toLowerCase();
+          return `- ${e.name} (type: ${ext})`;
+        });
+      if (cvFiles.length > 0) {
+        layers.cvContext = `The user has uploaded the following CV files:\n${cvFiles.join("\n")}\n\nThese CV files are accessible at uploads/cv/ on the server. Use this knowledge to tailor job matches and cover letters to the user's background.`;
+      } else {
+        layers.cvContext = "No CV files have been uploaded yet.";
+      }
+    } catch {
+      layers.cvContext = undefined;
+    }
 
     // Context Recovery Log
     if (isNewSession || isLongInactivity) {
       await this.logContextMemory(`Re-anchoring search context for session: ${sessionId}`);
+    }
+    if (shouldInjectFullProfile && !isFirstTurn) {
+      await this.logContextMemory(`Full profile re-injected at message ${msgCount}`);
     }
 
     // Update last sync time
@@ -123,7 +172,7 @@ export class ContinuitySyncService {
           await atlasState.writeText(ATLAS_FILES.identity, identityContent);
         }
         if (dbAgent.instructions && dbAgent.instructions.length > 0) {
-          const rules = dbAgent.instructions.map(i => `- ${i.instruction}`).join("\n");
+          const rules = dbAgent.instructions.map((i: { instruction: string }) => `- ${i.instruction}`).join("\n");
           await atlasState.writeText(ATLAS_FILES.operatingRules, rules);
         }
         if (dbAgent.user?.preferences) {

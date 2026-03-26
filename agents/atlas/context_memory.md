@@ -265,3 +265,136 @@
 [2026-03-25T03:49:25.972Z] Updated mind.md via LLM continuity update.
 [2026-03-25T03:49:25.975Z] Updated preferences.json via LLM continuity update.
 [2026-03-25T03:49:25.977Z] Turn execution completed
+[2026-03-25T18:57:19.332Z] Re-anchoring search context for session: local-a4d09b4f-0348-4e02-8b82-856dbf8bc5fd
+[2026-03-25T18:57:19.346Z] Starting turn: general
+[2026-03-25T18:57:28.034Z] Updated mind.md via LLM continuity update.
+[2026-03-25T18:57:28.036Z] Turn execution completed
+[2026-03-25T18:58:05.075Z] Starting turn: general
+[2026-03-25T19:13:52.662Z] Starting turn: search
+[2026-03-25T19:16:03.563Z] Starting turn: general
+[2026-03-25T19:31:27.511Z] Starting turn: search
+[2026-03-25T19:31:53.086Z] Updated mind.md via LLM continuity update.
+[2026-03-25T19:31:53.089Z] Updated user_profile.md via LLM continuity update.
+[2026-03-25T19:31:53.092Z] Updated preferences.json via LLM continuity update.
+[2026-03-25T19:31:53.093Z] Turn execution completed
+[2026-03-25T20:00:00.000Z] ADZUNA_REMOVAL: Removed entire Adzuna API integration. Job discovery now exclusively uses Crawl4AI with LinkedIn as primary source and Indeed as fallback.
+[2026-03-25T20:01:00.000Z] INDEED_SUPPORT: Added Indeed CSS selectors to worker.py for multi-source Crawl4AI extraction. Updated conversation-orchestrator to try Indeed when LinkedIn fails.
+[2026-03-25T20:02:00.000Z] SCRAPER_ENHANCEMENT: Updated worker.py with URL normalization (relative→absolute), whitespace cleanup, and Chrome 131 user-agent. Source priority set to LinkedIn > Indeed.
+[2026-03-25T19:54:07.085Z] Starting turn: search
+[2026-03-25T19:55:13.811Z] Updated mind.md via LLM continuity update.
+[2026-03-25T19:55:13.814Z] Turn execution completed
+[2026-03-25T20:10:00.000Z] CHAT_UX_OVERHAUL: Replaced static "Formulating response..." with live thought process in chat bubble. Tool executions now shown inline with status indicators (amber=running, green=done).
+[2026-03-25T20:11:00.000Z] VIEW_LISTING_FIX: Fixed "View listing" links — filtered out "#" fallback URLs, added relative-to-absolute URL resolution, added stopPropagation to prevent click interference.
+[2026-03-25T20:12:00.000Z] TOOL_LOGS_COLLAPSIBLE: Moved verbose operator logs into collapsible `<details>` element, only shown after final reply. Cleaner chat UX.
+[2026-03-25T20:13:00.000Z] README_REWRITE: Complete README overhaul with full architecture docs — auth system, Crawl4AI pipeline, agent architecture, routes, API endpoints, project structure, environment variables.
+[2026-03-25T20:02:16.896Z] Starting turn: search
+[2026-03-25T20:03:37.676Z] Updated mind.md via LLM continuity update.
+[2026-03-25T20:03:37.677Z] Turn execution completed
+[2026-03-25T20:05:55.906Z] Starting turn: search
+[2026-03-25T20:06:31.872Z] Updated mind.md via LLM continuity update.
+[2026-03-25T20:06:31.873Z] Turn execution completed
+[2026-03-25T20:10:07.005Z] Starting turn: general
+[2026-03-25T20:11:46.294Z] Updated mind.md via LLM continuity update.
+[2026-03-25T20:11:46.298Z] Updated preferences.json via LLM continuity update.
+[2026-03-25T20:11:46.301Z] Turn execution completed
+[2026-03-25T20:13:08.127Z] Starting turn: search
+[2026-03-25T20:15:39.063Z] Turn execution completed
+[2026-03-25T20:26:53.094Z] Starting turn: general
+[2026-03-25T20:27:24.865Z] Updated mind.md via LLM continuity update.
+[2026-03-25T20:27:24.866Z] Turn execution completed
+[2026-03-25T20:27:40.655Z] Starting turn: general
+[2026-03-25T20:28:11.759Z] Updated mind.md via LLM continuity update.
+[2026-03-25T20:28:11.761Z] Turn execution completed
+[2026-03-25T20:28:26.088Z] Starting turn: general
+[2026-03-25T20:28:53.915Z] Updated mind.md via LLM continuity update.
+[2026-03-25T20:28:53.916Z] Turn execution completed
+[2026-03-25T20:29:24.108Z] Starting turn: general
+[2026-03-25T20:29:42.122Z] Updated mind.md via LLM continuity update.
+[2026-03-25T20:29:42.123Z] Turn execution completed
+[2026-03-25T20:30:19.605Z] Starting turn: general
+[2026-03-25T20:30:41.442Z] Updated mind.md via LLM continuity update.
+[2026-03-25T20:30:41.444Z] Turn execution completed
+[2026-03-25T22:07:29.350Z] Re-anchoring search context for session: local-0ee8f64d-5518-4406-988a-a5929595d721
+[2026-03-25T22:07:29.364Z] Starting turn: general
+[2026-03-25T22:07:52.045Z] Turn execution completed
+[2026-03-25T22:56:22.043Z] Re-anchoring search context for session: local-335a68c1-e197-47cb-ae27-8986219402e1
+[2026-03-25T22:56:22.060Z] Starting turn: general
+[2026-03-25T22:56:22.438Z] Turn execution completed
+[2026-03-25T22:59:00.548Z] Starting turn: search
+[2026-03-25T23:00:04.262Z] Updated mind.md via LLM continuity update.
+[2026-03-25T23:00:04.264Z] Turn execution completed
+[2026-03-25T23:04:10.163Z] Starting turn: search
+[2026-03-25T23:04:33.723Z] Turn execution completed
+[2026-03-25T23:06:40.032Z] Starting turn: search
+[2026-03-25T23:07:08.179Z] Updated mind.md via LLM continuity update.
+[2026-03-25T23:07:08.181Z] Turn execution completed
+
+[2026-03-25T23:17:26.000Z] GEMINI_FALLBACK_CHAIN: Added model fallback logic in provider.ts — tries gemini-3.1-pro-preview first, then gemini-2.5-pro-preview-05-06, gemini-2.0-flash, gemini-1.5-pro on 429/503. Prevents quota errors from blocking Atlas.
+[2026-03-25T23:17:26.000Z] PREVIEW_JOBS_FIX: Fixed __PREVIEW_JOBS__ marker not appearing in finalReply. browser_extract_jobs calls preview_jobs internally (auto-preview) which bypassed toolLogs check — now extracts from toolContext via regex fallback.
+[2026-03-25T23:17:26.000Z] VIEW_LISTING_ALWAYS_SHOWN: Updated JobPreviewBox to always show View listing button — uses actual URL when available, falls back to LinkedIn search by title+company+location when URL is missing.
+[2026-03-25T23:17:26.000Z] SCRAPER_URL_FIX: Rewrote worker.py LinkedIn URL extraction — added data-entity-urn field, clean_linkedin_url() to strip tracking params, extract_job_id_from_urn() fallback, multi-selector URL extraction.
+[2026-03-25T23:17:44.085Z] Starting turn: search
+[2026-03-25T23:17:51.045Z] Turn execution completed
+[2026-03-25T23:19:06.425Z] Starting turn: general
+[2026-03-25T23:19:13.858Z] Turn execution completed
+[2026-03-25T23:23:53.444Z] Starting turn: search
+[2026-03-25T23:24:21.069Z] Updated mind.md via LLM continuity update.
+[2026-03-25T23:24:21.072Z] Updated preferences.json via LLM continuity update.
+[2026-03-25T23:24:21.074Z] Turn execution completed
+[2026-03-25T23:30:58.213Z] Starting turn: search
+[2026-03-25T23:31:12.171Z] Updated mind.md via LLM continuity update.
+[2026-03-25T23:31:12.172Z] Turn execution completed
+[2026-03-25T23:39:07.969Z] Starting turn: general
+[2026-03-25T23:39:43.104Z] Updated mind.md via LLM continuity update.
+[2026-03-25T23:39:43.105Z] Turn execution completed
+
+[2026-03-25T00:00:00.000Z] MAX_JOBS_PER_SEARCH: Added admin-configurable job output limit. Default=20, range 1-200. Controlled via Settings > Token Usage & Runtime Controls > Max Jobs Per Search. Applied in conversation-orchestrator.ts at the preview_jobs stage (LinkedIn + Indeed branches). Persisted in runtime-settings-store with disk migration for old state files.
+[2026-03-25T00:00:01.000Z] SCRAPER_ERROR_CLARITY: Replaced confusing scraper error message with SCRAPER_ERROR: prefix that instructs LLM to give honest "LinkedIn blocked, try again" message instead of hallucinating technical excuses.
+[2026-03-25T00:00:02.000Z] GEMINI_MODEL_STATUS: gemini-3.1-pro-preview is the configured default. Currently rate-limited (quota exhausted). Fallback chain: gemini-3.1-flash-lite-preview -> gemini-3-flash-preview -> gemini-2.5-pro -> gemini-2.5-flash. Active runtime model: gemini-3.1-flash-lite-preview. Do NOT change default model without user (Tushar) permission.
+[2026-03-25T00:00:03.000Z] REAL_JOB_URLS: Scraper now extracts real LinkedIn job URLs via data-entity-urn regex on raw HTML (extract_linkedin_job_ids). Sequential assignment maps job IDs to cards. View listing buttons now link to https://www.linkedin.com/jobs/view/{id}/ instead of search fallbacks.
+[2026-03-25T23:44:42.245Z] Starting turn: search
+[2026-03-25T23:45:15.535Z] Updated mind.md via LLM continuity update.
+[2026-03-25T23:45:15.538Z] Updated user_profile.md via LLM continuity update.
+[2026-03-25T23:45:15.541Z] Updated preferences.json via LLM continuity update.
+[2026-03-25T23:45:15.542Z] Turn execution completed
+[2026-03-25T23:46:40.186Z] Starting turn: general
+[2026-03-25T23:47:16.631Z] Updated mind.md via LLM continuity update.
+[2026-03-25T23:47:16.632Z] Turn execution completed
+[2026-03-25T23:47:27.213Z] Starting turn: search
+[2026-03-25T23:47:59.991Z] Updated mind.md via LLM continuity update.
+[2026-03-25T23:47:59.995Z] Updated preferences.json via LLM continuity update.
+[2026-03-25T23:47:59.997Z] Turn execution completed
+[2026-03-25T23:48:01.250Z] Starting turn: general
+[2026-03-25T23:48:32.116Z] Updated mind.md via LLM continuity update.
+[2026-03-25T23:48:32.118Z] Turn execution completed
+[2026-03-25T23:48:51.488Z] Starting turn: search
+[2026-03-25T23:48:57.486Z] Updated mind.md via LLM continuity update.
+[2026-03-25T23:48:57.488Z] Turn execution completed
+[2026-03-25T23:49:31.734Z] Starting turn: search
+[2026-03-25T23:49:39.915Z] Updated mind.md via LLM continuity update.
+[2026-03-25T23:49:39.916Z] Turn execution completed
+[2026-03-26T00:12:12.909Z] Starting turn: search
+[2026-03-26T00:14:13.517Z] Updated mind.md via LLM continuity update.
+[2026-03-26T00:14:13.518Z] Turn execution completed
+[2026-03-26T01:16:03.665Z] Re-anchoring search context for session: local-24ecf52a-7253-44be-af22-0825fd291726
+[2026-03-26T01:16:03.669Z] Starting turn: general
+[2026-03-26T01:16:13.808Z] Updated mind.md via LLM continuity update.
+[2026-03-26T01:16:13.809Z] Turn execution completed
+[2026-03-26T01:18:14.356Z] Starting turn: general
+[2026-03-26T01:18:24.698Z] Updated mind.md via LLM continuity update.
+[2026-03-26T01:18:24.700Z] Turn execution completed
+[2026-03-26T01:18:53.711Z] Starting turn: general
+[2026-03-26T01:19:03.479Z] Updated mind.md via LLM continuity update.
+[2026-03-26T01:19:03.480Z] Turn execution completed
+[2026-03-26T01:20:17.527Z] Starting turn: general
+[2026-03-26T01:22:15.192Z] Updated mind.md via LLM continuity update.
+[2026-03-26T01:22:15.194Z] Turn execution completed
+[2026-03-26T01:23:04.692Z] Starting turn: general
+
+[2026-03-26T01:10:00.000Z] BUG_FIX_ENV_CRASH: .env.local was missing NEXTAUTH_SECRET and DATABASE_URL � both required by Zod env schema. Every /api/agents/chat call returned HTML 500 (ZodError). Fixed by adding NEXTAUTH_SECRET (same as AUTH_SECRET) and DATABASE_URL=postgresql://postgres:postgres@localhost:5432/atlas_db to .env.local.
+
+[2026-03-26T01:10:01.000Z] BUG_FIX_RUNTIME_SETTINGS_IMPORT: runtimeSettingsStore used in conversation-orchestrator.ts at lines 575 and 604 (max-jobs-per-search cap) but never imported. Caused ReferenceError crash on every job search. Fixed by adding import to top of conversation-orchestrator.ts.
+
+[2026-03-26T01:19:22.000Z] SERVER_RESTART: Fresh restart after env + import fixes. /api/agents/chat confirmed HTTP 200. Atlas operational.
+[2026-03-26T01:24:33.571Z] Updated mind.md via LLM continuity update.
+[2026-03-26T01:24:33.572Z] Turn execution completed

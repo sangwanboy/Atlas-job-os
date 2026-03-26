@@ -12,6 +12,7 @@ import { tokenBudgetManager } from "@/lib/services/agent/token-budget-manager";
 import type { AgentRuntimeContext, AgentRuntimeResponse } from "@/lib/services/agent/types";
 import { auth } from "@/auth";
 import { ScraperService } from "@/lib/services/scraper/scraper-service";
+import { runtimeSettingsStore } from "@/lib/services/settings/runtime-settings-store";
 
 const maxToolRounds = 25;
 
@@ -497,6 +498,7 @@ async function executeToolCall(toolCall: ToolCall, sid: string): Promise<string>
           source: job.source || "Agent Search",
           description: job.description,
           skills: job.skills,
+          datePosted: (job as any).datePosted,
         });
         results.push(`✅ "${payload.job.title}" at ${payload.job.company} — saved`);
         job.isAlreadyImported = true; // Mark as imported in the store
@@ -563,17 +565,66 @@ async function executeToolCall(toolCall: ToolCall, sid: string): Promise<string>
   }
   if (toolCall.tool === "browser_extract_jobs") {
     const { query, location } = toolCall.parameters as { query: string, location: string };
-    // We construct a LinkedIn search URL as a primary discovery source
+    const linkedInFilters = (toolCall.parameters as any).linkedInFilters;
+
+    // Try LinkedIn scraping first
     const searchUrl = `https://www.linkedin.com/jobs/search/?keywords=${encodeURIComponent(query)}&location=${encodeURIComponent(location)}`;
     const result = await ScraperService.scrape(searchUrl);
-    if (!result.success) return `Error searching for jobs: ${result.error}`;
-    
-    let response = `### 🔍 Job Discovery: ${query} in ${location}\n\n${result.markdown}`;
-    if (result.jobs && result.jobs.length > 0) {
-      response += `\n\n**STRUCTURED_JOBS_FOUND**: I found ${result.jobs.length} structured job listings. Use these to populate the preview box.\n${JSON.stringify(result.jobs, null, 2)}`;
+
+    if (result.success && result.jobs && result.jobs.length > 0) {
+      // Apply admin-configured per-search job limit (default 20)
+      const maxJobs = runtimeSettingsStore.get("local-dev-user").settings.maxJobsPerSearch ?? 20;
+      const limitedJobs = result.jobs.slice(0, maxJobs);
+      // Auto-preview: directly call preview_jobs to preserve scraped URLs
+      const previewResult = await executeToolCall({
+        tool: "preview_jobs",
+        parameters: { jobs: limitedJobs.map((j: any) => ({
+          title: j.title || "Untitled Role",
+          company: j.company || "Unknown Company",
+          location: j.location || location,
+          url: j.url || "#",
+          salary: j.salary,
+          source: "LinkedIn",
+          description: j.description || "",
+          skills: Array.isArray(j.skills) ? j.skills.join(", ") : (j.skills || ""),
+          datePosted: j.date_posted || j.datePosted,
+          jobType: j.jobType || "",
+          senLevel: j.senLevel || "",
+          industry: j.industry || "",
+        })) }
+      }, sid);
+      return `### Job Discovery: ${query} in ${location}\n\nFound ${limitedJobs.length} jobs from LinkedIn (limit: ${maxJobs}).\n\n${previewResult}`;
     }
-    response += `\n\n**INSTRUCTION**: Analyze the content above and use the 'preview_jobs' tool to present relevant roles to the user.`;
-    return response;
+
+    // Fallback: try Indeed if LinkedIn failed
+    const indeedUrl = `https://uk.indeed.com/jobs?q=${encodeURIComponent(query)}&l=${encodeURIComponent(location)}`;
+    console.log(`[browser_extract_jobs] LinkedIn failed, trying Indeed: ${indeedUrl}`);
+    const indeedResult = await ScraperService.scrape(indeedUrl);
+
+    if (indeedResult.success && indeedResult.jobs && indeedResult.jobs.length > 0) {
+      const maxJobs = runtimeSettingsStore.get("local-dev-user").settings.maxJobsPerSearch ?? 20;
+      const limitedJobs = indeedResult.jobs.slice(0, maxJobs);
+      // Auto-preview: directly call preview_jobs to preserve scraped URLs
+      const previewResult = await executeToolCall({
+        tool: "preview_jobs",
+        parameters: { jobs: limitedJobs.map((j: any) => ({
+          title: j.title || "Untitled Role",
+          company: j.company || "Unknown Company",
+          location: j.location || location,
+          url: j.url || "#",
+          salary: j.salary,
+          source: "Indeed",
+          description: j.description || "",
+          skills: Array.isArray(j.skills) ? j.skills.join(", ") : (j.skills || ""),
+          datePosted: j.date_posted || j.datePosted,
+        })) }
+      }, sid);
+      return `### Job Discovery: ${query} in ${location}\n\nFound ${limitedJobs.length} jobs from Indeed (limit: ${maxJobs}).\n\n${previewResult}`;
+    }
+
+    // Both failed — return a clear, non-confusing error
+    const scraperError = result.error || "Unknown scraper error";
+    return `SCRAPER_ERROR: LinkedIn and Indeed both returned no results for "${query}" in "${location}". Raw error: ${scraperError}. Tell the user LinkedIn may be temporarily blocking automated access and suggest they try again in a moment or try a different search term. Do NOT invent technical explanations.`;
   }
   throw new Error(`Unsupported tool: ${toolCall.tool}`);
 }
@@ -613,10 +664,12 @@ export class ConversationOrchestrator {
     context.onUpdate?.({ type: "session_id", sessionId: sid });
 
     let historyContext = "";
+    let historyMessageCount = 0;
     if (sid !== "new" && sid !== "default") {
       try {
         const historyMessages = await agentStore.getSessionMessages(sid);
-        if (historyMessages.length > 0) {
+        historyMessageCount = historyMessages.length;
+        if (historyMessageCount > 0) {
           historyContext = historyMessages.slice(-5).map(m => `${m.role}: ${m.content}`).join("\n\n");
         }
       } catch {}
@@ -629,7 +682,7 @@ export class ConversationOrchestrator {
     else if (msg.includes("score") || msg.includes("filter") || msg.includes("fit")) taskType = "score";
     else if (msg.includes("draft") || msg.includes("email") || msg.includes("write")) taskType = "outreach";
 
-    const layers = await continuitySyncService.hydrateTurnContext(agent.id, sid, taskType);
+    const layers = await continuitySyncService.hydrateTurnContext(agent.id, sid, taskType, historyMessageCount);
     context.onUpdate?.({ type: "status", status: taskType === "search" ? "Searching for jobs..." : "Analyzing request..." });
     await continuitySyncService.logContextMemory(`Starting turn: ${taskType || "general"}`);
 
@@ -739,6 +792,13 @@ export class ConversationOrchestrator {
     if (previewLogs.length > 0 && !finalReply.includes("__PREVIEW_JOBS__")) {
       const lastPreview = previewLogs[previewLogs.length - 1];
       finalReply += `\n\n${lastPreview.result}`;
+    } else if (!finalReply.includes("__PREVIEW_JOBS__")) {
+      // preview_jobs may have been called internally (auto-preview inside browser_extract_jobs)
+      // In that case it won't appear in toolLogs, but the marker will be in toolContext
+      const previewMatch = toolContext.match(/__PREVIEW_JOBS__[\s\S]*?__END_PREVIEW__/);
+      if (previewMatch) {
+        finalReply = previewMatch[0] + "\n\n" + finalReply;
+      }
     }
 
     const normalizedReply = normalizeAgentReply(finalReply);

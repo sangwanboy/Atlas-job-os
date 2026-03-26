@@ -1,9 +1,8 @@
 {
-  "mode": "AWAITING_USER_ACTION",
-  "strategy": "Awaiting confirmation to import the 32 newly previewed jobs.",
+  "mode": "READY",
+  "strategy": "Presenting fresh, scored job results and awaiting import confirmation.",
   "todos": [
-    "Import pending jobs upon user confirmation",
-    "Monitor for new barista/hospitality listings in Birmingham",
-    "Monitor for new cybersecurity listings in Manchester"
+    "Wait for user to select jobs for import",
+    "Draft cover letters for selected roles"
   ]
 }

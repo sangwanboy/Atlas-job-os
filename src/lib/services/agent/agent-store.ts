@@ -39,7 +39,7 @@ export class AgentStore {
         soulMission: agent.soul?.mission || "",
         identityName: agent.identity?.name || "",
         communicationStyle: agent.identity?.communicationStyle || "",
-        model: agent.mindConfig?.model || "gemini-3.1-flash-lite-preview",
+        model: agent.mindConfig?.model || "gemini-3.1-pro-preview",
         onboardingCompleted: agent.onboardingCompleted,
         responseBudgetTokens: agent.responseBudgetTokens,
         memoryBudgetTokens: agent.memoryBudgetTokens,

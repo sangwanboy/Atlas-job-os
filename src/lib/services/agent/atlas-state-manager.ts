@@ -25,6 +25,7 @@ export const ATLAS_FILES = {
   outreachMemory: "outreach_memory.md",
   runtimeEvents: "runtime_events.ndjson",
   agentSnapshot: "agent_snapshot.md",
+  cvSummary: "cv_summary.md",
 };
 
 export class AtlasStateManager {

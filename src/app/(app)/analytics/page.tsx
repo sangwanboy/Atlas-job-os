@@ -92,15 +92,15 @@ export default function AnalyticsPage() {
   }, []);
 
   return (
-    <div className="flex h-full flex-col overflow-hidden">
-      <section className="flex flex-none flex-wrap items-start justify-between gap-3 pb-6">
+    <div className="flex h-full flex-col overflow-hidden px-3 pt-4 sm:px-4 md:px-6">
+      <section className="flex flex-none flex-wrap items-start justify-between gap-3 pb-4 sm:pb-6">
         <div>
-          <h2 className="text-2xl font-extrabold tracking-tight">Analytics</h2>
-          <p className="mt-1 text-sm text-muted">Weekly funnel, job sources, outreach performance, and provider usage.</p>
+          <h2 className="text-xl font-extrabold tracking-tight sm:text-2xl">Analytics</h2>
+          <p className="mt-1 hidden text-sm text-muted sm:block">Weekly funnel, job sources, outreach performance, and provider usage.</p>
         </div>
       </section>
 
-      <div className="flex-1 overflow-y-auto min-h-0 space-y-6 pb-6 custom-scrollbar">
+      <div className="flex-1 overflow-y-auto min-h-0 space-y-4 pb-6 custom-scrollbar sm:space-y-6">
         <section className="grid gap-4 xl:grid-cols-2">
           <article className="panel p-5">
             <div className="mb-4 flex items-center justify-between">

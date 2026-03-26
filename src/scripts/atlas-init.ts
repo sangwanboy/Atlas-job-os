@@ -55,7 +55,7 @@ async function run() {
     outreach_tone: "Professional",
     blacklist_companies: [],
     whitelist_companies: [],
-    source_priority: ["Adzuna"]
+    source_priority: ["LinkedIn", "Indeed"]
   }));
 
   await atlasState.writeText(ATLAS_FILES.userProfile, await atlasState.readText(ATLAS_FILES.userProfile, "Targeting high-fit engineering roles."));

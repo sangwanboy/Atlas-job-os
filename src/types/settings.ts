@@ -67,6 +67,7 @@ export type RuntimeSettings = {
   monthlyTokenBudget: number;
   softLimitPercent: number;
   perResponseTokenCap: number;
+  maxJobsPerSearch: number;
   autoSummarizeOnHighUsage: boolean;
   strictLoopProtection: boolean;
   strictAgentResponseMode: boolean;

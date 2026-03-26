@@ -514,6 +514,28 @@ export function LlmSettingsPanel() {
               className="w-full rounded-lg border bg-panel px-3 py-2"
             />
           </label>
+
+          <label className="space-y-1 text-sm">
+            <span className="font-semibold">Max Jobs Per Search</span>
+            <p className="text-xs text-slate-500">Maximum number of job listings Atlas returns in a single search (1–200)</p>
+            <input
+              type="number"
+              min={1}
+              max={200}
+              value={runtimeDraft.maxJobsPerSearch ?? 20}
+              onChange={(event) =>
+                setRuntimeDraft((current) =>
+                  current
+                    ? {
+                        ...current,
+                        maxJobsPerSearch: Math.min(200, Math.max(1, Number(event.target.value || 20))),
+                      }
+                    : current,
+                )
+              }
+              className="w-full rounded-lg border bg-panel px-3 py-2"
+            />
+          </label>
         </div>
 
         <div className="mt-5 grid gap-2 sm:grid-cols-2">

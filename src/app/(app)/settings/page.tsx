@@ -29,10 +29,10 @@ function SettingsSkeleton() {
 
 export default function SettingsPage() {
   return (
-    <div className="flex h-full flex-col overflow-hidden">
-      <section className="flex-none pb-6">
-        <h2 className="text-2xl font-extrabold tracking-tight">Settings</h2>
-        <p className="mt-1 text-sm text-muted">
+    <div className="flex h-full flex-col overflow-hidden px-3 pt-4 sm:px-4 md:px-6">
+      <section className="flex-none pb-4 sm:pb-6">
+        <h2 className="text-xl font-extrabold tracking-tight sm:text-2xl">Settings</h2>
+        <p className="mt-1 hidden text-sm text-muted sm:block">
           Manage your AI job agent configuration, connected integrations, and system preferences.
         </p>
       </section>
