@@ -682,9 +682,12 @@ export class ConversationOrchestrator {
     else if (msg.includes("score") || msg.includes("filter") || msg.includes("fit")) taskType = "score";
     else if (msg.includes("draft") || msg.includes("email") || msg.includes("write")) taskType = "outreach";
 
-    const layers = await continuitySyncService.hydrateTurnContext(agent.id, sid, taskType, historyMessageCount);
-    context.onUpdate?.({ type: "status", status: taskType === "search" ? "Searching for jobs..." : "Analyzing request..." });
-    await continuitySyncService.logContextMemory(`Starting turn: ${taskType || "general"}`);
+    // Send status immediately so UI shows activity without waiting for file I/O
+    context.onUpdate?.({ type: "status", status: taskType === "search" ? "Searching for jobs..." : "Thinking..." });
+    const [layers] = await Promise.all([
+      continuitySyncService.hydrateTurnContext(agent.id, sid, taskType, historyMessageCount),
+      continuitySyncService.logContextMemory(`Starting turn: ${taskType || "general"}`),
+    ]);
 
     // Reset loop guard for every new prompt
     loopPreventionGuard.reset(agent.id, sid);

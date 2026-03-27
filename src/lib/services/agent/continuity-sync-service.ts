@@ -20,6 +20,12 @@ export type ActiveTaskState = {
   currentStepIndex: number;
 };
 
+// ─── Layer Cache ─────────────────────────────────────────────────────────────
+
+type LayerCache = { layers: HydratedLayers; expiresAt: number };
+const _layerCache = new Map<string, LayerCache>();
+const LAYER_CACHE_TTL_MS = 30_000; // 30 seconds
+
 // ─── Selective Hydration Service ────────────────────────────────────────────
 
 export class ContinuitySyncService {
@@ -39,41 +45,63 @@ export class ContinuitySyncService {
    */
   async hydrateTurnContext(agentId: string, sessionId: string, taskType?: string, msgCount = 0): Promise<HydratedLayers> {
     const now = new Date();
-    const syncState = await atlasState.readJson<SyncState>(ATLAS_FILES.syncState, { 
-      lastHydratedAt: now.toISOString(), 
-      persistenceMode: "db-active", 
-      healthMarkers: [] 
-    });
+    const cacheKey = `${agentId}:${sessionId}:${msgCount}`;
+
+    // Return cached layers if still fresh (skip on first turn or re-injection turns)
+    const isFirstTurn = msgCount === 0;
+    const isReinjectionTurn = msgCount > 0 && msgCount % 7 === 0;
+    const cached = _layerCache.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now() && !isFirstTurn && !isReinjectionTurn) {
+      return cached.layers;
+    }
+
+    // Parallel: read sync state + all file layers simultaneously
+    const [
+      syncState,
+      mind,
+      fullContext,
+      soul,
+      identity,
+      operatingRules,
+      searchGuidelines,
+      fullProfile,
+      prefs,
+      cvSummary,
+      cvEntries,
+    ] = await Promise.all([
+      atlasState.readJson<SyncState>(ATLAS_FILES.syncState, { lastHydratedAt: now.toISOString(), persistenceMode: "db-active", healthMarkers: [] }),
+      atlasState.readText(ATLAS_FILES.mind, "Mind: READY"),
+      atlasState.readText(ATLAS_FILES.contextMemory, ""),
+      atlasState.readText(ATLAS_FILES.soul, ""),
+      atlasState.readText(ATLAS_FILES.identity, ""),
+      atlasState.readText(ATLAS_FILES.operatingRules, ""),
+      atlasState.readText(ATLAS_FILES.search, ""),
+      atlasState.readText(ATLAS_FILES.userProfile, ""),
+      atlasState.readJson(ATLAS_FILES.preferences, {}),
+      atlasState.readText(ATLAS_FILES.cvSummary, ""),
+      fs.readdir(path.join(process.cwd(), "uploads", "cv"), { withFileTypes: true }).catch(() => [] as import("node:fs").Dirent[]),
+    ]);
 
     const lastSync = new Date(syncState.lastHydratedAt);
     const diffMinutes = (now.getTime() - lastSync.getTime()) / (1000 * 60);
     const isNewSession = sessionId === "new" || sessionId === "default";
     const isLongInactivity = diffMinutes > 45;
-
-    // Smart profile injection: full profile at turn 0 and every 7 messages
-    const isFirstTurn = msgCount === 0;
-    const isReinjectionTurn = msgCount > 0 && msgCount % 7 === 0;
     const shouldInjectFullProfile = isFirstTurn || isReinjectionTurn || isLongInactivity;
 
     const layers: HydratedLayers = {};
 
-    // Mandatory Layers (Always included for every turn to ensure continuity)
-    layers.mind = await atlasState.readText(ATLAS_FILES.mind, "Mind: READY");
-    const fullContext = await atlasState.readText(ATLAS_FILES.contextMemory, "");
-    layers.recentContext = fullContext.slice(-1500); 
-
-    layers.soul = await atlasState.readText(ATLAS_FILES.soul, "");
-    layers.identity = await atlasState.readText(ATLAS_FILES.identity, "");
-    layers.operatingRules = await atlasState.readText(ATLAS_FILES.operatingRules, "");
-    layers.searchGuidelines = await atlasState.readText(ATLAS_FILES.search, "");
+    layers.mind = mind;
+    layers.recentContext = fullContext.slice(-1500);
+    layers.soul = soul;
+    layers.identity = identity;
+    layers.operatingRules = operatingRules;
+    layers.searchGuidelines = searchGuidelines;
 
     // Smart profile injection
-    const fullProfile = await atlasState.readText(ATLAS_FILES.userProfile, "");
     if (shouldInjectFullProfile) {
       layers.userProfile = fullProfile;
       layers.profileMini = undefined;
     } else if (fullProfile.length > 50) {
-      // Extract a compact 2-line summary from the profile for intermediate turns
       const nameMatch = fullProfile.match(/(?:# User Profile:\s*|Name:\s*)([^\n]+)/i);
       const roleMatch = fullProfile.match(/(?:Current Role|Target Role|## Overview)[\s\S]*?([^\n]{10,80})/i);
       const name = nameMatch?.[1]?.trim() ?? "User";
@@ -82,45 +110,29 @@ export class ContinuitySyncService {
       layers.userProfile = undefined;
     }
 
-    const prefs = await atlasState.readJson(ATLAS_FILES.preferences, {});
     layers.preferences = JSON.stringify(prefs, null, 2);
 
-    // CV Summary (upgrade tips) — always inject when available
-    const cvSummary = await atlasState.readText(ATLAS_FILES.cvSummary, "");
     if (cvSummary.length > 20) {
       layers.cvSummary = cvSummary;
     }
 
-    // Load CV context — list uploaded CVs from disk so Atlas is aware of them
-    try {
-      const cvDir = path.join(process.cwd(), "uploads", "cv");
-      const entries = await fs.readdir(cvDir, { withFileTypes: true }).catch(() => []);
-      const cvFiles = entries
-        .filter((e) => e.isFile())
-        .map((e) => {
-          const ext = path.extname(e.name).toLowerCase();
-          return `- ${e.name} (type: ${ext})`;
-        });
-      if (cvFiles.length > 0) {
-        layers.cvContext = `The user has uploaded the following CV files:\n${cvFiles.join("\n")}\n\nThese CV files are accessible at uploads/cv/ on the server. Use this knowledge to tailor job matches and cover letters to the user's background.`;
-      } else {
-        layers.cvContext = "No CV files have been uploaded yet.";
-      }
-    } catch {
-      layers.cvContext = undefined;
-    }
+    // CV context
+    const cvFiles = (cvEntries as import("node:fs").Dirent[])
+      .filter((e) => e.isFile())
+      .map((e) => `- ${e.name} (type: ${path.extname(e.name).toLowerCase()})`);
+    layers.cvContext = cvFiles.length > 0
+      ? `The user has uploaded the following CV files:\n${cvFiles.join("\n")}\n\nThese CV files are accessible at uploads/cv/ on the server. Use this knowledge to tailor job matches and cover letters to the user's background.`
+      : "No CV files have been uploaded yet.";
 
-    // Context Recovery Log
-    if (isNewSession || isLongInactivity) {
-      await this.logContextMemory(`Re-anchoring search context for session: ${sessionId}`);
-    }
-    if (shouldInjectFullProfile && !isFirstTurn) {
-      await this.logContextMemory(`Full profile re-injected at message ${msgCount}`);
-    }
+    // Fire-and-forget: log + update sync state (don't block the return)
+    void Promise.all([
+      (isNewSession || isLongInactivity) ? this.logContextMemory(`Re-anchoring search context for session: ${sessionId}`) : Promise.resolve(),
+      (shouldInjectFullProfile && !isFirstTurn) ? this.logContextMemory(`Full profile re-injected at message ${msgCount}`) : Promise.resolve(),
+      atlasState.writeJson(ATLAS_FILES.syncState, { ...syncState, lastHydratedAt: now.toISOString() }),
+    ]);
 
-    // Update last sync time
-    syncState.lastHydratedAt = now.toISOString();
-    await atlasState.writeJson(ATLAS_FILES.syncState, syncState);
+    // Cache the result
+    _layerCache.set(cacheKey, { layers, expiresAt: Date.now() + LAYER_CACHE_TTL_MS });
 
     return layers;
   }
