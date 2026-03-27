@@ -79,7 +79,7 @@ async function callGemini(
 class GeminiApiProvider implements AiProvider {
   async chat(request: AiChatRequest): Promise<AiChatResponse> {
     const apiKey = request.apiKey || env.GEMINI_API_KEY;
-    const preferredModel = request.model ?? env.DEFAULT_AI_MODEL ?? "gemini-3.1-pro-preview";
+    const model = request.model ?? env.DEFAULT_AI_MODEL ?? "gemini-3.1-pro-preview";
 
     if (!apiKey) {
       const fallback = await new MockAiProvider("gemini").chat(request);
