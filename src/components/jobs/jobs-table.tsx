@@ -29,8 +29,8 @@ export function JobsTable() {
   const [isLoading, setIsLoading] = React.useState(cachedJobs === null);
   const [isSearching, setIsSearching] = React.useState(false);
   const [syncMessage, setSyncMessage] = React.useState<string>("");
-  const [keywords, setKeywords] = React.useState(qParam || "software engineer");
-  const [location, setLocation] = React.useState("london");
+  const [keywords, setKeywords] = React.useState(qParam || "");
+  const [location, setLocation] = React.useState("");
   const [globalFilter, setGlobalFilter] = React.useState(qParam);
   const [sorting, setSorting] = React.useState<SortingState>([{ id: "score", desc: true }]);
   const [selectedJob, setSelectedJob] = React.useState<JobRow | null>(null);
@@ -214,23 +214,23 @@ export function JobsTable() {
   }
 
   return (
-    <section className="panel p-4 md:p-5">
+    <section className="panel p-3 sm:p-4 md:p-5">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h3 className="text-lg font-bold">Jobs Intelligence Table</h3>
-          <p className="text-sm text-muted">Filter, prioritize, and act on your best opportunities.</p>
+          <p className="hidden text-sm text-muted sm:block">Filter, prioritize, and act on your best opportunities.</p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <input value={keywords} onChange={(event) => setKeywords(event.target.value)} placeholder="Keywords" className="field w-44" />
-          <input value={location} onChange={(event) => setLocation(event.target.value)} placeholder="Location" className="field w-36" />
-          <button type="button" className="btn-primary" onClick={() => void runLiveSearch()} disabled={isSearching}>
+        <div className="flex w-full flex-wrap gap-2 sm:w-auto">
+          <input value={keywords} onChange={(event) => setKeywords(event.target.value)} placeholder="Keywords" className="field w-full sm:w-44" />
+          <input value={location} onChange={(event) => setLocation(event.target.value)} placeholder="Location" className="field w-full sm:w-36" />
+          <button type="button" className="btn-primary w-full sm:w-auto" onClick={() => void runLiveSearch()} disabled={isSearching}>
             {isSearching ? "Searching..." : "Search & Compile"}
           </button>
           <input
             value={globalFilter}
             onChange={(event) => setGlobalFilter(event.target.value)}
             placeholder="Filter table"
-            className="field w-44"
+            className="field w-full sm:w-44"
           />
         </div>
       </div>
@@ -238,8 +238,8 @@ export function JobsTable() {
       {syncMessage ? <p className="mb-3 text-sm text-muted">{syncMessage}</p> : null}
       {isLoading ? <p className="mb-3 text-sm text-muted">Loading jobs...</p> : null}
 
-      <div className="overflow-x-auto rounded-xl border border-white/60 bg-white/70">
-        <table className="w-full min-w-[1100px] text-sm">
+      <div className="overflow-x-auto rounded-xl border border-white/60 bg-white/70 -mx-1 sm:mx-0">
+        <table className="w-full min-w-[800px] text-sm">
           <thead className="bg-white/80 text-left">
             {table.getHeaderGroups().map((headerGroup) => (
               <tr key={headerGroup.id}>

@@ -537,6 +537,7 @@ export function AgentChatStarter() {
   async function sendMessage(overrideMessage?: string) {
     const msg = overrideMessage || input.trim();
     if (!msg) return;
+    setInitialLoading(false);
 
     const userMessage: ChatMessageView = {
       id: crypto.randomUUID(),
@@ -726,15 +727,18 @@ export function AgentChatStarter() {
       ];
 
   return (
-    <div className="flex h-full min-h-0 w-full gap-5 overflow-hidden xl:flex-row flex-col lg:gap-6">
-      <aside className="panel flex flex-col xl:w-[320px] xl:flex-none p-5 custom-scrollbar scroll-well overflow-y-auto max-h-[40vh] xl:max-h-full">
-        <div className="flex-none pb-2 border-b border-white/20">
-          <p className="text-xs font-semibold uppercase tracking-widest text-muted">Agent Profile</p>
-          <h3 className="mt-2 text-2xl font-extrabold">{profile.name}</h3>
-          <p className="mt-1 text-sm text-muted">{profile.roleTitle}</p>
+    <div className="flex h-full min-h-0 w-full gap-3 overflow-hidden xl:flex-row flex-col sm:gap-5 lg:gap-6">
+      <aside className="panel flex-none xl:flex xl:flex-col xl:w-[320px] p-4 sm:p-5 custom-scrollbar scroll-well overflow-y-auto max-h-[150px] sm:max-h-[200px] xl:max-h-full xl:overflow-y-auto">
+        {/* Compact mobile header, full profile on xl */}
+        <div className="flex items-center gap-3 xl:block xl:pb-2 xl:border-b xl:border-white/20">
+          <p className="hidden text-xs font-semibold uppercase tracking-widest text-muted xl:block">Agent Profile</p>
+          <h3 className="text-lg font-extrabold xl:mt-2 xl:text-2xl">{profile.name}</h3>
+          <span className="text-xs text-muted xl:mt-1 xl:block">·</span>
+          <p className="text-xs text-muted xl:mt-1">{profile.roleTitle}</p>
+          <span className="ml-auto text-[10px] text-muted xl:hidden">{profile.mindModel}</span>
         </div>
-        
-        <div className="flex-none space-y-4 py-4 text-sm">
+
+        <div className="hidden xl:block flex-none space-y-4 py-4 text-sm">
           <div>
             <span className="font-semibold block mb-1">Soul Mission:</span>
             <p className="text-muted leading-tight">{profile.soulMission}</p>
@@ -753,7 +757,7 @@ export function AgentChatStarter() {
           </div>
         </div>
 
-        <div className="flex-none pt-4 border-t border-white/20 space-y-3">
+        <div className="hidden xl:block flex-none pt-4 border-t border-white/20 space-y-3">
             <div className={`rounded-xl border border-white/60 bg-white/75 p-3 text-xs`}>
               <div className="flex items-center justify-between">
                 <p className="font-semibold">Tool Use</p>
@@ -822,14 +826,14 @@ export function AgentChatStarter() {
         </div>
       </aside>
 
-      <section className="panel flex h-full min-h-0 flex-1 flex-col overflow-hidden p-4 md:p-5 pb-3 md:pb-4 shadow-well">
+      <section className="panel flex min-h-0 flex-1 flex-col overflow-hidden p-3 pb-2 sm:p-4 sm:pb-3 md:p-5 md:pb-4 shadow-well">
         {/* Chat Header with Session Management */}
-        <div className="mb-4 flex flex-none items-center justify-between gap-4 border-b border-white/20 pb-4">
-          <div className="flex flex-1 items-center gap-2 overflow-hidden">
+        <div className="mb-3 flex flex-none items-center justify-between gap-2 border-b border-white/20 pb-3 sm:mb-4 sm:gap-4 sm:pb-4">
+          <div className="flex flex-1 items-center gap-2 overflow-hidden min-w-0">
             <select
               value={sessionId || "new"}
               onChange={(e) => void switchSession(e.target.value)}
-              className="field text-xs font-medium bg-white/50 py-1.5 focus:bg-white"
+              className="field text-xs font-medium bg-white/50 py-1.5 focus:bg-white min-w-0"
             >
               <option value="new">Current Conversation</option>
               {sessions?.map((s) => (
@@ -841,14 +845,15 @@ export function AgentChatStarter() {
           </div>
           <button
             onClick={() => void switchSession("new")}
-            className="btn-secondary whitespace-nowrap px-3 py-1.5 text-xs flex items-center gap-1.5"
+            className="btn-secondary whitespace-nowrap px-2.5 py-1.5 text-xs flex items-center gap-1 sm:px-3 sm:gap-1.5"
           >
             <span className="text-base leading-none font-bold">+</span>
-            New Chat
+            <span className="hidden sm:inline">New Chat</span>
+            <span className="sm:hidden">New</span>
           </button>
         </div>
 
-        <div className="flex-1 min-h-0 overflow-y-auto px-4 pt-4 pb-0 custom-scrollbar scroll-well shadow-well relative">
+        <div className="flex-1 min-h-0 overflow-y-auto px-2 pt-2 pb-0 custom-scrollbar scroll-well shadow-well relative sm:px-4 sm:pt-4">
           <div className="flex flex-col gap-4 pb-4">
             {initialLoading ? (
               <div className="flex flex-col gap-4 animate-pulse">
@@ -903,7 +908,7 @@ export function AgentChatStarter() {
           <div id="chat-bottom" className="h-px w-full opacity-0" ref={chatBottomRef} />
         </div>
 
-        <div className="mt-2 flex-none flex items-center gap-2 rounded-2xl border border-white/60 bg-white/80 p-3 shadow-sm transition-all duration-300 focus-within:ring-1 focus-within:ring-cyan-500/30">
+        <div className="mt-2 flex-none flex items-center gap-2 rounded-xl border border-white/60 bg-white/80 p-2 shadow-sm transition-all duration-300 focus-within:ring-1 focus-within:ring-cyan-500/30 sm:rounded-2xl sm:p-3">
           <input
             autoFocus
             value={input}

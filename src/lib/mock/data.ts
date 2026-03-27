@@ -25,7 +25,7 @@ export const activeAgent: AgentProfile = {
     communicationStyle: "Strategic",
   },
   mind: {
-    model: "gemini-3.1-flash-preview",
+    model: "gemini-3.1-flash-lite-preview",
     deterministicMode: true,
     maxTurns: 10,
   },

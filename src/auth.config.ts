@@ -1,4 +1,3 @@
-import Credentials from "next-auth/providers/credentials"
 import type { NextAuthConfig } from "next-auth"
 
 export default {
@@ -18,15 +17,17 @@ export default {
     },
     jwt({ token, user }) {
       if (user) {
-        token.role = (user as any).role
+        token.id = user.id;
+        token.role = (user as any).role;
       }
-      return token
+      return token;
     },
     session({ session, token }) {
       if (session.user) {
-        session.user.role = token.role as "USER" | "ADMIN"
+        session.user.id = token.id as string;
+        session.user.role = token.role as "USER" | "ADMIN";
       }
-      return session
+      return session;
     },
   },
 } satisfies NextAuthConfig

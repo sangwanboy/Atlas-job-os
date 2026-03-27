@@ -1,14 +1,11 @@
 import sys
 import json
 import asyncio
-import os
 import io
 import re
 
-# Force stdout to use UTF-8 to avoid 'charmap' errors on Windows
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
-# Ensure we can import crawl4ai
 try:
     from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig, CacheMode
     from crawl4ai.extraction_strategy import JsonCssExtractionStrategy
@@ -155,11 +152,95 @@ async def main():
                     "status_code": getattr(result, "status_code", 500)
                 }))
     except Exception as e:
-        print(json.dumps({
-            "success": False,
-            "error": f"Exception during crawl: {str(e)}",
-            "status_code": 500
-        }))
+        print(json.dumps({"success": False, "error": f"Search page crawl failed: {e}", "status_code": 500}))
+        return
+
+    if not result.success:
+        print(json.dumps({"success": False, "error": str(result.error_message), "status_code": 500}))
+        return
+
+    # Parse search results
+    base_jobs = []
+    if result.extracted_content:
+        try:
+            base_jobs = json.loads(result.extracted_content)
+        except Exception:
+            pass
+
+    # Build URL map from raw HTML job IDs (fallback for missing hrefs)
+    li_job_ids = extract_linkedin_job_ids(getattr(result, 'html', '') or '') if not is_indeed else []
+
+    # Resolve URLs and filter blanks
+    resolved = []
+    url_idx = 0
+    for job in base_jobs:
+        title = ' '.join((job.get('title') or '').split())
+        if not title:
+            continue
+
+        raw_url = (job.get('url') or '').strip()
+        if not is_indeed:
+            clean_url = build_clean_linkedin_url(raw_url)
+            if not clean_url and url_idx < len(li_job_ids):
+                clean_url = f'https://www.linkedin.com/jobs/view/{li_job_ids[url_idx]}/'
+                url_idx += 1
+            elif clean_url:
+                url_idx += 1
+        else:
+            clean_url = raw_url if raw_url.startswith('http') else (
+                'https://uk.indeed.com' + raw_url if raw_url.startswith('/') else ''
+            )
+
+        for f in ['title', 'company', 'location', 'salary', 'date_posted']:
+            if job.get(f):
+                job[f] = ' '.join(str(job[f]).split())
+
+        job['title'] = title
+        job['url'] = clean_url
+        job['source'] = 'Indeed' if is_indeed else 'LinkedIn'
+        resolved.append(job)
+
+    if not resolved:
+        print(json.dumps({"success": False, "error": "No jobs found on search page", "status_code": 404}))
+        return
+
+    # ── STEP 2: Scrape each job's detail page concurrently ────────────────────
+    # Only do this for LinkedIn (Indeed detail pages are harder to scrape as guest)
+    if not is_indeed:
+        semaphore = asyncio.Semaphore(4)  # max 4 concurrent detail fetches
+        detail_tasks = [
+            scrape_detail(browser_config, job['url'], semaphore)
+            for job in resolved if job.get('url') and 'linkedin.com/jobs/view/' in job.get('url', '')
+        ]
+        details = await asyncio.gather(*detail_tasks, return_exceptions=True)
+
+        detail_idx = 0
+        for job in resolved:
+            if job.get('url') and 'linkedin.com/jobs/view/' in job.get('url', ''):
+                detail = details[detail_idx] if detail_idx < len(details) else {}
+                if isinstance(detail, dict) and detail:
+                    if detail.get('description'):
+                        job['description'] = detail['description'][:4000]
+                    if detail.get('salary') and not job.get('salary'):
+                        job['salary'] = detail['salary']
+                    if detail.get('skills'):
+                        skills = detail['skills']
+                        job['skills'] = ', '.join(skills[:20]) if isinstance(skills, list) else str(skills)
+                    if detail.get('jobType'):
+                        job['jobType'] = detail['jobType']
+                    if detail.get('senLevel'):
+                        job['senLevel'] = detail['senLevel']
+                    if detail.get('industry'):
+                        job['industry'] = detail['industry']
+                detail_idx += 1
+
+    print(json.dumps({
+        "success": True,
+        "url": url,
+        "jobs": resolved,
+        "status_code": 200
+    }))
+
 
 
 if __name__ == "__main__":

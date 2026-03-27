@@ -69,6 +69,10 @@ export class ScraperService {
       });
 
       child.on("close", (code) => {
+        clearTimeout(timeout);
+        if (resolved) return;
+        resolved = true;
+
         if (code !== 0) {
           console.error(`[ScraperService] Worker failed with code ${code}. Stderr: ${stderr}`);
           finish({
@@ -82,7 +86,6 @@ export class ScraperService {
 
         try {
           const lines = stdout.trim().split("\n");
-          // The last line should be our JSON output
           const lastLine = lines[lines.length - 1];
           const result = JSON.parse(lastLine) as ScrapeResult;
           console.log(`[ScraperService] Crawl successful for ${url}`);

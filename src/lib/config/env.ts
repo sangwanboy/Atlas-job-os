@@ -29,6 +29,9 @@ const envSchema = z.object({
   BROWSER_SCREENSHOT_DIR: z.string().optional(),
   REDIS_URL: z.string().optional(),
   LOG_LEVEL: z.enum(["debug", "info", "warn", "error"]).default("info"),
+  VERTEX_AI_PROJECT: z.string().optional(),
+  VERTEX_AI_LOCATION: z.string().optional(),
+  GOOGLE_APPLICATION_CREDENTIALS: z.string().optional(),
 });
 
 export const env = envSchema.parse({
@@ -60,4 +63,7 @@ export const env = envSchema.parse({
   BROWSER_SCREENSHOT_DIR: process.env.BROWSER_SCREENSHOT_DIR,
   REDIS_URL: process.env.REDIS_URL,
   LOG_LEVEL: process.env.LOG_LEVEL,
+  VERTEX_AI_PROJECT: process.env.VERTEX_AI_PROJECT,
+  VERTEX_AI_LOCATION: process.env.VERTEX_AI_LOCATION,
+  GOOGLE_APPLICATION_CREDENTIALS: process.env.GOOGLE_APPLICATION_CREDENTIALS,
 });

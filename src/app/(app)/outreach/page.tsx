@@ -75,11 +75,11 @@ export default function OutreachPage() {
   }
 
   return (
-    <div className="flex h-full flex-col overflow-hidden">
-      <section className="flex flex-none flex-wrap items-start justify-between gap-3 pb-6">
+    <div className="flex h-full flex-col overflow-hidden px-3 pt-4 sm:px-4 md:px-6">
+      <section className="flex flex-none flex-wrap items-start justify-between gap-3 pb-4 sm:pb-6">
         <div>
-          <h2 className="text-2xl font-extrabold tracking-tight">Outreach</h2>
-          <p className="mt-1 text-sm text-muted">Plan campaigns, personalize drafts, and control send cadence.</p>
+          <h2 className="text-xl font-extrabold tracking-tight sm:text-2xl">Outreach</h2>
+          <p className="mt-1 hidden text-sm text-muted sm:block">Plan campaigns, personalize drafts, and control send cadence.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <button 
@@ -173,7 +173,7 @@ export default function OutreachPage() {
       {selectedRecruiter && (
         <div className="fixed inset-0 z-50 flex justify-end bg-slate-950/40 backdrop-blur-sm" onClick={() => setSelectedRecruiter(null)}>
           <div
-            className="h-full w-full max-w-md overflow-y-auto bg-white/95 p-6 shadow-2xl backdrop-blur-xl border-l border-white/60"
+            className="h-full w-full overflow-y-auto bg-white/95 p-4 shadow-2xl backdrop-blur-xl border-l border-white/60 sm:max-w-md sm:p-6"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-start justify-between gap-4 mb-6">
@@ -211,8 +211,8 @@ export default function OutreachPage() {
       )}
 
       {showDrafts ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-6 backdrop-blur-sm">
-          <div className="max-h-[85vh] w-full max-w-5xl overflow-y-auto rounded-3xl border border-white/60 bg-white/95 p-6 shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-3 backdrop-blur-sm sm:p-6">
+          <div className="max-h-[90vh] w-full max-w-5xl overflow-y-auto rounded-2xl border border-white/60 bg-white/95 p-4 shadow-2xl sm:rounded-3xl sm:p-6">
             <div className="flex items-start justify-between gap-4 sticky top-0 bg-white/95 pb-4 backdrop-blur-sm z-10">
               <div>
                 <h3 className="text-xl font-extrabold">Generated Draft Batch</h3>

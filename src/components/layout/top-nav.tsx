@@ -123,12 +123,12 @@ export function TopNav({ onToggleSidebar, sidebarCollapsed, onToggleDesktopSideb
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search jobs, recruiters, tags, notes"
+            placeholder="Search jobs..."
             className="w-full bg-transparent text-sm outline-none placeholder:text-muted"
           />
         </form>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-1.5 sm:gap-3">
           {/* Notification bell */}
           <div className="relative" ref={notifRef}>
             <button 
@@ -145,7 +145,7 @@ export function TopNav({ onToggleSidebar, sidebarCollapsed, onToggleDesktopSideb
             </button>
 
             {showNotifications && (
-              <div className="absolute right-0 top-full mt-2 w-80 rounded-2xl border border-white/60 bg-white/95 p-4 shadow-2xl backdrop-blur-xl">
+              <div className="absolute right-0 top-full mt-2 w-[calc(100vw-2rem)] max-w-80 rounded-2xl border border-white/60 bg-white/95 p-4 shadow-2xl backdrop-blur-xl sm:w-80">
                 <h4 className="font-bold">Notifications</h4>
                 <div className="mt-3 space-y-3">
                   {notifications.map((notif) => {
@@ -183,14 +183,15 @@ export function TopNav({ onToggleSidebar, sidebarCollapsed, onToggleDesktopSideb
               <>
                 <button
                   onClick={() => setShowProfileMenu(!showProfileMenu)}
-                  className={`rounded-lg border px-3 py-2 text-sm font-semibold shadow-sm whitespace-nowrap transition-colors flex flex-col items-start ${
+                  className={`rounded-lg border p-2 text-sm font-semibold shadow-sm whitespace-nowrap transition-colors flex items-center gap-2 sm:px-3 sm:py-2 sm:flex-col sm:items-start ${
                     showProfileMenu
                       ? "bg-cyan-50 text-cyan-700 border-cyan-200"
                       : "border-white/60 bg-white/75 hover:bg-white"
                   }`}
                 >
-                  <span className="leading-tight">{session.user?.name || "User"}</span>
-                  {session.user?.role === "ADMIN" && <span className="text-[10px] text-cyan-600 font-bold tracking-wider uppercase">Admin</span>}
+                  <User className="h-4 w-4 sm:hidden" />
+                  <span className="hidden leading-tight sm:block">{session.user?.name || "User"}</span>
+                  {session.user?.role === "ADMIN" && <span className="hidden text-[10px] text-cyan-600 font-bold tracking-wider uppercase sm:block">Admin</span>}
                 </button>
 
                 {showProfileMenu && (

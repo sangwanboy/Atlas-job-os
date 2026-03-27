@@ -147,7 +147,8 @@ export async function POST(request: Request) {
           applicationStatus: payload.status ?? "SAVED",
           priority: payload.priority ?? "MEDIUM",
           descriptionRaw: payload.description,
-          requiredSkills: payload.skills ? payload.skills.split(",").map(s => s.trim()) : [],
+          requiredSkills: payload.skills ? payload.skills.split(",").map(s => s.trim()).filter(Boolean) : [],
+          postedDate: payload.datePosted ? new Date(payload.datePosted) : undefined,
         },
         select: {
           id: true,

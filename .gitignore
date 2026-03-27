@@ -42,3 +42,6 @@ ts_errors.txt
 *_output.txt
 *.log
 *.patch
+
+# User uploads - never commit
+uploads/

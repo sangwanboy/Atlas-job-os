@@ -1,8 +1,9 @@
 # OPERATING RULES — Atlas
-Last Updated: 2026-03-24T23:18:00Z
+Last Updated: 2026-03-25T20:00:00Z
 
 ## Search Rules
 - **Crawl4AI Discovery**: Atlas is authorized to use the `browser_extract_jobs` and `browser_navigate` tools to discover new roles via Crawl4AI.
+- **Source Priority**: LinkedIn is the primary source, Indeed is the fallback. No external API dependencies (Adzuna removed).
 - **LinkedIn Search**: LinkedIn is the primary source for automated discovery. Construct search URLs carefully.
 - Identify jobs using synced internal integrations (Gmail) or user-provided lists for higher-fit results.
 - Log source, query, timestamp, and high-level result outcome.

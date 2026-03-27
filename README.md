@@ -13,7 +13,7 @@ A production-minded, full-stack SaaS application for intelligent job discovery, 
 | Language | TypeScript 5 |
 | Auth | NextAuth v5 (beta) — JWT + Credentials |
 | ORM | Prisma 6 + PostgreSQL |
-| AI Provider | Gemini (google-generative-ai) via abstracted provider |
+| AI Provider | Gemini via Vertex AI (service account) — `gemini-3.1-flash-lite-preview` default |
 | Job Scraping | Crawl4AI (Python, `JsonCssExtractionStrategy`) |
 | Browser Automation | Playwright (Chromium) |
 | Tables | TanStack React Table v8 |
@@ -46,8 +46,14 @@ AUTH_SECRET=your_secret_here
 # Database
 DATABASE_URL=postgresql://user:password@localhost:5432/atlas_db
 
-# AI Provider
-GEMINI_API_KEY=your_gemini_api_key_here
+# AI Provider — Vertex AI (service account, recommended)
+VERTEX_AI_PROJECT=your-gcp-project-id
+VERTEX_AI_LOCATION=us-central1
+GOOGLE_APPLICATION_CREDENTIALS=path/to/service-account.json
+DEFAULT_AI_MODEL=gemini-3.1-flash-lite-preview
+
+# AI Provider — Direct Gemini API (alternative, no service account needed)
+# GEMINI_API_KEY=your_gemini_api_key_here
 
 # Gmail Integration (optional)
 GMAIL_CLIENT_ID=

@@ -1,45 +1,57 @@
 "use client";
 
-import { signIn } from "next-auth/react";
 import Link from "next/link";
 import { useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
-import { Bot, Eye, EyeOff, LogIn } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Bot, Eye, EyeOff, UserPlus } from "lucide-react";
 
-export default function LoginPage() {
+export default function RegisterPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const callbackUrl = searchParams?.get("callbackUrl") || "/dashboard";
-  const registered = searchParams?.get("registered");
-
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const handleLogin = async (e: React.FormEvent) => {
+  const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email || !password) {
+    if (!name || !email || !password) {
       setError("Please fill in all fields.");
       return;
     }
+    if (password.length < 6) {
+      setError("Password must be at least 6 characters.");
+      return;
+    }
+    if (password !== confirmPassword) {
+      setError("Passwords do not match.");
+      return;
+    }
+
     setError("");
     setLoading(true);
 
-    const result = await signIn("credentials", {
-      email,
-      password,
-      redirect: false,
-    });
+    try {
+      const res = await fetch("/api/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, email, password }),
+      });
 
-    setLoading(false);
+      const data = await res.json();
 
-    if (result?.error) {
-      setError("Invalid email or password.");
-    } else {
-      router.push(callbackUrl);
-      router.refresh();
+      if (!res.ok) {
+        setError(data.error || "Registration failed.");
+        setLoading(false);
+        return;
+      }
+
+      router.push("/login?registered=1");
+    } catch {
+      setError("Something went wrong. Try again.");
+      setLoading(false);
     }
   };
 
@@ -58,18 +70,12 @@ export default function LoginPage() {
               <Bot className="h-7 w-7 text-white" />
             </div>
             <h1 className="text-2xl font-bold tracking-tight text-white">
-              Welcome back
+              Create Account
             </h1>
             <p className="mt-1.5 text-sm text-slate-400">
-              Sign in to your Job OS account
+              Join Job OS to start discovering opportunities
             </p>
           </div>
-
-          {registered && (
-            <div className="mb-6 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300">
-              Account created successfully. Sign in below.
-            </div>
-          )}
 
           {error && (
             <div className="mb-6 rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-300">
@@ -77,7 +83,21 @@ export default function LoginPage() {
             </div>
           )}
 
-          <form onSubmit={handleLogin} className="space-y-4">
+          <form onSubmit={handleRegister} className="space-y-4">
+            <div>
+              <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-slate-400">
+                Full Name
+              </label>
+              <input
+                type="text"
+                placeholder="John Doe"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                autoComplete="name"
+                className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-slate-500 focus:border-cyan-500/50 focus:outline-none focus:ring-1 focus:ring-cyan-500/50 transition-all"
+              />
+            </div>
+
             <div>
               <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-slate-400">
                 Email
@@ -99,10 +119,10 @@ export default function LoginPage() {
               <div className="relative">
                 <input
                   type={showPassword ? "text" : "password"}
-                  placeholder="Enter password"
+                  placeholder="Min. 6 characters"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  autoComplete="current-password"
+                  autoComplete="new-password"
                   className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 pr-12 text-white placeholder:text-slate-500 focus:border-cyan-500/50 focus:outline-none focus:ring-1 focus:ring-cyan-500/50 transition-all"
                 />
                 <button
@@ -115,6 +135,20 @@ export default function LoginPage() {
               </div>
             </div>
 
+            <div>
+              <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-slate-400">
+                Confirm Password
+              </label>
+              <input
+                type={showPassword ? "text" : "password"}
+                placeholder="Confirm password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                autoComplete="new-password"
+                className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-slate-500 focus:border-cyan-500/50 focus:outline-none focus:ring-1 focus:ring-cyan-500/50 transition-all"
+              />
+            </div>
+
             <button
               type="submit"
               disabled={loading}
@@ -124,8 +158,8 @@ export default function LoginPage() {
                 <div className="h-5 w-5 animate-spin rounded-full border-2 border-white/30 border-t-white" />
               ) : (
                 <>
-                  <LogIn className="h-4 w-4" />
-                  Sign In
+                  <UserPlus className="h-4 w-4" />
+                  Create Account
                 </>
               )}
             </button>
@@ -133,18 +167,14 @@ export default function LoginPage() {
 
           <div className="mt-6 text-center">
             <p className="text-sm text-slate-400">
-              Don&apos;t have an account?{" "}
+              Already have an account?{" "}
               <Link
-                href="/register"
+                href="/login"
                 className="font-semibold text-cyan-400 hover:text-cyan-300 transition-colors"
               >
-                Create one
+                Sign in
               </Link>
             </p>
-          </div>
-
-          <div className="mt-6 rounded-xl border border-white/5 bg-white/[0.02] p-3 text-center text-xs text-slate-500">
-            <p>Default admin: <span className="text-slate-400 font-mono">admin@jobos.local</span> / <span className="text-slate-400 font-mono">admin123</span></p>
           </div>
         </div>
       </div>

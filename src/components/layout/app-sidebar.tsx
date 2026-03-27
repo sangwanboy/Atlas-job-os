@@ -5,7 +5,7 @@ import type { Route } from "next";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { Bot, BriefcaseBusiness, ChartNoAxesCombined, LayoutDashboard, Megaphone, Settings, Users, PanelLeftClose, PanelLeftOpen, X } from "lucide-react";
+import { Bot, BriefcaseBusiness, ChartNoAxesCombined, FileText, LayoutDashboard, Megaphone, Settings, Users, PanelLeftClose, PanelLeftOpen, X } from "lucide-react";
 import type { RuntimeSettingsResponse } from "@/types/settings";
 
 const navItems = [
@@ -13,6 +13,7 @@ const navItems = [
   { href: "/jobs", label: "Jobs", icon: BriefcaseBusiness },
   { href: "/agents/workspace", label: "Agent Workspace", icon: Bot },
   { href: "/outreach", label: "Outreach", icon: Megaphone },
+  { href: "/cv", label: "My CV", icon: FileText },
   { href: "/settings", label: "Settings", icon: Settings },
   { href: "/analytics", label: "Analytics", icon: ChartNoAxesCombined },
 ] as const satisfies ReadonlyArray<{ href: Route; label: string; icon: React.ComponentType<{ className?: string }> }>;
@@ -55,6 +56,25 @@ export function AppSidebar({ mobileOpen, onClose, collapsed, onToggleCollapse }:
   const percentage = Math.min(100, Math.round((totalTokens / budget) * 100));
   const budgetLabel = budget >= 1000000 ? `${(budget / 1000000).toFixed(1)}M` : `${Math.round(budget / 1000)}k`;
   const usageDisplay = totalTokens >= 1000 ? `${(totalTokens / 1000).toFixed(1)}k` : totalTokens;
+
+  const NavLink = ({ item, onClick }: { item: typeof navItems[number]; onClick?: () => void }) => {
+    const Icon = item.icon;
+    const active = pathname ? pathname === item.href || pathname.startsWith(`${item.href}/`) : false;
+    return (
+      <Link
+        href={item.href}
+        onClick={onClick}
+        className={`group flex items-center gap-3 rounded-xl border px-3 py-2 text-sm font-semibold transition ${
+          active
+            ? "border-cyan-200/80 bg-cyan-50/80 text-slate-900"
+            : "border-transparent text-muted hover:border-white/70 hover:bg-white/75 hover:text-text"
+        }`}
+      >
+        <Icon className="h-4 w-4" />
+        {item.label}
+      </Link>
+    );
+  };
 
   return (
     <>
