@@ -5,7 +5,7 @@ import type { Route } from "next";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { Bot, BriefcaseBusiness, ChartNoAxesCombined, LayoutDashboard, Megaphone, Settings, Users, PanelLeftClose, PanelLeftOpen, X } from "lucide-react";
+import { Bot, BriefcaseBusiness, ChartNoAxesCombined, FileText, LayoutDashboard, Megaphone, Settings, Users, PanelLeftClose, PanelLeftOpen, X } from "lucide-react";
 import type { RuntimeSettingsResponse } from "@/types/settings";
 
 const navItems = [

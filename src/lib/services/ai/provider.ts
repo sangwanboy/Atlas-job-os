@@ -1,4 +1,5 @@
 import { env } from "@/lib/config/env";
+import { GoogleAuth } from "google-auth-library";
 
 export type AiProviderName = "openai" | "anthropic" | "gemini" | "groq" | "mistral" | "cohere" | "perplexity" | "xai" | "deepseek" | "together" | "openrouter";
 
@@ -78,14 +79,15 @@ async function callGemini(
 
 class GeminiApiProvider implements AiProvider {
   async chat(request: AiChatRequest): Promise<AiChatResponse> {
+    const preferredModel = request.model ?? env.DEFAULT_AI_MODEL ?? "gemini-2.5-flash";
+    const useVertex = !!(env.VERTEX_AI_PROJECT && env.GOOGLE_APPLICATION_CREDENTIALS);
     const apiKey = request.apiKey || env.GEMINI_API_KEY;
-    const model = request.model ?? env.DEFAULT_AI_MODEL ?? "gemini-3.1-pro-preview";
 
-    if (!apiKey) {
+    if (!useVertex && !apiKey) {
       const fallback = await new MockAiProvider("gemini").chat(request);
       return {
         ...fallback,
-        text: `${fallback.text}\n[Gemini API key missing, using mock response.]`,
+        text: `${fallback.text}\n[No Gemini API key or Vertex AI config, using mock response.]`,
       };
     }
 
