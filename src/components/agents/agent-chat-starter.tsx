@@ -537,6 +537,7 @@ export function AgentChatStarter() {
   async function sendMessage(overrideMessage?: string) {
     const msg = overrideMessage || input.trim();
     if (!msg) return;
+    setInitialLoading(false);
 
     const userMessage: ChatMessageView = {
       id: crypto.randomUUID(),

@@ -1,4 +1,5 @@
 import { env } from "@/lib/config/env";
+import { GoogleAuth } from "google-auth-library";
 
 export type AiProviderName = "openai" | "anthropic" | "gemini" | "groq" | "mistral" | "cohere" | "perplexity" | "xai" | "deepseek" | "together" | "openrouter";
 
@@ -46,10 +47,9 @@ type GeminiResponse = {
 // Fallback chain: if preferred model is rate-limited (429/503), try these in order
 // All confirmed available via ListModels API as of 2026-03-25
 const GEMINI_FALLBACK_MODELS = [
-  "gemini-3.1-flash-lite-preview",  // same 3.1 family, confirmed working
-  "gemini-3-flash-preview",          // 3.x family, confirmed working
-  "gemini-2.5-pro",                  // stable, confirmed working
+  "gemini-3.1-flash-lite-preview",  // confirmed working
   "gemini-2.5-flash",                // fast stable fallback
+  "gemini-2.5-pro",                  // stable fallback
 ];
 
 async function callGemini(
@@ -76,16 +76,69 @@ async function callGemini(
   return { ok: false, status: response.status, errorText };
 }
 
+// ─── Vertex AI helpers ───────────────────────────────────────────────────────
+
+let _googleAuth: GoogleAuth | null = null;
+function getGoogleAuth(): GoogleAuth {
+  if (!_googleAuth) {
+    _googleAuth = new GoogleAuth({
+      keyFile: env.GOOGLE_APPLICATION_CREDENTIALS,
+      scopes: ["https://www.googleapis.com/auth/cloud-platform"],
+    });
+  }
+  return _googleAuth;
+}
+
+// Cache the access token for up to 55 minutes (tokens last 60 min)
+let _cachedToken: { token: string; expiresAt: number } | null = null;
+async function getAccessToken(): Promise<string> {
+  if (_cachedToken && _cachedToken.expiresAt > Date.now()) {
+    return _cachedToken.token;
+  }
+  const auth = getGoogleAuth();
+  const client = await auth.getClient();
+  const tokenResponse = await client.getAccessToken();
+  const token = typeof tokenResponse === "string" ? tokenResponse : tokenResponse?.token;
+  if (!token) throw new Error("Failed to obtain Vertex AI access token");
+  _cachedToken = { token, expiresAt: Date.now() + 55 * 60 * 1000 };
+  return token;
+}
+
+async function callVertexGemini(
+  model: string,
+  body: object,
+): Promise<{ ok: boolean; text?: string; status?: number; errorText?: string }> {
+  const project = env.VERTEX_AI_PROJECT;
+  const location = env.VERTEX_AI_LOCATION ?? "us-central1";
+  const accessToken = await getAccessToken();
+  const url = `https://${location}-aiplatform.googleapis.com/v1/projects/${project}/locations/${location}/publishers/google/models/${model}:generateContent`;
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+    body: JSON.stringify(body),
+  });
+  if (response.ok) {
+    const json = (await response.json()) as GeminiResponse;
+    const text = json.candidates?.[0]?.content?.parts?.map((p) => p.text ?? "").join(" ").trim();
+    return { ok: true, text: text || "I received an empty response from Gemini." };
+  }
+  const errorText = await response.text();
+  return { ok: false, status: response.status, errorText };
+}
+
+// ─── GeminiApiProvider ───────────────────────────────────────────────────────
+
 class GeminiApiProvider implements AiProvider {
   async chat(request: AiChatRequest): Promise<AiChatResponse> {
+    const preferredModel = request.model ?? env.DEFAULT_AI_MODEL ?? "gemini-3.1-pro-preview";
+    const useVertex = !!(env.VERTEX_AI_PROJECT && env.GOOGLE_APPLICATION_CREDENTIALS);
     const apiKey = request.apiKey || env.GEMINI_API_KEY;
-    const model = request.model ?? env.DEFAULT_AI_MODEL ?? "gemini-3.1-pro-preview";
 
-    if (!apiKey) {
+    if (!useVertex && !apiKey) {
       const fallback = await new MockAiProvider("gemini").chat(request);
       return {
         ...fallback,
-        text: `${fallback.text}\n[Gemini API key missing, using mock response.]`,
+        text: `${fallback.text}\n[No Gemini API key or Vertex AI config, using mock response.]`,
       };
     }
 
@@ -107,7 +160,9 @@ class GeminiApiProvider implements AiProvider {
       let lastError = "";
 
       for (let attempt = 0; attempt < 3; attempt++) {
-        const result = await callGemini(apiKey, model, requestBody);
+        const result = useVertex
+          ? await callVertexGemini(model, requestBody)
+          : await callGemini(apiKey!, model, requestBody);
         if (result.ok) {
           if (model !== preferredModel) {
             console.warn(`[GeminiProvider] Fell back to ${model} (preferred: ${preferredModel})`);
@@ -128,8 +183,8 @@ class GeminiApiProvider implements AiProvider {
         break;
       }
 
-      // Hard error on the PREFERRED model (not a rate-limit) — stop immediately
-      if (model === preferredModel && lastStatus !== 429 && lastStatus !== 503 && lastStatus >= 400 && lastStatus < 500) {
+      // Hard error on preferred model only for auth/quota errors — 404 means wrong model name, fall through
+      if (model === preferredModel && lastStatus !== 429 && lastStatus !== 503 && lastStatus !== 404 && lastStatus >= 400 && lastStatus < 500) {
         return {
           text: `Gemini request failed (${lastStatus}): ${lastError.slice(0, 300)}`,
           provider: "gemini",
