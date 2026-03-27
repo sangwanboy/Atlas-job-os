@@ -158,16 +158,14 @@ export function JobReviewDrawer({ job, onClose }: JobReviewDrawerProps) {
         )}
 
         <div className="mt-auto pt-6 space-y-3">
-          {job.sourceUrl && (
-            <a
-              href={job.sourceUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="btn-secondary w-full text-center flex items-center justify-center gap-2"
-            >
-              View Original Listing <ExternalLink className="h-4 w-4" />
-            </a>
-          )}
+          <a
+            href={job.sourceUrl || `https://www.linkedin.com/jobs/search/?keywords=${encodeURIComponent(`${job.title} ${job.company}`)}&location=${encodeURIComponent(job.location || '')}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="btn-secondary w-full text-center flex items-center justify-center gap-2"
+          >
+            {job.sourceUrl ? "View Original Listing" : "Search on LinkedIn"} <ExternalLink className="h-4 w-4" />
+          </a>
         </div>
       </div>
     </div>

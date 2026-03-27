@@ -1,8 +1,7 @@
 {
   "mode": "AWAITING_USER_ACTION",
-  "strategy": "Awaiting confirmation to import the 32 newly previewed jobs.",
+  "strategy": "Discarded the 32 pending jobs as requested. Awaiting new search parameters or instructions.",
   "todos": [
-    "Import pending jobs upon user confirmation",
     "Monitor for new barista/hospitality listings in Birmingham",
     "Monitor for new cybersecurity listings in Manchester"
   ]

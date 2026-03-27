@@ -1,6 +1,6 @@
 "use client";
 
-import { Bell, LogOut, Search, Settings, User, LogIn } from "lucide-react";
+import { Bell, LogOut, Search, Settings, User, LogIn, Menu, PanelLeftOpen } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useSession, signOut, signIn } from "next-auth/react";
@@ -30,7 +30,13 @@ const defaultNotifications: Notification[] = [
   },
 ];
 
-export function TopNav() {
+type TopNavProps = {
+  onToggleSidebar?: () => void;
+  sidebarCollapsed?: boolean;
+  onToggleDesktopSidebar?: () => void;
+};
+
+export function TopNav({ onToggleSidebar, sidebarCollapsed, onToggleDesktopSidebar }: TopNavProps = {}) {
   const router = useRouter();
   const { data: session } = useSession();
   const [search, setSearch] = useState("");
@@ -86,12 +92,34 @@ export function TopNav() {
 
   return (
     <header className="sticky top-0 z-30 flex h-16 items-center border-b border-white/60 bg-white/45 px-4 backdrop-blur md:px-6 lg:px-8">
-      <div className="flex w-full items-center justify-between gap-4">
-        <form 
+      <div className="flex w-full items-center justify-between gap-3">
+        {/* Mobile hamburger */}
+        {onToggleSidebar && (
+          <button
+            onClick={onToggleSidebar}
+            className="lg:hidden rounded-lg border border-white/60 bg-white/75 p-2 shadow-sm hover:bg-white transition-colors flex-none"
+            aria-label="Open menu"
+          >
+            <Menu className="h-4 w-4" />
+          </button>
+        )}
+
+        {/* Desktop: show expand button when sidebar is collapsed */}
+        {sidebarCollapsed && onToggleDesktopSidebar && (
+          <button
+            onClick={onToggleDesktopSidebar}
+            title="Expand sidebar"
+            className="hidden lg:flex rounded-lg border border-white/60 bg-white/75 p-2 shadow-sm hover:bg-white transition-colors flex-none items-center gap-1.5 text-xs font-medium text-muted"
+          >
+            <PanelLeftOpen className="h-4 w-4" />
+          </button>
+        )}
+
+        <form
           onSubmit={handleSearch}
-          className="flex w-full max-w-xl items-center gap-2 rounded-xl border border-white/60 bg-white/75 px-3 py-2 shadow-sm focus-within:ring-2 focus-within:ring-cyan-500/20 transition-all"
+          className="flex flex-1 min-w-0 items-center gap-2 rounded-xl border border-white/60 bg-white/75 px-3 py-2 shadow-sm focus-within:ring-2 focus-within:ring-cyan-500/20 transition-all"
         >
-          <Search className="h-4 w-4 text-muted" />
+          <Search className="h-4 w-4 text-muted flex-none" />
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}

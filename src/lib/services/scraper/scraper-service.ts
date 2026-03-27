@@ -11,22 +11,47 @@ export type ScrapeResult = {
   status_code?: number;
 };
 
+const SCRAPE_TIMEOUT_MS = 45_000; // 45 seconds max per scrape
+
 export class ScraperService {
   private static venvPath = path.join(process.cwd(), ".venv-scraper");
-  private static pythonExe = process.platform === "win32" 
+  private static pythonExe = process.platform === "win32"
     ? path.join(this.venvPath, "Scripts", "python.exe")
     : path.join(this.venvPath, "bin", "python");
   private static workerPath = path.join(process.cwd(), "src/lib/services/scraper/worker.py");
 
   /**
-   * Scrapes a URL using the Crawl4AI worker.
+   * Scrapes a URL using the Crawl4AI worker with a hard timeout.
    */
   static async scrape(url: string): Promise<ScrapeResult> {
     return new Promise((resolve) => {
+      let resolved = false;
+      const finish = (result: ScrapeResult) => {
+        if (resolved) return;
+        resolved = true;
+        clearTimeout(timer);
+        resolve(result);
+      };
+
       console.log(`[ScraperService] Initiating Crawl4AI for: ${url}`);
-      
-      const child = spawn(this.pythonExe, [this.workerPath, url]);
-      
+
+      let child: ReturnType<typeof spawn>;
+      try {
+        child = spawn(this.pythonExe, [this.workerPath, url]);
+      } catch (spawnErr) {
+        const msg = spawnErr instanceof Error ? spawnErr.message : String(spawnErr);
+        console.error(`[ScraperService] Failed to spawn worker: ${msg}`);
+        finish({ success: false, url, error: `Failed to spawn Crawl4AI worker: ${msg}`, status_code: 500 });
+        return;
+      }
+
+      // Hard timeout — kill the child process if it takes too long
+      const timer = setTimeout(() => {
+        console.error(`[ScraperService] Timeout after ${SCRAPE_TIMEOUT_MS}ms for: ${url}`);
+        try { child.kill("SIGKILL"); } catch {}
+        finish({ success: false, url, error: `Crawl4AI worker timed out after ${SCRAPE_TIMEOUT_MS / 1000}s`, status_code: 504 });
+      }, SCRAPE_TIMEOUT_MS);
+
       let stdout = "";
       let stderr = "";
 
@@ -38,10 +63,15 @@ export class ScraperService {
         stderr += data.toString();
       });
 
+      child.on("error", (err) => {
+        console.error(`[ScraperService] Spawn error: ${err.message}`);
+        finish({ success: false, url, error: `Worker spawn error: ${err.message}`, status_code: 500 });
+      });
+
       child.on("close", (code) => {
         if (code !== 0) {
           console.error(`[ScraperService] Worker failed with code ${code}. Stderr: ${stderr}`);
-          resolve({
+          finish({
             success: false,
             url,
             error: `Crawl4AI worker exited with code ${code}. ${stderr.slice(0, 500)}`,
@@ -56,10 +86,10 @@ export class ScraperService {
           const lastLine = lines[lines.length - 1];
           const result = JSON.parse(lastLine) as ScrapeResult;
           console.log(`[ScraperService] Crawl successful for ${url}`);
-          resolve(result);
+          finish(result);
         } catch (e) {
           console.error(`[ScraperService] Failed to parse JSON output: ${stdout}`);
-          resolve({
+          finish({
             success: false,
             url,
             error: `Output parsing failed. Raw output: ${stdout.slice(0, 500)}`,

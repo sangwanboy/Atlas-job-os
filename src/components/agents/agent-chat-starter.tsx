@@ -67,14 +67,19 @@ const ChatMessageItem = React.memo(({
     return null;
   }, [message.content, previewJobs]);
 
-  if (!content && message.role === "ASSISTANT" && !(message as any).toolLogs?.length) return null;
+  const toolLogs: any[] = (message as any).toolLogs || [];
+  const isThinking = !content && message.role === "ASSISTANT";
+  const activeToolLog = toolLogs.find((l: any) => l.result === "Executing...");
+  const lastCompletedTool = [...toolLogs].reverse().find((l: any) => l.result !== "Executing...");
+
+  if (!content && message.role === "ASSISTANT" && !toolLogs.length) return null;
 
   return (
     <div className="space-y-2">
-      {showToolUse && (message as any).toolLogs?.length > 0 && (
+      {showToolUse && toolLogs.length > 0 && (
         <div className="mx-4 rounded-lg border border-dashed border-cyan-500/30 bg-cyan-500/5 p-2 text-[10px] font-mono text-cyan-700/70 max-h-[200px] overflow-y-auto break-all custom-scrollbar">
           <p className="mb-1 uppercase tracking-wider font-bold sticky top-0 bg-white/80 backdrop-blur-sm p-1 z-10">Internal Operator Logs:</p>
-          {(message as any).toolLogs.map((log: any, idx: number) => (
+          {toolLogs.map((log: any, idx: number) => (
             <div key={idx} className="mb-2 last:mb-0 border-l-2 border-cyan-500/20 pl-2">
               <p className="font-bold">→ Executed: {log.tool}</p>
               <p className="mt-0.5 opacity-80 italic">Params: {JSON.stringify(log.parameters)}</p>
@@ -94,18 +99,58 @@ const ChatMessageItem = React.memo(({
       >
         {message.role === "ASSISTANT" ? (
           <div className="space-y-3">
-            <div className="prose prose-sm max-w-none prose-headings:font-bold prose-headings:mt-3 prose-headings:mb-1 prose-strong:font-bold prose-p:my-0 prose-p:leading-snug prose-ul:my-0 prose-ol:my-0 prose-li:my-0 prose-li:leading-snug">
-              <ReactMarkdown
-                components={{
-                  a: ({ node, ...props }) => <a {...props} target="_blank" rel="noopener noreferrer" className="text-cyan-600 hover:underline" />
-                }}
-              >
-                {content}
-              </ReactMarkdown>
-            </div>
-            
+            {/* Thinking state: show live tool activity inside the bubble */}
+            {isThinking && (
+              <div className="space-y-2 min-w-[200px]">
+                <div className="flex items-center gap-2">
+                  <div className="flex gap-0.5">
+                    <span className="h-1.5 w-1.5 rounded-full bg-cyan-500 animate-bounce [animation-delay:0ms]" />
+                    <span className="h-1.5 w-1.5 rounded-full bg-cyan-500 animate-bounce [animation-delay:150ms]" />
+                    <span className="h-1.5 w-1.5 rounded-full bg-cyan-500 animate-bounce [animation-delay:300ms]" />
+                  </div>
+                  <span className="text-xs font-semibold text-slate-700">
+                    {activeToolLog ? `Running: ${activeToolLog.tool.replace(/_/g, " ")}` : "Atlas is thinking..."}
+                  </span>
+                </div>
+                {toolLogs.length > 0 && (
+                  <div className="space-y-1">
+                    {toolLogs.map((log: any, idx: number) => (
+                      <div key={idx} className="flex items-center gap-1.5 text-[11px] text-slate-500">
+                        {log.result === "Executing..." ? (
+                          <span className="h-1 w-1 rounded-full bg-amber-400 animate-pulse flex-none" />
+                        ) : (
+                          <span className="h-1 w-1 rounded-full bg-emerald-500 flex-none" />
+                        )}
+                        <span className={log.result === "Executing..." ? "text-amber-700 font-medium" : "text-slate-500"}>
+                          {log.tool.replace(/_/g, " ")}
+                          {log.result === "Executing..." ? "..." : " ✓"}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {lastCompletedTool && (
+                  <p className="text-[10px] text-slate-400 italic truncate max-w-[280px]">
+                    Last: {typeof lastCompletedTool.result === "string" ? lastCompletedTool.result.slice(0, 80) : "Done"}
+                  </p>
+                )}
+              </div>
+            )}
+            {/* Final response */}
+            {content && (
+              <div className="prose prose-sm max-w-none prose-headings:font-bold prose-headings:mt-3 prose-headings:mb-1 prose-strong:font-bold prose-p:my-0 prose-p:leading-snug prose-ul:my-0 prose-ol:my-0 prose-li:my-0 prose-li:leading-snug">
+                <ReactMarkdown
+                  components={{
+                    a: ({ node, ...props }) => <a {...props} target="_blank" rel="noopener noreferrer" className="text-cyan-600 hover:underline" />
+                  }}
+                >
+                  {content}
+                </ReactMarkdown>
+              </div>
+            )}
+
             {extractedJobs && extractedJobs.length > 0 && (
-              <JobPreviewBox 
+              <JobPreviewBox
                 jobs={extractedJobs}
                 onImportAll={onImportAll!}
                 onImportSingle={onImportSingle!}
@@ -248,11 +293,14 @@ const JobPreviewBox = ({
                   {job.source && (
                     <span className="text-[10px] text-slate-400 font-medium bg-slate-50/50 px-1.5 py-0.5 rounded border border-slate-100/50">{job.source}</span>
                   )}
-                  {job.url && (
-                    <a href={job.url} target="_blank" rel="noopener noreferrer" className="text-[10px] font-bold text-cyan-600 hover:text-cyan-800 hover:underline transition-all">
-                      View listing ↗
-                    </a>
-                  )}
+                  <a
+                    href={job.url && job.url !== "#" ? job.url : `https://www.linkedin.com/jobs/search/?keywords=${encodeURIComponent(`${job.title} ${job.company}`)}&location=${encodeURIComponent(job.location || "")}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[10px] font-bold text-cyan-600 hover:text-cyan-800 hover:underline transition-all"
+                  >
+                    {job.url && job.url !== "#" ? "View listing ↗" : "Search on LinkedIn ↗"}
+                  </a>
                 </div>
                 {job.description && (
                   <p className="mt-2 text-xs text-slate-500 line-clamp-2 leading-relaxed">{job.description}</p>
@@ -355,7 +403,8 @@ export function AgentChatStarter() {
 
   // Effect 1: Loading Sessions (run once on mount if not hydrated)
   useEffect(() => {
-    if (sessions.length > 0 && !urlSessionId) {
+    // If we already have messages and sessions, we're good
+    if (messages.length > initialChat.length && sessions.length > 0 && !urlSessionId) {
       setInitialLoading(false);
       return; 
     }
@@ -842,12 +891,12 @@ export function AgentChatStarter() {
                 );
               })
             )}
-            {loading && !initialLoading ? (
+            {loading && !initialLoading && importingJobs ? (
               <div className="flex items-center gap-2 pl-2">
                 <div className="h-1.5 w-1.5 animate-bounce rounded-full bg-cyan-600" />
                 <div className="h-1.5 w-1.5 animate-bounce rounded-full bg-cyan-600 [animation-delay:-0.15s]" />
                 <div className="h-1.5 w-1.5 animate-bounce rounded-full bg-cyan-600 [animation-delay:-0.3s]" />
-                <p className="text-xs text-muted italic">{importingJobs ? "Atlas is importing jobs..." : processingSteps[loadingTextIndex]}</p>
+                <p className="text-xs text-muted italic">Atlas is importing jobs...</p>
               </div>
             ) : null}
           </div>

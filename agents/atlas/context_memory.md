@@ -265,3 +265,34 @@
 [2026-03-25T03:49:25.972Z] Updated mind.md via LLM continuity update.
 [2026-03-25T03:49:25.975Z] Updated preferences.json via LLM continuity update.
 [2026-03-25T03:49:25.977Z] Turn execution completed
+[2026-03-25T17:52:12.479Z] Re-anchoring search context for session: local-4a4cb00c-d4d3-4648-b41f-accbbc21a99f
+[2026-03-25T17:52:12.492Z] Starting turn: general
+[2026-03-25T17:52:12.696Z] Turn execution completed
+[2026-03-25T17:52:53.518Z] Starting turn: general
+[2026-03-25T17:52:53.665Z] Turn execution completed
+[2026-03-25T17:54:43.408Z] Starting turn: general
+[2026-03-25T17:54:43.532Z] Turn execution completed
+[2026-03-25T17:55:13.052Z] Starting turn: general
+[2026-03-25T17:55:13.186Z] Turn execution completed
+[2026-03-25T17:57:52.439Z] Starting turn: general
+[2026-03-25T17:57:52.604Z] Turn execution completed
+[2026-03-25T17:59:30.830Z] Starting turn: general
+[2026-03-25T17:59:41.739Z] Updated mind.md via LLM continuity update.
+[2026-03-25T17:59:41.742Z] Turn execution completed
+[2026-03-25T17:59:50.646Z] Starting turn: general
+[2026-03-25T18:00:49.530Z] Updated mind.md via LLM continuity update.
+[2026-03-25T18:00:49.532Z] Turn execution completed
+[2026-03-25T18:17:01.179Z] Starting turn: search
+[2026-03-25T18:17:01.319Z] Turn execution completed
+[2026-03-25T18:31:37Z] PROJECT_SETUP_COMPLETE: Successfully installed Node.js dependencies, set up .venv-scraper with crawl4ai, and initialized PostgreSQL via Docker.
+[2026-03-25T18:31:37Z] DATABASE_INITIALIZED: Prisma migration and seeding completed for PostgreSQL. High-fidelity job schema is ready.
+[2026-03-25T18:31:37Z] AI_MODEL_CONFIGURED: Set default provider to Gemini and model to `gemini-3.1-pro-preview`. Verified 404 error resolution.
+[2026-03-25T18:31:37Z] AUTH_VERIFIED: Confirmed admin key `admin` is active for local development bypass.
+[2026-03-25T20:40:00Z] SCRAPER_TIMEOUT_FIX: Added 45-second hard timeout with SIGKILL to ScraperService. Added spawn error handling and resolved flag to prevent double-resolve. Prevents agent from hanging indefinitely when Crawl4AI worker stalls on LinkedIn bot detection.
+[2026-03-25T20:40:00Z] ADZUNA_REMOVED: Removed all Adzuna API fallback logic from conversation-orchestrator.ts. Job discovery now relies solely on Crawl4AI (browser_extract_jobs → worker.py → LinkedIn scrape). On failure, agent returns a descriptive error with suggestions.
+[2026-03-25T20:40:00Z] CHAT_BUBBLE_FIX: Rewrote ChatMessageItem in agent-chat-starter.tsx to show live tool execution status INSIDE the message bubble while Atlas is working. Each running tool shows a pulsing amber dot; completed tools show green dot. Removed external "Formulating response..." text for non-import states — thinking is now visible inside the bubble.
+[2026-03-25T20:40:00Z] VIEW_LISTING_FIX: Fixed "View listing" button in JobPreviewBox — now only renders when url is truthy AND not "#". Fixed previewJobSchema to default url to "" instead of "#". Fixed job-review-drawer to always show a button: "View Original Listing" if sourceUrl exists, or "Search on LinkedIn" as fallback.
+[2026-03-25T20:40:00Z] AUTH_SYSTEM: Full auth system implemented. Login at /login, register at /register. Default admin: admin@jobos.local / admin123. Admin user management at /admin/users (create, promote/demote, reset password, delete). Passwords hashed with PBKDF2 via Web Crypto API (edge-compatible). In-memory user store for dev (local-user-store.ts).
+[2026-03-25T20:40:00Z] MOBILE_RESPONSIVE: All pages made mobile-responsive. Hamburger sidebar on mobile, responsive table min-widths, stacked card layouts, adaptive padding. Agent chat profile panel collapses on mobile.
+[2026-03-25T20:40:00Z] README_UPDATED: README.md fully rewritten with complete tech stack, all environment variables, setup instructions, feature descriptions, project structure, and API routes table.
+[2026-03-25T20:36:27.093Z] Re-anchoring search context for session: discovery-verify-1774470987054
