@@ -5,18 +5,7 @@ import type { Route } from "next";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
-import {
-  Bot,
-  BriefcaseBusiness,
-  ChartNoAxesCombined,
-  LayoutDashboard,
-  Megaphone,
-  Settings,
-  Users,
-  PanelLeftClose,
-  X,
-  FileText,
-} from "lucide-react";
+import { Bot, BriefcaseBusiness, ChartNoAxesCombined, LayoutDashboard, Megaphone, Settings, Users, PanelLeftClose, PanelLeftOpen, X } from "lucide-react";
 import type { RuntimeSettingsResponse } from "@/types/settings";
 
 const navItems = [
@@ -113,9 +102,24 @@ export function AppSidebar({ mobileOpen, onClose, collapsed, onToggleCollapse }:
             </div>
 
             <nav className="mt-7 space-y-2">
-              {navItems.map((item) => (
-                <NavLink key={item.href} item={item} />
-              ))}
+              {navItems.map((item) => {
+                const Icon = item.icon;
+                const active = pathname ? pathname === item.href || pathname.startsWith(`${item.href}/`) : false;
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className={`group flex items-center gap-3 rounded-xl border px-3 py-2 text-sm font-semibold transition ${
+                      active
+                        ? "border-cyan-200/80 bg-cyan-50/80 text-slate-900"
+                        : "border-transparent text-muted hover:border-white/70 hover:bg-white/75 hover:text-text"
+                    }`}
+                  >
+                    <Icon className="h-4 w-4" />
+                    {item.label}
+                  </Link>
+                );
+              })}
               {isAdmin && (
                 <>
                   <div className="my-2 border-t border-white/40" />
@@ -191,9 +195,25 @@ export function AppSidebar({ mobileOpen, onClose, collapsed, onToggleCollapse }:
         </div>
 
         <nav className="space-y-2">
-          {navItems.map((item) => (
-            <NavLink key={item.href} item={item} onClick={onClose} />
-          ))}
+          {navItems.map((item) => {
+            const Icon = item.icon;
+            const active = pathname ? pathname === item.href || pathname.startsWith(`${item.href}/`) : false;
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                onClick={onClose}
+                className={`group flex items-center gap-3 rounded-xl border px-3 py-2 text-sm font-semibold transition ${
+                  active
+                    ? "border-cyan-200/80 bg-cyan-50/80 text-slate-900"
+                    : "border-transparent text-muted hover:border-white/70 hover:bg-white/75 hover:text-text"
+                }`}
+              >
+                <Icon className="h-4 w-4" />
+                {item.label}
+              </Link>
+            );
+          })}
           {isAdmin && (
             <>
               <div className="my-2 border-t border-white/40" />

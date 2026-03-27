@@ -3,17 +3,17 @@ import type { NextAuthConfig } from "next-auth"
 export default {
   providers: [],
   pages: {
-    signIn: "/login",
+    signIn: '/login',
   },
   callbacks: {
-    authorized({ auth, request }) {
-      const { pathname } = request.nextUrl;
-      // Always allow API routes — they handle auth internally
-      if (pathname.startsWith("/api/")) return true;
-      // Always allow auth pages
-      if (pathname.startsWith("/login") || pathname.startsWith("/register")) return true;
-      // Require login for all other routes
-      return !!auth?.user;
+    authorized({ request, auth }) {
+      const { pathname } = request.nextUrl
+      // Allow all API routes — they handle their own auth internally
+      if (pathname.startsWith('/api/')) return true
+      // Allow login and register pages
+      if (pathname === '/login' || pathname === '/register') return true
+      // Require auth for all app routes
+      return !!auth
     },
     jwt({ token, user }) {
       if (user) {
