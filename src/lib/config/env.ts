@@ -19,7 +19,7 @@ const envSchema = z.object({
   TOGETHER_API_KEY: z.string().optional(),
   OPENROUTER_API_KEY: z.string().optional(),
   DEFAULT_AI_PROVIDER: z.enum(["openai", "anthropic", "gemini"]).default("gemini"),
-  DEFAULT_AI_MODEL: z.string().min(1).default("gemini-3.1-flash-lite"),
+  DEFAULT_AI_MODEL: z.string().min(1).default("gemini-3.1-pro-preview"),
   BROWSER_HEADLESS: z.string().optional(),
   BROWSER_ACTION_TIMEOUT_MS: z.string().optional(),
   BROWSER_ACTION_RETRY_COUNT: z.string().optional(),

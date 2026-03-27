@@ -40,7 +40,7 @@ export function AgentProvider({ children }: { children: React.ReactNode }) {
   const [sessions, setSessions] = useState<Array<{ id: string; title: string }>>([]);
   const [pendingJobs, setPendingJobs] = useState<JobPreview[] | null>(null);
   const [loading, setLoading] = useState(false);
-  const [initialLoading, setInitialLoading] = useState(true);
+  const [initialLoading, setInitialLoading] = useState(messages.length <= 1);
 
   return (
     <AgentContext.Provider

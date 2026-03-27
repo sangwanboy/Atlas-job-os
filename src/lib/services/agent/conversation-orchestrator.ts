@@ -179,7 +179,7 @@ const previewJobSchema = z.object({
   isAlreadyImported: z.boolean().optional(),
 }).transform(val => ({
   ...val,
-  url: val.url || val.link || "#",
+  url: val.url || val.link || "",
   skills: Array.isArray(val.skills) ? val.skills.join(", ") : val.skills
 }));
 

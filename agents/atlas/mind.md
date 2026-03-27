@@ -1,8 +1,8 @@
 {
-  "mode": "READY",
-  "strategy": "Presenting fresh, scored job results and awaiting import confirmation.",
+  "mode": "AWAITING_USER_ACTION",
+  "strategy": "Discarded the 32 pending jobs as requested. Awaiting new search parameters or instructions.",
   "todos": [
-    "Wait for user to select jobs for import",
-    "Draft cover letters for selected roles"
+    "Monitor for new barista/hospitality listings in Birmingham",
+    "Monitor for new cybersecurity listings in Manchester"
   ]
 }
