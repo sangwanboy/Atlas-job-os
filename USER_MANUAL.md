@@ -41,12 +41,14 @@ Type naturally — Atlas understands intent:
 > "Get financial analyst positions in London, posted this week"
 
 **What Atlas does with a job search:**
-1. Opens LinkedIn (then Indeed as fallback) in a stealth browser
-2. Scrolls and scans job cards like a human would
+1. Searches 8 UK job boards in parallel (LinkedIn, Indeed, Reed, TotalJobs, Adzuna, CV-Library, Monster, CWJobs)
+2. Uses a stealth Chromium browser with fingerprint spoofing to avoid bot detection
 3. Scores each card against your search query
 4. Visits the top matching job pages individually
 5. Extracts full details: description, salary, job type, date posted, applicant count, apply link
 6. Presents them in the **Job Discovery Preview** box
+
+Atlas types its response word-by-word as it thinks — just like ChatGPT. You can click the **red stop button** at any time to cancel a response mid-generation.
 
 ---
 
@@ -203,6 +205,7 @@ Import a broad set first, then tell Atlas:
 | Send message | Enter |
 | New line in message | Shift + Enter |
 | New chat | Click **+ New Chat** |
+| Stop generation | Click the **red circular button** (appears while Atlas is typing) |
 
 ---
 
@@ -216,7 +219,10 @@ LinkedIn rate-limits scrapers periodically. Wait 2–3 minutes and try again, or
 Many employers don't publish salaries. Atlas shows "Not disclosed" rather than inventing a figure.
 
 **Atlas seems slow**
-Response time is 8–15 seconds for job searches (browser automation takes time). For chat-only messages it should be under 5 seconds. The model in use (shown in Agent Profile) affects speed — Gemini Flash is the fastest option.
+Response time is 8–15 seconds for job searches (browser automation takes time). For chat-only messages you should see the first word appear within 2–3 seconds (Gemini time-to-first-token). The model in use (shown in Agent Profile) affects speed — Gemini Flash is the fastest option.
+
+**Atlas shows `<continuity_update>` or JSON in the chat**
+This was a known bug (fixed). Update to the latest version — internal sync blocks are now stripped from the stream before display.
 
 **CV profile shows wrong information**
 Delete the CV and re-upload. If the PDF is a scanned image, Atlas uses Vertex AI vision — ensure your Google credentials are configured in Settings.
@@ -226,13 +232,22 @@ Delete the CV and re-upload. If the PDF is a scanned image, Atlas uses Vertex AI
 ## Architecture Overview (for developers)
 
 ```
-User chat → Next.js API → ConversationOrchestrator
+User chat → Next.js API (immediate status flush)
+                              ↓
+                    ConversationOrchestrator
+                    [auth + getAgent in parallel]
+                    [history + continuity in parallel]
                               ↓
                     Gemini (Vertex AI) ← CV profile + memory layers
+                    [SSE streaming → word-by-word tokens]
+                    [<continuity_update> blocks filtered in real-time]
                               ↓
                     Tool: browser_extract_jobs
                               ↓
-                    ScraperService → worker.py (Playwright)
+                    ScraperService → worker.py (Playwright stealth)
+                    [8 platforms in parallel]
+                    [Persistent Chromium profile + fingerprint spoofing]
+                    [scraper_selectors.json overrides loaded at startup]
                               ↓
                     Listing page scan (Bezier mouse, DOM cards)
                               ↓

@@ -405,3 +405,13 @@
 [2026-03-28T03:42:28.724Z] Updated mind.md via LLM continuity update.
 [2026-03-28T03:42:28.756Z] Updated user_profile.md via LLM continuity update.
 [2026-03-28T03:42:28.785Z] Updated preferences.json via LLM continuity update.
+
+[2026-03-28T00:00:00.000Z] SESSION_UPGRADE: Live word-by-word streaming implemented. Gemini SSE chunks split into individual tokens emitted at 18ms intervals. delta_clear event resets UI during tool-call rounds.
+[2026-03-28T00:00:01.000Z] TAG_FILTER: <continuity_update> blocks stripped from stream in real-time via stateful buffer — no internal JSON leaks to user during streaming.
+[2026-03-28T00:00:02.000Z] STOP_BUTTON: AbortController-based stop/kill added to chat UI. Red circular button with red square centre replaces Send while Atlas is generating. Aborted messages show _(stopped)_.
+[2026-03-28T00:00:03.000Z] STEALTH_BROWSER: Persistent Chromium profile at agents/atlas/browser_profile/. Playwright-stealth applied. Fingerprint spoofing: navigator.webdriver=undefined, canvas noise, WebGL vendor override, realistic plugins array, hardwareConcurrency=8.
+[2026-03-28T00:00:04.000Z] SELF_HEALING_SCRAPER: update_scraper_selectors tool added. On scrape failure worker.py emits dom_sample. Atlas can analyse DOM and write new CSS selector overrides to agents/atlas/scraper_selectors.json loaded at worker startup.
+[2026-03-28T00:00:05.000Z] PERF_PARALLEL_SETUP: Orchestrator setup parallelised into 3 waves — (auth+getAgent), (createOrReuseSession), (getSessionMessages+hydrateTurnContext). Estimated 700ms saved per turn. Immediate status flush added to chat route before orchestrator.run().
+[2026-03-28T00:00:06.000Z] STABILITY_FIXES: Stream controller closed-flag guard prevents enqueue-after-close errors. User upsert race condition (P2002) caught with findFirst fallback. stale pages/_document.tsx removed — was forcing mixed Pages+App Router webpack compilation causing _not-found module crash.
+[2026-03-28T00:00:07.000Z] BUNDLER: Reverted from --turbopack to standard webpack (Next.js 15.5.x Turbopack has React Client Manifest corruption bug). WeeklyTrendChart lazy-loaded via dynamic() to prevent recharts compile hang. optimizePackageImports added for recharts/lucide-react.
+[2026-03-28T00:00:08.000Z] AUTH_FIX: NEXTAUTH_URL made optional in Zod env schema. Removed from .env files — NextAuth v5 auto-detects from request host. Middleware uses edge-safe NextAuth(authConfig) pattern.

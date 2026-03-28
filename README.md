@@ -38,7 +38,7 @@ A production-minded, full-stack SaaS application for intelligent job discovery, 
 NODE_ENV=development
 NEXT_PUBLIC_APP_NAME=AI Job Intelligence Dashboard
 NEXT_PUBLIC_APP_URL=http://localhost:3000
-NEXTAUTH_URL=http://localhost:3000
+# NEXTAUTH_URL is optional — NextAuth v5 auto-detects from request host
 
 # Auth (generate with: openssl rand -hex 32)
 AUTH_SECRET=your_secret_here
@@ -82,7 +82,7 @@ python -m venv .venv-scraper
 # Linux / macOS
 source .venv-scraper/bin/activate
 
-pip install crawl4ai pydantic
+pip install crawl4ai pydantic playwright-stealth
 playwright install chromium
 ```
 
@@ -165,16 +165,20 @@ Admin users can manage all users at `/admin/users`:
 ## Features
 
 ### Job Discovery (Atlas Agent)
-The Atlas AI agent uses **Crawl4AI** with CSS extraction + raw-HTML regex for high-fidelity structured job extraction from LinkedIn and Indeed.
+The Atlas AI agent uses **Crawl4AI** with CSS extraction + raw-HTML regex for high-fidelity structured job extraction from LinkedIn, Indeed, Reed, TotalJobs, Adzuna, CV-Library, Monster, and CWJobs.
 
 **How it works:**
 1. User asks Atlas to find jobs (e.g. "Find nursing jobs in London")
-2. Atlas calls `browser_extract_jobs` → spawns Python worker → Crawl4AI scrapes LinkedIn
+2. Atlas calls `browser_extract_jobs` → spawns Python worker → Crawl4AI scrapes 8 UK platforms in parallel
 3. Structured job data (title, company, location, salary, date) extracted via CSS selectors
 4. Real job URLs extracted from `data-entity-urn` attributes in raw HTML → `linkedin.com/jobs/view/{id}/`
 5. Results capped to **Max Jobs Per Search** limit (admin-configurable, default 20)
 6. Atlas previews jobs in rich cards inside the chat bubble with **"View listing ↗"** links
 7. User clicks **Import All** or **Import** (per card) to save to the pipeline
+
+**Stealth browser:** Persistent Chromium profile (`agents/atlas/browser_profile/`) with `playwright-stealth` + comprehensive fingerprint spoofing (canvas noise, WebGL vendor override, realistic plugins/hardwareConcurrency).
+
+**Self-healing selectors:** If a platform's DOM changes, Atlas receives a `dom_sample` and can call `update_scraper_selectors` to write new CSS overrides to `agents/atlas/scraper_selectors.json` — loaded at worker startup without a restart.
 
 **Timeout protection:** Scraper has a 45-second hard timeout with SIGKILL to prevent hangs.
 
@@ -199,12 +203,16 @@ The Atlas AI agent uses **Crawl4AI** with CSS extraction + raw-HTML regex for hi
 
 ### Agent Chat (Atlas)
 - Stateful multi-turn AI chat powered by Gemini (`gemini-3.1-pro-preview` default)
+- **Live word-by-word streaming** — tokens emitted at 18ms intervals (ChatGPT-style typing effect)
+- **Stop button** — red circular abort button cancels in-flight generation instantly
+- Internal `<continuity_update>` blocks stripped from stream in real-time (never shown to user)
 - Live tool execution shown inside the chat bubble (tool names animate as they run)
 - Session history with persistent memory across conversations
 - Continuity sync: Soul, Identity, Mind, Rules layers loaded every turn
 - Loop prevention guard
 - Context memory logged to `agents/atlas/context_memory.md`
 - Automatic model fallback on rate-limits — app stays responsive even if quota is exhausted
+- Parallelised orchestrator setup (auth + agent lookup, history + continuity in parallel)
 
 ### Admin Settings (`/settings`)
 - **Max Jobs Per Search** — cap how many job cards Atlas shows per search (default: 20, range: 1–200)
@@ -288,6 +296,8 @@ prisma/
 ## Notes
 
 - **Auth without DB:** In development, users are stored in-memory via `src/lib/services/auth/local-user-store.ts`. For production, wire Prisma adapter.
-- **Crawl4AI scraping:** LinkedIn actively blocks bots. The worker uses stealth user-agents and overlay removal. Results may vary; the agent gracefully handles scraper failures.
-- **AI provider:** Defaults to Gemini. Configure `GEMINI_API_KEY` in your `.env`. The provider abstraction in `src/lib/services/ai/provider.ts` supports swapping to OpenAI or others.
+- **Crawl4AI scraping:** LinkedIn actively blocks bots. The worker uses persistent Chromium profile + `playwright-stealth` fingerprint spoofing. Results may vary; the agent gracefully handles scraper failures and supports self-healing CSS selector overrides.
+- **AI provider:** Defaults to Gemini. Configure `GEMINI_API_KEY` or Vertex AI credentials in your `.env`. The provider abstraction in `src/lib/services/ai/provider.ts` supports swapping to OpenAI or others.
+- **Streaming:** Atlas uses Gemini SSE (`streamGenerateContent`) for live token-by-token output. Falls back to batch response if SSE fails.
+- **Bundler:** Uses standard webpack (not Turbopack) — Turbopack has a known React Client Manifest corruption bug in Next.js 15.5.x.
 - **Mobile responsive:** Full mobile support with hamburger sidebar, responsive tables, and adaptive layouts.
