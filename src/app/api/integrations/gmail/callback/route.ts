@@ -31,10 +31,10 @@ export async function GET(req: Request) {
 
     // Attempt to persist the tokens in the database
     try {
-      // @ts-ignore
+      // @ts-expect-error
       await prisma.integrationAccount.upsert({
         where: {
-          // @ts-ignore
+          // @ts-expect-error
           userId_provider: {
             userId: HARDCODED_USER_ID,
             provider: "google",
@@ -43,22 +43,22 @@ export async function GET(req: Request) {
         create: {
           userId: HARDCODED_USER_ID,
           provider: "google",
-          // @ts-ignore
+          // @ts-expect-error
           email: emailAddress,
           accessToken: tokens.access_token,
           refreshToken: tokens.refresh_token || null,
-          // @ts-ignore
+          // @ts-expect-error
           expiresAt: tokens.expiry_date ? new Date(tokens.expiry_date) : null,
           scopes: tokens.scope,
           status: "CONNECTED",
           syncStatus: "IDLE",
         },
         update: {
-          // @ts-ignore
+          // @ts-expect-error
           email: emailAddress,
           accessToken: tokens.access_token,
           ...(tokens.refresh_token ? { refreshToken: tokens.refresh_token } : {}),
-          // @ts-ignore
+          // @ts-expect-error
           expiresAt: tokens.expiry_date ? new Date(tokens.expiry_date) : null,
           scopes: tokens.scope,
           status: "CONNECTED",
@@ -83,7 +83,7 @@ export async function GET(req: Request) {
       return NextResponse.redirect(`${appUrl}/settings?success=GmailConnectedLocal`);
     }
 
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("[Gmail Code Exchange Error]:", err);
     return NextResponse.redirect(`${appUrl}/settings?error=TokenExchangeFailed`);
   }

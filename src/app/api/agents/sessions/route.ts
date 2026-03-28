@@ -44,7 +44,7 @@ export async function GET(request: Request) {
         const sessions = await agentStore.listSessions({ agentId, userId });
         console.log(`[API/Sessions] Found ${sessions.length} sessions`);
         
-        let hydratedMessages: any[] = [];
+        let hydratedMessages: unknown[] = [];
         if (sessions.length > 0) {
           hydratedMessages = await agentStore.getSessionMessages(sessions[0].id);
         }

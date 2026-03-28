@@ -1,0 +1,4 @@
+{
+  "_comment": "Dynamic CSS selector overrides for job boards. Atlas updates this file when DOM changes are detected. Keys match detect_site() return values.",
+  "overrides": {}
+}

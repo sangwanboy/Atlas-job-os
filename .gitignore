@@ -1,6 +1,9 @@
 # dependencies
 /node_modules
 
+# secrets / credentials
+/secrets
+
 # next
 /.next
 /out

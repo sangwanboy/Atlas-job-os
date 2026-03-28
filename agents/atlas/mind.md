@@ -1,8 +1,9 @@
 {
-  "mode": "AWAITING_USER_ACTION",
-  "strategy": "Discarded the 32 pending jobs as requested. Awaiting new search parameters or instructions.",
+  "mode": "REVIEW",
+  "strategy": "Evaluating London search results and providing CV optimization advice before expanding to Manchester.",
   "todos": [
-    "Monitor for new barista/hospitality listings in Birmingham",
-    "Monitor for new cybersecurity listings in Manchester"
+    "Import London jobs upon user confirmation",
+    "Execute Manchester search for Web Developer/Software Engineer roles",
+    "Refine CV based on specific tech stack requirements found in London roles"
   ]
 }

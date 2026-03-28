@@ -5,7 +5,9 @@ import { runtimeSettingsStore } from "@/lib/services/settings/runtime-settings-s
 export async function GET() {
   try {
     const settings = runtimeSettingsStore.get();
-    return NextResponse.json(settings);
+    return NextResponse.json(settings, {
+      headers: { "Cache-Control": "private, max-age=60, stale-while-revalidate=300" },
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to load runtime settings";
     return NextResponse.json({ error: message }, { status: 500 });

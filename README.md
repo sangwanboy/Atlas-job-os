@@ -93,20 +93,47 @@ cp .env.example .env
 # Edit .env with your values
 ```
 
-### 4. Set up the database
+### 4. Start the database (Docker — recommended)
+
+Make sure **Docker Desktop** is running, then:
+
+```bash
+docker run -d \
+  --name atlas-postgres \
+  -e POSTGRES_USER=postgres \
+  -e POSTGRES_PASSWORD=postgres \
+  -e POSTGRES_DB=ai_job_dashboard \
+  -p 5432:5432 \
+  --restart unless-stopped \
+  postgres:15
+```
+
+> This matches the default `DATABASE_URL` in `.env`:
+> `postgresql://postgres:postgres@localhost:5432/ai_job_dashboard`
+
+To stop / start later:
+```bash
+docker stop atlas-postgres
+docker start atlas-postgres
+```
+
+### 5. Set up the database schema
 
 ```bash
 # Generate Prisma client
 npm run prisma:generate
 
-# Run migrations
+# Push schema to DB (dev — no migration history)
+npx prisma db push
+
+# Or run migrations
 npm run prisma:migrate
 
 # Seed with initial data (optional)
 npm run prisma:seed
 ```
 
-### 5. Start the dev server
+### 6. Start the dev server
 
 ```bash
 npm run dev        # Next.js on port 3000

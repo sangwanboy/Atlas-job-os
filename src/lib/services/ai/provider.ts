@@ -19,6 +19,7 @@ export type AiChatResponse = {
 
 export interface AiProvider {
   chat(request: AiChatRequest): Promise<AiChatResponse>;
+  chatStream?(request: AiChatRequest, onToken: (text: string) => void): Promise<AiChatResponse>;
 }
 
 class MockAiProvider implements AiProvider {
@@ -45,15 +46,78 @@ type GeminiResponse = {
 };
 
 // Fallback chain: if preferred model is rate-limited (429/503), try these in order
-// All confirmed available via ListModels API as of 2026-03-25
 const GEMINI_FALLBACK_MODELS = [
-  "gemini-3.1-flash-lite-preview",  // same 3.1 family, confirmed working
-  "gemini-3-flash-preview",          // 3.x family, confirmed working
-  "gemini-2.5-pro",                  // stable, confirmed working
-  "gemini-2.5-flash",                // fast stable fallback
+  "gemini-3.1-flash-lite-preview",
+  "gemini-3.1-pro-preview",
+  "gemini-3-flash-preview",
+  "gemini-2.5-pro",
+  "gemini-2.5-flash",
+  "gemini-2.5-flash-lite-preview-06-17",
 ];
 
-async function callGemini(
+// Cached GoogleAuth + token (service account)
+let _vertexAuth: GoogleAuth | null = null;
+let _vertexToken: string | null = null;
+let _vertexTokenExpiresAt = 0;
+
+function getVertexAuth(credentialsPath: string): GoogleAuth {
+  if (!_vertexAuth) {
+    _vertexAuth = new GoogleAuth({
+      keyFile: credentialsPath,
+      scopes: ["https://www.googleapis.com/auth/cloud-platform"],
+    });
+  }
+  return _vertexAuth;
+}
+
+async function getVertexToken(credentialsPath: string): Promise<string> {
+  if (_vertexToken && Date.now() < _vertexTokenExpiresAt - 60_000) {
+    return _vertexToken;
+  }
+  const auth = getVertexAuth(credentialsPath);
+  const client = await auth.getClient();
+  const tokenResponse = await client.getAccessToken();
+  if (!tokenResponse.token) throw new Error("Failed to obtain Vertex AI token");
+  _vertexToken = tokenResponse.token;
+  _vertexTokenExpiresAt = Date.now() + 55 * 60 * 1000;
+  return _vertexToken;
+}
+
+async function callVertexAI(
+  project: string,
+  location: string,
+  credentialsPath: string,
+  model: string,
+  body: object,
+): Promise<{ ok: boolean; text?: string; status?: number; errorText?: string }> {
+  const token = await getVertexToken(credentialsPath);
+
+  // Global endpoint has no region prefix in the hostname
+  const host = location === "global"
+    ? "aiplatform.googleapis.com"
+    : `${location}-aiplatform.googleapis.com`;
+  const url = `https://${host}/v1/projects/${project}/locations/${location}/publishers/google/models/${encodeURIComponent(model)}:generateContent`;
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${token}`,
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (response.ok) {
+    const json = (await response.json()) as GeminiResponse;
+    const text = json.candidates?.[0]?.content?.parts?.map((p) => p.text ?? "").join(" ").trim();
+    return { ok: true, text: text || "I received an empty response from Vertex AI." };
+  }
+
+  const errorText = await response.text();
+  return { ok: false, status: response.status, errorText };
+}
+
+async function callGeminiAPI(
   apiKey: string,
   model: string,
   body: object,
@@ -79,8 +143,11 @@ async function callGemini(
 
 class GeminiApiProvider implements AiProvider {
   async chat(request: AiChatRequest): Promise<AiChatResponse> {
-    const preferredModel = request.model ?? env.DEFAULT_AI_MODEL ?? "gemini-2.5-flash";
-    const useVertex = !!(env.VERTEX_AI_PROJECT && env.GOOGLE_APPLICATION_CREDENTIALS);
+    const preferredModel = request.model ?? env.DEFAULT_AI_MODEL ?? "gemini-3.1-flash-lite-preview";
+    const vertexProject = env.VERTEX_AI_PROJECT;
+    const vertexLocation = env.VERTEX_AI_LOCATION ?? "global";
+    const vertexCreds = env.GOOGLE_APPLICATION_CREDENTIALS;
+    const useVertex = !!(vertexProject && vertexCreds);
     const apiKey = request.apiKey || env.GEMINI_API_KEY;
 
     if (!useVertex && !apiKey) {
@@ -101,7 +168,6 @@ class GeminiApiProvider implements AiProvider {
       generationConfig: { temperature: request.temperature ?? 0.4 },
     };
 
-    // Try preferred model first with backoff, then fall through to fallbacks
     const modelsToTry = [preferredModel, ...GEMINI_FALLBACK_MODELS.filter((m) => m !== preferredModel)];
 
     for (const model of modelsToTry) {
@@ -109,7 +175,10 @@ class GeminiApiProvider implements AiProvider {
       let lastError = "";
 
       for (let attempt = 0; attempt < 3; attempt++) {
-        const result = await callGemini(apiKey, model, requestBody);
+        const result = useVertex
+          ? await callVertexAI(vertexProject!, vertexLocation, vertexCreds!, model, requestBody)
+          : await callGeminiAPI(apiKey!, model, requestBody);
+
         if (result.ok) {
           if (model !== preferredModel) {
             console.warn(`[GeminiProvider] Fell back to ${model} (preferred: ${preferredModel})`);
@@ -130,7 +199,7 @@ class GeminiApiProvider implements AiProvider {
         break;
       }
 
-      // Hard error on the PREFERRED model (not a rate-limit) — stop immediately
+      // Hard error on the PREFERRED model (not rate-limit) — stop immediately
       if (model === preferredModel && lastStatus !== 429 && lastStatus !== 503 && lastStatus >= 400 && lastStatus < 500) {
         return {
           text: `Gemini request failed (${lastStatus}): ${lastError.slice(0, 300)}`,
@@ -139,7 +208,6 @@ class GeminiApiProvider implements AiProvider {
         };
       }
 
-      // Rate-limited or bad fallback model — try the next one
       console.warn(`[GeminiProvider] ${model} failed (${lastStatus}), trying next fallback...`);
     }
 
@@ -148,6 +216,91 @@ class GeminiApiProvider implements AiProvider {
       provider: "gemini",
       model: preferredModel,
     };
+  }
+
+  async chatStream(request: AiChatRequest, onToken: (text: string) => void): Promise<AiChatResponse> {
+    const preferredModel = request.model ?? env.DEFAULT_AI_MODEL ?? "gemini-3.1-flash-lite-preview";
+    const vertexProject = env.VERTEX_AI_PROJECT;
+    const vertexLocation = env.VERTEX_AI_LOCATION ?? "global";
+    const vertexCreds = env.GOOGLE_APPLICATION_CREDENTIALS;
+    const useVertex = !!(vertexProject && vertexCreds);
+    const apiKey = request.apiKey || env.GEMINI_API_KEY;
+
+    if (!useVertex && !apiKey) {
+      const fallback = await this.chat(request);
+      onToken(fallback.text);
+      return fallback;
+    }
+
+    const requestBody = {
+      contents: [{ role: "user", parts: [{ text: `${request.systemPrompt}\n\nUser: ${request.userPrompt}` }] }],
+      generationConfig: { temperature: request.temperature ?? 0.4 },
+    };
+
+    const modelsToTry = [preferredModel, ...GEMINI_FALLBACK_MODELS.filter((m) => m !== preferredModel)];
+
+    for (const model of modelsToTry) {
+      try {
+        let streamUrl: string;
+        let headers: Record<string, string> = { "Content-Type": "application/json" };
+
+        if (useVertex) {
+          const token = await getVertexToken(vertexCreds!);
+          const host = vertexLocation === "global" ? "aiplatform.googleapis.com" : `${vertexLocation}-aiplatform.googleapis.com`;
+          streamUrl = `https://${host}/v1/projects/${vertexProject}/locations/${vertexLocation}/publishers/google/models/${encodeURIComponent(model)}:streamGenerateContent?alt=sse`;
+          headers["Authorization"] = `Bearer ${token}`;
+        } else {
+          streamUrl = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:streamGenerateContent?alt=sse&key=${encodeURIComponent(apiKey!)}`;
+        }
+
+        const response = await fetch(streamUrl, { method: "POST", headers, body: JSON.stringify(requestBody) });
+        if (!response.ok || !response.body) {
+          const status = response.status;
+          if (status === 429 || status === 503) continue; // try next model
+          break;
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+        let fullText = "";
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop() ?? "";
+          for (const line of lines) {
+            if (!line.startsWith("data: ")) continue;
+            const data = line.slice(6).trim();
+            if (!data || data === "[DONE]") continue;
+            try {
+              const json = JSON.parse(data) as GeminiResponse;
+              const chunk = json.candidates?.[0]?.content?.parts?.map((p) => p.text ?? "").join("") ?? "";
+              if (chunk) {
+                fullText += chunk;
+                // Split chunk into word tokens and emit with typing delay
+                const tokens = chunk.split(/(\s+)/);
+                for (const tok of tokens) {
+                  if (tok) {
+                    onToken(tok);
+                    await new Promise<void>((r) => setTimeout(r, 18));
+                  }
+                }
+              }
+            } catch { /* malformed SSE chunk — skip */ }
+          }
+        }
+
+        if (fullText) return { text: fullText, provider: "gemini", model };
+      } catch { continue; }
+    }
+
+    // SSE failed — fall back to non-streaming
+    const fallback = await this.chat(request);
+    onToken(fallback.text);
+    return fallback;
   }
 }
 

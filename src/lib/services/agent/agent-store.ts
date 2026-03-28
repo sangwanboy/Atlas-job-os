@@ -18,17 +18,17 @@ export type AgentRecord = {
 export class AgentStore {
   async findAgent(agentId: string, userId: string): Promise<AgentRecord | null> {
     try {
-      const agent = await prisma.agent.findFirst({
-        where: {
-          OR: [{ id: agentId }, { key: agentId }],
-          userId,
-        },
-        include: {
-          soul: true,
-          identity: true,
-          mindConfig: true,
-        },
+      // Try exact userId match first, then fall back to any agent with that key/id
+      let agent = await prisma.agent.findFirst({
+        where: { OR: [{ id: agentId }, { key: agentId }], userId },
+        include: { soul: true, identity: true, mindConfig: true },
       });
+      if (!agent) {
+        agent = await prisma.agent.findFirst({
+          where: { OR: [{ id: agentId }, { key: agentId }] },
+          include: { soul: true, identity: true, mindConfig: true },
+        });
+      }
 
       if (!agent) return null;
 
@@ -72,6 +72,17 @@ export class AgentStore {
         }
       }
 
+      // Ensure the user row exists before creating a session (handles local-dev users)
+      await prisma.user.upsert({
+        where: { id: input.userId },
+        update: {},
+        create: {
+          id: input.userId,
+          email: `${input.userId}@ai-job-os.local`,
+          name: input.userId,
+        },
+      });
+
       const created = await prisma.chatSession.create({
         data: {
           userId: input.userId,
@@ -96,8 +107,9 @@ export class AgentStore {
     agentId?: string; // Optional for compatibility
     userId?: string;  // Optional for compatibility
   }): Promise<void> {
-    // 1. Try DB first
+    // 1. Try DB first (skip if session is a local fallback ID — not persisted in DB)
     try {
+      if (input.sessionId.startsWith("local-")) throw new Error("local session");
       await prisma.chatMessage.create({
         data: {
           sessionId: input.sessionId,

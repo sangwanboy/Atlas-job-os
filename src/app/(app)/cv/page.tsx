@@ -16,7 +16,10 @@ import {
   ChevronDown,
   ChevronRight,
   Brain,
+  Tag,
 } from "lucide-react";
+
+type CvTag = "professional" | "part-time" | "role-specific" | "general";
 
 type CvFile = {
   name: string;
@@ -24,7 +27,16 @@ type CvFile = {
   size: number;
   uploadedAt: string;
   ext: string;
+  tag: CvTag;
+  label: string | null;
 };
+
+const CV_TAGS: { value: CvTag; label: string; color: string }[] = [
+  { value: "professional", label: "Professional", color: "bg-violet-100 text-violet-700 border-violet-200" },
+  { value: "part-time", label: "Part-time", color: "bg-amber-100 text-amber-700 border-amber-200" },
+  { value: "role-specific", label: "Role-specific", color: "bg-blue-100 text-blue-700 border-blue-200" },
+  { value: "general", label: "General", color: "bg-slate-100 text-slate-600 border-slate-200" },
+];
 
 type ProfileStatus = {
   hasProfile: boolean;
@@ -82,6 +94,7 @@ export default function CvPage() {
   const [error, setError] = useState<string | null>(null);
   const [deletingName, setDeletingName] = useState<string | null>(null);
   const [reprocessingName, setReprocessingName] = useState<string | null>(null);
+  const [taggingName, setTaggingName] = useState<string | null>(null);
   const [profileStatus, setProfileStatus] = useState<ProfileStatus | null>(null);
   const [profileExpanded, setProfileExpanded] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
@@ -207,6 +220,18 @@ export default function CvPage() {
     }
   };
 
+  const handleTagChange = async (name: string, tag: CvTag) => {
+    setTaggingName(name);
+    try {
+      await fetch("/api/cv", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, tag }) });
+      setFiles((prev) => prev.map((f) => f.name === name ? { ...f, tag } : f));
+    } catch {
+      showToast("Failed to update tag", "error");
+    } finally {
+      setTaggingName(null);
+    }
+  };
+
   const handleReprocess = async (name: string) => {
     setReprocessingName(name);
     try {
@@ -288,7 +313,7 @@ export default function CvPage() {
             )}
           </button>
           {profileExpanded && profileStatus?.profilePreview && (
-            <div className="mt-3 rounded-xl bg-white/70 border border-emerald-100 px-4 py-3">
+            <div className="mt-3 rounded-xl bg-white/70 border border-emerald-100 px-4 py-3 max-h-96 overflow-y-auto">
               <p className="text-xs text-slate-600 font-mono leading-relaxed whitespace-pre-wrap">
                 {profileStatus.profilePreview}
               </p>
@@ -399,7 +424,7 @@ export default function CvPage() {
                     <CvFileIcon ext={f.ext} size="lg" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <p className="font-semibold text-slate-900 truncate">
                         {f.originalName ?? f.name}
                       </p>
@@ -410,7 +435,7 @@ export default function CvPage() {
                         </span>
                       )}
                     </div>
-                    <div className="mt-1 flex items-center gap-2 text-xs text-muted flex-wrap">
+                    <div className="mt-1.5 flex items-center gap-2 text-xs text-muted flex-wrap">
                       <span className="rounded-md bg-slate-100 px-2 py-0.5 font-medium text-slate-600">
                         {typeLabel(f.ext)}
                       </span>
@@ -418,6 +443,24 @@ export default function CvPage() {
                       <span>{formatBytes(f.size)}</span>
                       <span>·</span>
                       <span>Uploaded {formatDate(f.uploadedAt)}</span>
+                    </div>
+                    {/* Tag selector */}
+                    <div className="mt-2 flex items-center gap-1.5 flex-wrap">
+                      <Tag className="h-3 w-3 text-muted flex-none" />
+                      {CV_TAGS.map((t) => (
+                        <button
+                          key={t.value}
+                          onClick={() => void handleTagChange(f.name, t.value)}
+                          disabled={taggingName === f.name}
+                          className={`rounded-full border px-2.5 py-0.5 text-[11px] font-semibold transition-all ${
+                            f.tag === t.value
+                              ? t.color + " shadow-sm scale-105"
+                              : "bg-white border-slate-200 text-slate-400 hover:border-slate-300 hover:text-slate-600"
+                          }`}
+                        >
+                          {t.label}
+                        </button>
+                      ))}
                     </div>
                   </div>
                   <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">

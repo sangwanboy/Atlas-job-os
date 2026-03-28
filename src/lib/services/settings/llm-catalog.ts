@@ -22,17 +22,18 @@ export const llmProviderCatalog: LlmProviderCatalogEntry[] = [
   },
   {
     provider: "gemini",
-    label: "Google Gemini",
+    label: "Google Gemini (Vertex AI)",
     models: [
+      // Gemini 3.x family (Vertex AI)
+      "gemini-3-flash-preview",
+      "gemini-3.1-flash-lite-preview",
       "gemini-3.1-pro-preview",
-      "gemini-3.1-flash-preview",
+      // Gemini 2.5 family (Vertex AI)
       "gemini-2.5-pro",
       "gemini-2.5-flash",
-      "gemini-2.0-flash",
-      "gemini-1.5-pro",
-      "gemini-1.5-flash",
+      "gemini-2.5-flash-lite-preview-06-17",
     ],
-    defaultModel: "gemini-3.1-pro-preview",
+    defaultModel: "gemini-3-flash-preview",
   },
   {
     provider: "groq",

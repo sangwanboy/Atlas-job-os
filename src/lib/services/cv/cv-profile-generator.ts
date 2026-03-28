@@ -5,7 +5,7 @@
  * Writes the profile to agents/atlas/user_profile.md and cv_summary.md.
  */
 
-import { env } from "@/lib/config/env";
+import { callVertexMultimodal } from "@/lib/services/ai/vertex-client";
 import { atlasState, ATLAS_FILES } from "@/lib/services/agent/atlas-state-manager";
 import { continuitySyncService } from "@/lib/services/agent/continuity-sync-service";
 
@@ -45,46 +45,23 @@ Output a SINGLE JSON object with this exact structure (no markdown fences, just 
 
 The profileMarkdown field must be a complete, well-structured markdown profile that Atlas will use as context. Include all sections.`;
 
-async function callGemini(prompt: string): Promise<string> {
-  const apiKey = env.GEMINI_API_KEY;
-  if (!apiKey) throw new Error("GEMINI_API_KEY not set");
-
-  const model = "gemini-2.5-flash";
-  const body = {
-    contents: [
-      {
-        parts: [
-          { text: `${PROFILE_SYSTEM_PROMPT}\n\nHere is the CV text to analyze:\n\n---\n${prompt.slice(0, 15000)}\n---` },
-        ],
-      },
+async function generateProfileViaVertex(cvText: string): Promise<string> {
+  const result = await callVertexMultimodal({
+    parts: [
+      { text: `${PROFILE_SYSTEM_PROMPT}\n\nHere is the CV text to analyze:\n\n---\n${cvText.slice(0, 15000)}\n---` },
     ],
-    generationConfig: { temperature: 0.2, responseMimeType: "application/json" },
-  };
+    temperature: 0.2,
+    responseMimeType: "application/json",
+  });
 
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    },
-  );
-
-  if (!response.ok) {
-    const errText = await response.text();
-    throw new Error(`Gemini profile generation failed (${response.status}): ${errText.slice(0, 300)}`);
-  }
-
-  const json = (await response.json()) as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> };
-  const text = json.candidates?.[0]?.content?.parts?.map((p) => p.text ?? "").join("").trim() ?? "";
-  if (!text) throw new Error("Gemini returned empty profile");
-  return text;
+  if (!result.ok || !result.text) throw new Error(result.error ?? "Vertex AI returned empty profile");
+  return result.text;
 }
 
 export class CvProfileGenerator {
   static async generateAndSave(cvText: string, fileName: string): Promise<ProfileGenerationResult> {
     try {
-      const rawJson = await callGemini(cvText);
+      const rawJson = await generateProfileViaVertex(cvText);
 
       // Parse JSON output from Gemini
       let parsed: Record<string, unknown>;
@@ -131,8 +108,8 @@ export class CvProfileGenerator {
       const message = err instanceof Error ? err.message : String(err);
       console.error("[CvProfileGenerator] Error:", message);
 
-      // Fallback: write raw CV text as basic profile
-      const fallbackProfile = `# User Profile\n\nExtracted from CV: ${fileName}\n\n${cvText.slice(0, 3000)}`;
+      // Fallback: write a minimal stub — do NOT dump raw CV text which may be binary garbage
+      const fallbackProfile = `# User Profile\n\n*Profile extraction failed for ${fileName}. Please re-process the file once Vertex AI is available.*\n\nError: ${message}`;
       await atlasState.writeText(ATLAS_FILES.userProfile, fallbackProfile);
       await continuitySyncService.logContextMemory(`CV profile (fallback) saved from: ${fileName}`);
 

@@ -74,7 +74,7 @@ export async function GET() {
       lastUpdated,
       profileLength: profile.length,
       hasSummary: summary.length > 0,
-      profilePreview: hasProfile ? profile.slice(0, 300) + "…" : null,
+      profilePreview: hasProfile ? profile : null,
     });
   } catch {
     return NextResponse.json({ hasProfile: false, lastUpdated: null });

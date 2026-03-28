@@ -1,24 +1,16 @@
 {
+  "preferred_name": "Tushar",
   "preferred_titles": [
-    "Commis Chef",
-    "Kitchen Assistant",
-    "Chef de Partie",
-    "Software Engineer",
-    "Junior Software Developer",
-    "Driver",
-    "Barista",
-    "Bartender",
-    "Waiter",
-    "Waitress",
-    "Cyber Security Engineer",
-    "Security Analyst",
-    "Information Security",
-    "Nurse",
-    "Nursing",
-    "Psychologist",
-    "Clinical Psychologist",
-    "Warehouse Operative",
-    "Warehouse Assistant",
-    "Stock Controller"
-  ]
+    "Software Development Engineer",
+    "Junior Software Engineer",
+    "New Grad Software Engineer",
+    "Web Developer",
+    "Front End Developer"
+  ],
+  "preferred_locations": [
+    "London",
+    "Coventry",
+    "Manchester"
+  ],
+  "recency_preference": "past-month"
 }

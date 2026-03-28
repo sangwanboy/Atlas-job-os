@@ -13,6 +13,90 @@ import type { AgentRuntimeContext, AgentRuntimeResponse } from "@/lib/services/a
 import { auth } from "@/auth";
 import { ScraperService } from "@/lib/services/scraper/scraper-service";
 import { runtimeSettingsStore } from "@/lib/services/settings/runtime-settings-store";
+import { prisma } from "@/lib/db";
+import fs from "node:fs/promises";
+import path from "node:path";
+
+// ── Direct DB helpers (bypass HTTP self-calls) ────────────────────────────────
+
+function parseSalaryBounds(salary?: string): { salaryMin?: number; salaryMax?: number } {
+  if (!salary) return {};
+  const values = salary.match(/\d[\d,.]*/g)?.map(p => Number(p.replace(/,/g, ""))).filter(Number.isFinite) ?? [];
+  if (values.length === 0) return {};
+  if (values.length === 1) return { salaryMin: Math.round(values[0]) };
+  return { salaryMin: Math.round(values[0]), salaryMax: Math.round(values[1]) };
+}
+
+function mapEmploymentType(jobType?: string): "FULL_TIME" | "PART_TIME" | "CONTRACT" | "INTERNSHIP" | "FREELANCE" | undefined {
+  if (!jobType) return undefined;
+  const t = jobType.toLowerCase();
+  if (t.includes("full")) return "FULL_TIME";
+  if (t.includes("part")) return "PART_TIME";
+  if (t.includes("contract")) return "CONTRACT";
+  if (t.includes("intern")) return "INTERNSHIP";
+  if (t.includes("freelance")) return "FREELANCE";
+  return undefined;
+}
+
+async function saveJobToDB(params: {
+  title: string; company: string; location: string;
+  url?: string; salary?: string; source?: string;
+  description?: string; skills?: string; datePosted?: string;
+  jobType?: string; score?: number;
+}): Promise<{ id: string; title: string; company: string }> {
+  let user: { id: string };
+  try {
+    user = await prisma.user.upsert({
+      where: { email: "local-dev-user@ai-job-os.local" },
+      update: { name: "Local Dev User" },
+      create: { email: "local-dev-user@ai-job-os.local", name: "Local Dev User" },
+      select: { id: true },
+    });
+  } catch {
+    // Race condition on concurrent saves — row already exists, just fetch it
+    user = (await prisma.user.findFirst({ where: { email: "local-dev-user@ai-job-os.local" }, select: { id: true } }))!;
+  }
+  const existing = await prisma.company.findFirst({ where: { name: params.company }, select: { id: true } });
+  const company = existing ?? await prisma.company.create({ data: { name: params.company }, select: { id: true } });
+  const salary = parseSalaryBounds(params.salary);
+  const job = await prisma.job.create({
+    data: {
+      userId: user.id,
+      source: params.source ?? "Agent Search",
+      sourceUrl: params.url,
+      title: params.title,
+      companyId: company.id,
+      location: params.location,
+      salaryMin: salary.salaryMin,
+      salaryMax: salary.salaryMax,
+      currency: params.salary ? "GBP" : undefined,
+      applicationStatus: "SAVED",
+      priority: "MEDIUM",
+      descriptionRaw: params.description,
+      requiredSkills: params.skills ? params.skills.split(",").map(s => s.trim()).filter(Boolean) : [],
+      postedDate: params.datePosted ? new Date(params.datePosted) : undefined,
+      employmentType: mapEmploymentType(params.jobType),
+    },
+    select: { id: true, title: true },
+  });
+
+  // Save scraper match score if provided
+  if (params.score !== undefined && params.score > 0) {
+    await prisma.jobScore.create({
+      data: {
+        jobId: job.id,
+        userId: user.id,
+        totalScore: params.score,
+        confidence: 0.8,
+        explanation: "Scraper relevance score",
+        factorBreakdown: { scraper: params.score },
+        missingDataPenalty: 0,
+      },
+    });
+  }
+
+  return { id: job.id, title: job.title, company: params.company };
+}
 
 const maxToolRounds = 25;
 
@@ -28,6 +112,8 @@ type PendingJob = {
   source?: string;
   description?: string;
   skills?: string;
+  jobType?: string;
+  score?: number;
   isAlreadyImported?: boolean;
 };
 const pendingJobsStore = new Map<string, PendingJob[]>();
@@ -42,7 +128,7 @@ const toolDescriptors = [
   },
   {
     name: "import_pending_jobs",
-    description: "Import previously previewed jobs into the pipeline. If the session state is lost, you can pass the 'jobs' array directly. Parameters: { action?: 'import_all' | 'import_selected', indices?: number[], jobs?: Job[] }",
+    description: "ALWAYS use this when the user says 'import', 'save', 'add to pipeline', or 'import all' — even if you also see browser_extract_jobs in the tool list. NEVER call browser_extract_jobs to handle an import request. Jobs already previewed this session are stored server-side; just call this tool with action='import_all' to save them all. Parameters: { action?: 'import_all' | 'import_selected', indices?: number[], jobs?: Job[] }",
     parameters: {
       action: "string?",
       indices: "number[]?",
@@ -124,6 +210,11 @@ const toolDescriptors = [
     description: "Search for jobs on LinkedIn or other boards and extract structured data using Crawl4AI discovery. Parameters: { query: string, location: string, limit?: number }",
     parameters: { query: "string", location: "string", limit: "number?" },
   },
+  {
+    name: "update_scraper_selectors",
+    description: "Self-heal the job scraper when a platform's DOM has changed. Call this when browser_extract_jobs reports a platform failed with a dom_sample. Analyse the HTML, identify the correct CSS selectors for job cards, and save them. Parameters: { site: string, cardSelectors: string[] }",
+    parameters: { site: "string", cardSelectors: "string[]" },
+  },
 ] as const;
 
 const saveJobToolSchema = z.object({
@@ -176,6 +267,8 @@ const previewJobSchema = z.object({
   description: z.string().optional(),
   skills: z.union([z.string(), z.array(z.string())]).optional(),
   datePosted: z.string().optional(),
+  jobType: z.string().optional(),
+  score: z.number().optional(),
   isAlreadyImported: z.boolean().optional(),
 }).transform(val => ({
   ...val,
@@ -271,8 +364,8 @@ function normalizeToolCallCandidate(candidate: Record<string, unknown>): ToolCal
 function getInternalApiBases(): string[] {
   return Array.from(
     new Set(
-      ["http://127.0.0.1:3001", env.NEXT_PUBLIC_APP_URL, env.NEXTAUTH_URL, "http://127.0.0.1:3000"]
-        .filter(Boolean),
+      [env.NEXT_PUBLIC_APP_URL, env.NEXTAUTH_URL, "http://127.0.0.1:3000"]
+        .filter((u): u is string => Boolean(u)),
     ),
   );
 }
@@ -463,7 +556,10 @@ async function executeToolCall(toolCall: ToolCall, sid: string): Promise<string>
     pendingJobsStore.set(sid, finalJobs);
     
     const jobList = finalJobs.map((j, i) => `${i + 1}. **${j.title}** at ${j.company} (${j.location})${j.isAlreadyImported ? " [ALREADY IN PIPELINE]" : ""}`).join("\n");
-    return `__PREVIEW_JOBS__${JSON.stringify(finalJobs)}__END_PREVIEW__\n\n### 🔍 Job Discovery Preview\nPreviewed ${finalJobs.length} accumulated job(s) for your review:\n${jobList}\n\nReview the list below. Jobs already in your pipeline are marked. Click 'Import All' to save the rest.`;
+    // Strip description/skills from preview JSON — they contain ] chars that break parsing
+    // Full data is kept in pendingJobsStore server-side for import
+    const previewJobs = finalJobs.map(({ description: _d, skills: _s, ...rest }) => rest);
+    return `__PREVIEW_JOBS__${JSON.stringify(previewJobs)}__END_PREVIEW__\n\n### 🔍 Job Discovery Preview\nPreviewed ${finalJobs.length} accumulated job(s) for your review:\n${jobList}\n\nReview the list below. Jobs already in your pipeline are marked. Click 'Import All' to save the rest.`;
   }
   if (toolCall.tool === "import_pending_jobs") {
     const params = importPendingJobsSchema.parse(toolCall.parameters);
@@ -489,7 +585,7 @@ async function executeToolCall(toolCall: ToolCall, sid: string): Promise<string>
     const results: string[] = [];
     for (const job of jobsToImport) {
       try {
-        const payload = await postInternalJson<{ success: boolean; job: { id: string; title: string; company: string } }>("/api/jobs", {
+        const saved = await saveJobToDB({
           title: job.title,
           company: job.company,
           location: job.location,
@@ -499,9 +595,11 @@ async function executeToolCall(toolCall: ToolCall, sid: string): Promise<string>
           description: job.description,
           skills: job.skills,
           datePosted: (job as any).datePosted,
+          jobType: job.jobType,
+          score: job.score,
         });
-        results.push(`✅ "${payload.job.title}" at ${payload.job.company} — saved`);
-        job.isAlreadyImported = true; // Mark as imported in the store
+        results.push(`✅ "${saved.title}" at ${saved.company} — saved`);
+        job.isAlreadyImported = true;
       } catch (e) {
         const msg = e instanceof Error ? e.message : "Unknown error";
         results.push(`❌ "${job.title}" at ${job.company} — failed: ${msg}`);
@@ -518,8 +616,8 @@ async function executeToolCall(toolCall: ToolCall, sid: string): Promise<string>
   }
   if (toolCall.tool === "save_job") {
     const params = saveJobToolSchema.parse(toolCall.parameters);
-    const payload = await postInternalJson<{ success: boolean; job: { id: string; title: string; company: string } }>("/api/jobs", params);
-    
+    const saved = await saveJobToDB(params);
+
     // Update pending store if this URL was in there
     const pending = pendingJobsStore.get(sid) || [];
     const idx = pending.findIndex(j => j.url === params.url);
@@ -528,7 +626,7 @@ async function executeToolCall(toolCall: ToolCall, sid: string): Promise<string>
       pendingJobsStore.set(sid, pending);
     }
 
-    return `Job "${payload.job.title}" at ${payload.job.company} saved successfully.`;
+    return `Job "${saved.title}" at ${saved.company} saved successfully.`;
   }
   if (toolCall.tool === "read_context_memory") {
     const context = await continuitySyncService.hydrateTurnContext(sid, sid);
@@ -563,68 +661,115 @@ async function executeToolCall(toolCall: ToolCall, sid: string): Promise<string>
     }
     return response;
   }
+  if (toolCall.tool === "update_scraper_selectors") {
+    const { site, cardSelectors } = toolCall.parameters as { site: string; cardSelectors: string[] };
+    const selectorsPath = path.join(process.cwd(), "agents/atlas/scraper_selectors.json");
+    let data: { _comment?: string; overrides: Record<string, string[]> } = { overrides: {} };
+    try {
+      const existing = await fs.readFile(selectorsPath, "utf-8");
+      data = JSON.parse(existing);
+    } catch {}
+    data.overrides = { ...data.overrides, [site]: cardSelectors };
+    await fs.writeFile(selectorsPath, JSON.stringify(data, null, 2), "utf-8");
+    return `✅ Scraper selectors updated for **${site}**: \`${cardSelectors.join(", ")}\`. These will be used on the next search.`;
+  }
   if (toolCall.tool === "browser_extract_jobs") {
     const { query, location } = toolCall.parameters as { query: string, location: string };
-    const linkedInFilters = (toolCall.parameters as any).linkedInFilters;
+    const searchQuery = `${query} ${location}`.trim();
 
-    // Try LinkedIn scraping first
-    const searchUrl = `https://www.linkedin.com/jobs/search/?keywords=${encodeURIComponent(query)}&location=${encodeURIComponent(location)}`;
-    const result = await ScraperService.scrape(searchUrl);
+    // Build search URLs for 8 reputable UK platforms — all run in parallel
+    const platforms: { name: string; url: string }[] = [
+      { name: "LinkedIn",   url: `https://www.linkedin.com/jobs/search/?keywords=${encodeURIComponent(query)}&location=${encodeURIComponent(location)}` },
+      { name: "Indeed",     url: `https://uk.indeed.com/jobs?q=${encodeURIComponent(query)}&l=${encodeURIComponent(location)}` },
+      { name: "Reed",       url: `https://www.reed.co.uk/jobs?keywords=${encodeURIComponent(query)}&location=${encodeURIComponent(location)}` },
+      { name: "TotalJobs",  url: `https://www.totaljobs.com/jobs/${encodeURIComponent(query.replace(/\s+/g, "-").toLowerCase())}/in-${encodeURIComponent(location.replace(/\s+/g, "-").toLowerCase())}` },
+      { name: "Adzuna",     url: `https://www.adzuna.co.uk/jobs/search?q=${encodeURIComponent(query)}&loc=${encodeURIComponent(location)}` },
+      { name: "CV-Library", url: `https://www.cv-library.co.uk/search-jobs?q=${encodeURIComponent(query)}&loc=${encodeURIComponent(location)}&us=1` },
+      { name: "Monster",    url: `https://www.monster.co.uk/jobs/search?q=${encodeURIComponent(query)}&where=${encodeURIComponent(location)}` },
+      { name: "CWJobs",     url: `https://www.cwjobs.co.uk/jobs/${encodeURIComponent(query.replace(/\s+/g, "-").toLowerCase())}/in-${encodeURIComponent(location.replace(/\s+/g, "-").toLowerCase())}` },
+    ];
 
-    if (result.success && result.jobs && result.jobs.length > 0) {
-      // Apply admin-configured per-search job limit (default 20)
-      const maxJobs = runtimeSettingsStore.get("local-dev-user").settings.maxJobsPerSearch ?? 20;
-      const limitedJobs = result.jobs.slice(0, maxJobs);
-      // Auto-preview: directly call preview_jobs to preserve scraped URLs
-      const previewResult = await executeToolCall({
-        tool: "preview_jobs",
-        parameters: { jobs: limitedJobs.map((j: any) => ({
+    console.log(`[browser_extract_jobs] Searching ${platforms.length} UK platforms in parallel for: ${searchQuery}`);
+
+    // Search all platforms in parallel
+    const platformResults = await Promise.allSettled(
+      platforms.map(p => ScraperService.scrape(p.url, searchQuery).then(r => ({ ...r, platformName: p.name })))
+    );
+
+    // Aggregate all jobs from successful platforms
+    type RawJob = { title?: string; company?: string; location?: string; url?: string; salary?: string; description?: string; skills?: string | string[]; date_posted?: string; job_type?: string; score?: number; _platform?: string };
+    const allJobs: RawJob[] = [];
+    const successfulPlatforms: string[] = [];
+    const failedPlatforms: { name: string; error: string; dom_sample?: string }[] = [];
+
+    for (let i = 0; i < platformResults.length; i++) {
+      const pr = platformResults[i];
+      const name = platforms[i].name;
+      if (pr.status === "fulfilled" && pr.value.success && pr.value.jobs && pr.value.jobs.length > 0) {
+        successfulPlatforms.push(name);
+        for (const j of pr.value.jobs) {
+          allJobs.push({ ...j, _platform: name });
+        }
+      } else {
+        const err = pr.status === "rejected" ? String(pr.reason) : (pr.value?.error ?? "no results");
+        const domSample = pr.status === "fulfilled" ? pr.value?.dom_sample : undefined;
+        failedPlatforms.push({ name, error: err, dom_sample: domSample });
+      }
+    }
+
+    if (allJobs.length === 0) {
+      const domHints = failedPlatforms
+        .filter(f => f.dom_sample)
+        .map(f => `\n**${f.name}** DOM sample:\n\`\`\`html\n${f.dom_sample?.slice(0, 1500)}\n\`\`\``)
+        .join("\n");
+      return `SCRAPER_ERROR: All platforms returned no results for "${query}" in "${location}".${domHints ? `\n\nDOM samples from failed platforms (call update_scraper_selectors to fix):${domHints}` : " Try a broader search term or different location."}`;
+    }
+
+    // Deduplicate by title+company key
+    const seen = new Set<string>();
+    const unique = allJobs.filter(j => {
+      const key = `${(j.title || "").toLowerCase().trim()}|${(j.company || "").toLowerCase().trim()}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
+    // Sort by scraper relevance score descending, take top 10
+    const top10 = unique
+      .sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
+      .slice(0, 10);
+
+    const previewResult = await executeToolCall({
+      tool: "preview_jobs",
+      parameters: {
+        jobs: top10.map((j: RawJob) => ({
           title: j.title || "Untitled Role",
           company: j.company || "Unknown Company",
           location: j.location || location,
           url: j.url || "#",
           salary: j.salary,
-          source: "LinkedIn",
+          source: j._platform,
           description: j.description || "",
           skills: Array.isArray(j.skills) ? j.skills.join(", ") : (j.skills || ""),
-          datePosted: j.date_posted || j.datePosted,
-          jobType: j.jobType || "",
-          senLevel: j.senLevel || "",
-          industry: j.industry || "",
-        })) }
-      }, sid);
-      return `### Job Discovery: ${query} in ${location}\n\nFound ${limitedJobs.length} jobs from LinkedIn (limit: ${maxJobs}).\n\n${previewResult}`;
-    }
+          datePosted: j.date_posted || "",
+          jobType: j.job_type || "",
+          score: j.score,
+        }))
+      }
+    }, sid);
 
-    // Fallback: try Indeed if LinkedIn failed
-    const indeedUrl = `https://uk.indeed.com/jobs?q=${encodeURIComponent(query)}&l=${encodeURIComponent(location)}`;
-    console.log(`[browser_extract_jobs] LinkedIn failed, trying Indeed: ${indeedUrl}`);
-    const indeedResult = await ScraperService.scrape(indeedUrl);
+    const scoreList = top10.map((j: RawJob, i: number) =>
+      `${i + 1}. ${j.title} at ${j.company} [${j._platform}] — score: ${Math.round(j.score ?? 0)}/100`
+    ).join("\n");
 
-    if (indeedResult.success && indeedResult.jobs && indeedResult.jobs.length > 0) {
-      const maxJobs = runtimeSettingsStore.get("local-dev-user").settings.maxJobsPerSearch ?? 20;
-      const limitedJobs = indeedResult.jobs.slice(0, maxJobs);
-      // Auto-preview: directly call preview_jobs to preserve scraped URLs
-      const previewResult = await executeToolCall({
-        tool: "preview_jobs",
-        parameters: { jobs: limitedJobs.map((j: any) => ({
-          title: j.title || "Untitled Role",
-          company: j.company || "Unknown Company",
-          location: j.location || location,
-          url: j.url || "#",
-          salary: j.salary,
-          source: "Indeed",
-          description: j.description || "",
-          skills: Array.isArray(j.skills) ? j.skills.join(", ") : (j.skills || ""),
-          datePosted: j.date_posted || j.datePosted,
-        })) }
-      }, sid);
-      return `### Job Discovery: ${query} in ${location}\n\nFound ${limitedJobs.length} jobs from Indeed (limit: ${maxJobs}).\n\n${previewResult}`;
-    }
+    const failedNote = failedPlatforms.length > 0
+      ? `\n\n**Failed platforms** (DOM may have changed — call \`update_scraper_selectors\` to fix):\n${failedPlatforms.map(f => {
+          const hint = f.dom_sample ? `\n\`\`\`html\n${f.dom_sample.slice(0, 1000)}\n\`\`\`` : "";
+          return `- **${f.name}**: ${f.error}${hint}`;
+        }).join("\n")}`
+      : "";
 
-    // Both failed — return a clear, non-confusing error
-    const scraperError = result.error || "Unknown scraper error";
-    return `SCRAPER_ERROR: LinkedIn and Indeed both returned no results for "${query}" in "${location}". Raw error: ${scraperError}. Tell the user LinkedIn may be temporarily blocking automated access and suggest they try again in a moment or try a different search term. Do NOT invent technical explanations.`;
+    return `### Job Discovery: ${query} in ${location}\n\nSearched ${successfulPlatforms.join(", ")} — found ${unique.length} unique jobs, showing top 10 by relevance score.\n\n**SCRAPER MATCH SCORES (use these exact numbers, do NOT invent your own):**\n${scoreList}\n\n${previewResult}${failedNote}`;
   }
   throw new Error(`Unsupported tool: ${toolCall.tool}`);
 }
@@ -642,39 +787,31 @@ function normalizeAgentReply(input: string): string {
 
 export class ConversationOrchestrator {
   async run(context: AgentRuntimeContext): Promise<AgentRuntimeResponse> {
-    const session = await auth();
+    // Wave 1: auth + agent lookup in parallel
+    const [session, agent] = await Promise.all([
+      auth(),
+      agentRegistry.getAgent(context.agentId, context.userId),
+    ]);
     const isDeveloper = session?.user?.role === "ADMIN" || session?.user?.email === "admin@aijobos.local";
     const dynamicMaxRounds = isDeveloper ? 100 : maxToolRounds;
-
-    const agent = await agentRegistry.getAgent(context.agentId, context.userId);
     const effectiveUserId = context.userId ?? agent.userId;
-    
+
+    // Wave 2: session creation (needs agent.id)
     let effectiveSessionId = context.sessionId;
     if (effectiveUserId) {
       try {
-        effectiveSessionId = await agentStore.createOrReuseSession({ 
-          sessionId: context.sessionId, 
-          userId: effectiveUserId, 
-          agentId: agent.id, 
-          message: context.message 
+        effectiveSessionId = await agentStore.createOrReuseSession({
+          sessionId: context.sessionId,
+          userId: effectiveUserId,
+          agentId: agent.id,
+          message: context.message
         });
       } catch {}
     }
     const sid = effectiveSessionId || "default";
     context.onUpdate?.({ type: "session_id", sessionId: sid });
 
-    let historyContext = "";
-    let historyMessageCount = 0;
-    if (sid !== "new" && sid !== "default") {
-      try {
-        const historyMessages = await agentStore.getSessionMessages(sid);
-        historyMessageCount = historyMessages.length;
-        if (historyMessageCount > 0) {
-          historyContext = historyMessages.slice(-5).map(m => `${m.role}: ${m.content}`).join("\n\n");
-        }
-      } catch {}
-    }
-
+    // Detect task type early for status message
     let taskType: string | undefined;
     const msg = context.message.toLowerCase();
     if (msg.includes("search") || msg.includes("find") || msg.includes("discovery")) taskType = "search";
@@ -682,9 +819,19 @@ export class ConversationOrchestrator {
     else if (msg.includes("score") || msg.includes("filter") || msg.includes("fit")) taskType = "score";
     else if (msg.includes("draft") || msg.includes("email") || msg.includes("write")) taskType = "outreach";
 
-    const layers = await continuitySyncService.hydrateTurnContext(agent.id, sid, taskType, historyMessageCount);
     context.onUpdate?.({ type: "status", status: taskType === "search" ? "Searching for jobs..." : "Analyzing request..." });
-    await continuitySyncService.logContextMemory(`Starting turn: ${taskType || "general"}`);
+
+    // Wave 3: history + continuity in parallel (both need sid)
+    let historyContext = "";
+    let historyMessageCount = 0;
+    const [historyMessages, layers] = await Promise.all([
+      sid !== "new" && sid !== "default" ? agentStore.getSessionMessages(sid).catch(() => []) : Promise.resolve([]),
+      continuitySyncService.hydrateTurnContext(agent.id, sid, taskType, 0),
+    ]);
+    if (historyMessages.length > 0) {
+      historyMessageCount = historyMessages.length;
+      historyContext = historyMessages.slice(-5).map((m: { role: string; content: string }) => `${m.role}: ${m.content}`).join("\n\n");
+    }
 
     // Reset loop guard for every new prompt
     loopPreventionGuard.reset(agent.id, sid);
@@ -726,8 +873,7 @@ export class ConversationOrchestrator {
         ? `--- CONTINUATION Round ${round} ---`
         : null;
 
-      console.time(`LLM Round ${round}`);
-      const aiResponse = await provider.chat({
+      const llmRequest = {
         systemPrompt,
         userPrompt: [
           `--- AGENT INTERNAL STATE ---\n${internalStateStr}\n----------------------------`,
@@ -739,7 +885,62 @@ export class ConversationOrchestrator {
         model: context.preferredModel ?? agent.model,
         temperature: 0.4,
         apiKey: context.apiKey,
-      });
+      };
+
+      console.time(`LLM Round ${round}`);
+      // Stream tokens live as deltas; if tool calls follow, send delta_clear to reset UI
+      // Tag filter: suppress internal <continuity_update>...</continuity_update> blocks during streaming
+      let tagFilterBuf = "";
+      let inInternalTag = false;
+      const OPEN_TAG = "<continuity_update>";
+      const CLOSE_TAG = "</continuity_update>";
+
+      function flushTagFilter(token: string) {
+        tagFilterBuf += token;
+        while (tagFilterBuf.length > 0) {
+          if (inInternalTag) {
+            const closeIdx = tagFilterBuf.indexOf(CLOSE_TAG);
+            if (closeIdx !== -1) {
+              tagFilterBuf = tagFilterBuf.slice(closeIdx + CLOSE_TAG.length);
+              inInternalTag = false;
+            } else {
+              // Still inside tag — keep buffering, safety valve at 4000 chars
+              if (tagFilterBuf.length > 4000) { tagFilterBuf = ""; inInternalTag = false; }
+              break;
+            }
+          } else {
+            const openIdx = tagFilterBuf.indexOf(OPEN_TAG);
+            if (openIdx !== -1) {
+              const safe = tagFilterBuf.slice(0, openIdx);
+              if (safe) context.onUpdate?.({ type: "delta", text: safe });
+              tagFilterBuf = tagFilterBuf.slice(openIdx + OPEN_TAG.length);
+              inInternalTag = true;
+            } else {
+              // No open tag found — emit everything except the last N chars (partial tag guard)
+              const guard = OPEN_TAG.length - 1;
+              const safeLen = Math.max(0, tagFilterBuf.length - guard);
+              if (safeLen > 0) {
+                context.onUpdate?.({ type: "delta", text: tagFilterBuf.slice(0, safeLen) });
+                tagFilterBuf = tagFilterBuf.slice(safeLen);
+              }
+              break;
+            }
+          }
+        }
+      }
+
+      let sentDeltas = false;
+      const aiResponse = provider.chatStream
+        ? await provider.chatStream(llmRequest, (token) => {
+            flushTagFilter(token);
+            sentDeltas = true;
+          })
+        : await provider.chat(llmRequest);
+      // Flush any remaining safe buffer after stream ends
+      if (tagFilterBuf && !inInternalTag) {
+        context.onUpdate?.({ type: "delta", text: tagFilterBuf });
+        tagFilterBuf = "";
+      }
       console.timeEnd(`LLM Round ${round}`);
 
       if (aiResponse.text.startsWith("Gemini request failed:")) {
@@ -762,7 +963,13 @@ export class ConversationOrchestrator {
 
       if (toolCalls.length === 0) {
         aiResponseText = aiResponse.text;
+        // Tokens were already emitted live; nothing more to flush
         break;
+      }
+
+      // Tool calls detected — clear any streamed partial text and continue
+      if (sentDeltas) {
+        context.onUpdate?.({ type: "delta_clear" });
       }
 
       let turnRes = "";
@@ -803,18 +1010,16 @@ export class ConversationOrchestrator {
 
     const normalizedReply = normalizeAgentReply(finalReply);
     if (effectiveUserId) {
-      try {
-        await agentStore.saveMessage({ sessionId: sid, role: "USER", content: context.message, tokenEstimate: 0, agentId: agent.id, userId: effectiveUserId });
-        await agentStore.saveMessage({ sessionId: sid, role: "ASSISTANT", content: normalizedReply, tokenEstimate: 0, agentId: agent.id, userId: effectiveUserId });
-      } catch {}
+      void Promise.all([
+        agentStore.saveMessage({ sessionId: sid, role: "USER", content: context.message, tokenEstimate: 0, agentId: agent.id, userId: effectiveUserId }),
+        agentStore.saveMessage({ sessionId: sid, role: "ASSISTANT", content: normalizedReply, tokenEstimate: 0, agentId: agent.id, userId: effectiveUserId }),
+      ]).catch(() => {});
     }
 
     const continuityUpdate = extractContinuityUpdate(aiResponseText);
     if (continuityUpdate) {
-      await continuitySyncService.syncLayersWithLlm(agent.id, sid, continuityUpdate);
+      void continuitySyncService.syncLayersWithLlm(agent.id, sid, continuityUpdate);
     }
-
-    await continuitySyncService.logContextMemory("Turn execution completed");
 
     return { 
       reply: normalizedReply, 

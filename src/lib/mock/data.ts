@@ -25,7 +25,7 @@ export const activeAgent: AgentProfile = {
     communicationStyle: "Strategic",
   },
   mind: {
-    model: "gemini-3.1-flash-lite-preview",
+    model: "gemini-3-flash-preview",
     deterministicMode: true,
     maxTurns: 10,
   },
@@ -34,11 +34,11 @@ export const activeAgent: AgentProfile = {
   responseBudgetTokens: 1800,
 };
 
-export const initialChat: ChatMessageView[] = [
-  {
-    id: "greeting-msg",
-    role: "ASSISTANT",
-    content: "Hello! I'm Atlas. What kind of roles are you looking for today? Give me some details (e.g. title, remote/onsite, industry) and I'll start fetching jobs for you to review.",
-    createdAt: new Date().toISOString(),
-  }
-];
+export function createInitialChat(userName?: string | null): ChatMessageView[] {
+  const greeting = userName
+    ? `Hello, ${userName}! I'm Atlas. Ready to continue your job search. What would you like to work on today?`
+    : "Hello! I'm Atlas. What kind of roles are you looking for today? Give me some details (e.g. title, remote/onsite, industry) and I'll start fetching jobs for you to review.";
+  return [{ id: "greeting-msg", role: "ASSISTANT", content: greeting, createdAt: new Date().toISOString() }];
+}
+
+export const initialChat: ChatMessageView[] = createInitialChat();

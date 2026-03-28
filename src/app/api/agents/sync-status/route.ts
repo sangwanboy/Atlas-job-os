@@ -38,6 +38,10 @@ export async function GET(request: Request) {
   const mindDoc = await atlasState.readText(ATLAS_FILES.mind, "");
   const soulDoc = await atlasState.readText(ATLAS_FILES.soul, "");
   const identityDoc = await atlasState.readText(ATLAS_FILES.identity, "");
+  const userProfileDoc = await atlasState.readText(ATLAS_FILES.userProfile, "");
+  const userNameMatch = userProfileDoc.match(/(?:# User Profile:\s*|^Name:\s*)([^\n]+)/im)
+    ?? userProfileDoc.match(/^([A-Za-z][^\s;,\n]{1,30})/);
+  const userName = userNameMatch?.[1]?.trim() ?? null;
   
   const runtimeSelection = runtimeSettingsStore.get("local-dev-user");
 
@@ -45,6 +49,7 @@ export async function GET(request: Request) {
     agentId,
     resolvedAgentId,
     sessionId,
+    userName,
     summary: { lastSyncedAt: syncState.lastHydratedAt },
     usage: {
       totalTokens: runtimeSelection.usage.totalTokens,

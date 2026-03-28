@@ -14,12 +14,13 @@ export type AgentRuntimeContext = {
 };
 
 export type AgentTurnUpdate = {
-  type: "status" | "tool_start" | "tool_end" | "session_id";
+  type: "status" | "tool_start" | "tool_end" | "session_id" | "delta" | "delta_clear";
   status?: string;
   tool?: string;
   parameters?: any;
   result?: any;
   sessionId?: string;
+  text?: string;
 };
 
 export type AgentRuntimeResponse = {

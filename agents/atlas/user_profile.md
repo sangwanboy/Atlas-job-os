@@ -1,1 +1,1 @@
-Tushar; focus includes London hospitality, Software Engineering (India/Remote), Nursing (London), and now actively pursuing warehouse/logistics roles in the West Midlands and London.
+Tushar is a graduate student at the University of Warwick (MSc Engineering Business Management). He has experience in full-stack development and digital marketing. He is currently targeting Software Engineering roles in London and Manchester.

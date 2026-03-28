@@ -1,6 +1,11 @@
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { OverviewKpis } from "@/components/dashboard/overview-kpis";
-import { WeeklyTrendChart } from "@/components/dashboard/weekly-trend-chart";
+
+const WeeklyTrendChart = dynamic(
+  () => import("@/components/dashboard/weekly-trend-chart").then((m) => m.WeeklyTrendChart),
+  { loading: () => <div className="panel h-64 animate-pulse" /> },
+);
 
 export default function DashboardPage() {
   return (

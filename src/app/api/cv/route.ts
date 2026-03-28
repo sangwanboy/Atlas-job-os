@@ -3,6 +3,22 @@ import * as fs from "node:fs/promises";
 import * as path from "node:path";
 
 const CV_DIR = path.join(process.cwd(), "uploads", "cv");
+const METADATA_FILE = path.join(CV_DIR, "_metadata.json");
+
+export type CvTag = "professional" | "part-time" | "role-specific" | "general";
+
+async function readMetadata(): Promise<Record<string, { tag?: CvTag; label?: string }>> {
+  try {
+    const raw = await fs.readFile(METADATA_FILE, "utf-8");
+    return JSON.parse(raw) as Record<string, { tag?: CvTag; label?: string }>;
+  } catch {
+    return {};
+  }
+}
+
+async function writeMetadata(data: Record<string, { tag?: CvTag; label?: string }>) {
+  await fs.writeFile(METADATA_FILE, JSON.stringify(data, null, 2), "utf-8");
+}
 
 const ALLOWED_EXTENSIONS = new Set([
   ".pdf", ".doc", ".docx", ".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp",
@@ -48,14 +64,18 @@ async function processCvInBackground(fileName: string, filePath: string, ext: st
 export async function GET() {
   try {
     await ensureCvDir();
-    const entries = await fs.readdir(CV_DIR, { withFileTypes: true });
+    const [entries, metadata] = await Promise.all([
+      fs.readdir(CV_DIR, { withFileTypes: true }),
+      readMetadata(),
+    ]);
     const files = await Promise.all(
       entries
-        .filter((e) => e.isFile())
+        .filter((e) => e.isFile() && e.name !== "_metadata.json")
         .map(async (e) => {
           const filePath = path.join(CV_DIR, e.name);
           const stat = await fs.stat(filePath);
           const ext = path.extname(e.name).toLowerCase();
+          const meta = metadata[e.name] ?? {};
           return {
             name: e.name,
             originalName: e.name,
@@ -63,6 +83,8 @@ export async function GET() {
             uploadedAt: stat.birthtime.toISOString(),
             modifiedAt: stat.mtime.toISOString(),
             ext,
+            tag: meta.tag ?? "general" as CvTag,
+            label: meta.label ?? null,
             type: ext === ".pdf"
               ? "application/pdf"
               : ext === ".docx"
@@ -141,6 +163,23 @@ export async function POST(req: Request) {
   }
 }
 
+export async function PATCH(req: Request) {
+  try {
+    const json = (await req.json()) as { name: string; tag?: CvTag; label?: string };
+    const { name, tag, label } = json;
+    if (!name) return NextResponse.json({ error: "Missing file name" }, { status: 400 });
+
+    const safe = path.basename(name);
+    const metadata = await readMetadata();
+    metadata[safe] = { ...metadata[safe], ...(tag ? { tag } : {}), ...(label !== undefined ? { label } : {}) };
+    await writeMetadata(metadata);
+    return NextResponse.json({ success: true, name: safe, tag: metadata[safe].tag, label: metadata[safe].label });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Update failed";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
+
 export async function DELETE(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
@@ -158,6 +197,9 @@ export async function DELETE(req: Request) {
     }
 
     await fs.unlink(filePath);
+    const metadata = await readMetadata();
+    delete metadata[safe];
+    await writeMetadata(metadata);
     return NextResponse.json({ success: true });
   } catch (err) {
     console.error("[CV API] DELETE error:", err);

@@ -28,19 +28,24 @@ export async function POST(request: Request) {
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
       async start(controller) {
-        const onUpdate = (update: any) => {
+        let closed = false;
+        const onUpdate = (update: Record<string, unknown>) => {
+          if (closed) return;
           try {
             controller.enqueue(encoder.encode(JSON.stringify(update) + "\n"));
-          } catch (e) {
-            console.error("[ChatAPI] Error enqueuing update:", e);
+          } catch {
+            closed = true;
           }
         };
 
         try {
+          // Flush immediately so the client sees the connection and shows the typing indicator
+          onUpdate({ type: "status", status: "Thinking…" });
+
           const result = await conversationOrchestrator.run({
             agentId: parsed.agentId,
             sessionId: parsed.sessionId,
-            userId,
+            userId: settingsUserId,
             message: parsed.message,
             preferredProvider: selectedProvider,
             preferredModel: selection.model,
@@ -61,9 +66,10 @@ export async function POST(request: Request) {
           controller.enqueue(encoder.encode(JSON.stringify({ type: "final", result }) + "\n"));
         } catch (error) {
           const message = error instanceof Error ? error.message : "Unexpected chat error";
-          controller.enqueue(encoder.encode(JSON.stringify({ type: "error", error: message }) + "\n"));
+          if (!closed) controller.enqueue(encoder.encode(JSON.stringify({ type: "error", error: message }) + "\n"));
         } finally {
-          controller.close();
+          closed = true;
+          try { controller.close(); } catch { /* already closed */ }
         }
       },
     });

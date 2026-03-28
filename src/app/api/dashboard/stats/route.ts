@@ -7,17 +7,22 @@ export async function GET() {
     // 1. Fetch from Local Cache (Most resilient for Dev)
     const cachedJobs = localJobsCache.list();
     
-    // 2. Attempt to fetch from Prisma for "Production-grade" persistence
+    // 2. Attempt to fetch from Prisma — queries run in parallel
     let dbJobsCount = 0;
     let dbNewCount = 0;
     try {
       const yesterday = new Date();
       yesterday.setHours(yesterday.getHours() - 24);
-      
-      const user = await prisma.user.findFirst({ where: { email: "local-dev-user@ai-job-os.local" } });
+
+      const user = await prisma.user.findFirst({
+        where: { email: "local-dev-user@ai-job-os.local" },
+        select: { id: true },
+      });
       if (user) {
-        dbJobsCount = await prisma.job.count({ where: { userId: user.id } });
-        dbNewCount = await prisma.job.count({ where: { userId: user.id, createdAt: { gte: yesterday } } });
+        [dbJobsCount, dbNewCount] = await Promise.all([
+          prisma.job.count({ where: { userId: user.id } }),
+          prisma.job.count({ where: { userId: user.id, createdAt: { gte: yesterday } } }),
+        ]);
       }
     } catch (e) {
       console.warn("Prisma stats failed, falling back to cache:", e);
@@ -77,7 +82,9 @@ export async function GET() {
       };
     });
 
-    return NextResponse.json({ kpiMetrics, weeklyTrend });
+    return NextResponse.json({ kpiMetrics, weeklyTrend }, {
+      headers: { "Cache-Control": "private, max-age=30, stale-while-revalidate=60" },
+    });
   } catch (error) {
     console.error("Dashboard stats error:", error);
     return NextResponse.json({ kpiMetrics: [], weeklyTrend: [] });

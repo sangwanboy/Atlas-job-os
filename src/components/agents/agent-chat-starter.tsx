@@ -3,7 +3,7 @@
 import React, { useEffect, useState, useMemo, useRef } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import ReactMarkdown from "react-markdown";
-import { activeAgent, initialChat } from "@/lib/mock/data";
+import { activeAgent, initialChat, createInitialChat } from "@/lib/mock/data";
 import type { SyncedAgentProfile } from "@/lib/services/agent/agent-profile-sync";
 import type { ChatMessageView } from "@/types/domain";
 import { Eye } from "lucide-react";
@@ -27,39 +27,18 @@ const ChatMessageItem = React.memo(({
 }) => {
   const content = useMemo(() => {
     // Robust regex to find and remove the hidden job JSON blocks, including suffixes
-    const stripRegex = /(__PREVIEW_JOBS__|__JOB_PREVIEW__|PREVIEW_JOBS|JOB_PREVIEW)[\s\W]*?\[[\s\S]*?\](?:[\s\W]*__END_PREVIEW__)?/gi;
-    return message.content.replace(stripRegex, "").trim();
+    // Strip the entire __PREVIEW_JOBS__....__END_PREVIEW__ block from display text
+    return message.content.replace(/__PREVIEW_JOBS__[\s\S]*?__END_PREVIEW__/gi, "").trim();
   }, [message.content]);
 
   const extractedJobs = useMemo(() => {
     if (previewJobs && previewJobs.length > 0) return previewJobs;
     
-    // Fallback: extract jobs from content using a robust regex
+    // Extract using __END_PREVIEW__ boundary — safe against ] inside descriptions
     try {
-      const markers = ["__PREVIEW_JOBS__", "__JOB_PREVIEW__", "PREVIEW_JOBS", "JOB_PREVIEW"];
-      for (const marker of markers) {
-        const startIdx = message.content.indexOf(marker);
-        if (startIdx !== -1) {
-          const jsonStart = message.content.indexOf("[", startIdx);
-          if (jsonStart !== -1) {
-            // Find the last possible ']' in the content part for this marker
-            const endMarkerIdx = message.content.indexOf("__END_PREVIEW__", jsonStart);
-            let jsonEnd = -1;
-            
-            if (endMarkerIdx !== -1) {
-              jsonEnd = message.content.lastIndexOf("]", endMarkerIdx) + 1;
-            } else {
-              // Be very greedy for the JSON array
-              jsonEnd = message.content.lastIndexOf("]") + 1;
-            }
-            
-            if (jsonEnd > jsonStart) {
-              const jsonStr = message.content.slice(jsonStart, jsonEnd).trim();
-              console.log("[ChatMessageItem] Parsing JSON jobs for marker:", marker);
-              return JSON.parse(jsonStr) as JobPreview[];
-            }
-          }
-        }
+      const boundaryMatch = message.content.match(/__PREVIEW_JOBS__([\s\S]*?)__END_PREVIEW__/i);
+      if (boundaryMatch) {
+        return JSON.parse(boundaryMatch[1].trim()) as JobPreview[];
       }
     } catch (e) {
       console.warn("[ChatMessageItem] Extraction fallback failed:", e);
@@ -76,20 +55,6 @@ const ChatMessageItem = React.memo(({
 
   return (
     <div className="space-y-2">
-      {showToolUse && toolLogs.length > 0 && (
-        <div className="mx-4 rounded-lg border border-dashed border-cyan-500/30 bg-cyan-500/5 p-2 text-[10px] font-mono text-cyan-700/70 max-h-[200px] overflow-y-auto break-all custom-scrollbar">
-          <p className="mb-1 uppercase tracking-wider font-bold sticky top-0 bg-white/80 backdrop-blur-sm p-1 z-10">Internal Operator Logs:</p>
-          {toolLogs.map((log: any, idx: number) => (
-            <div key={idx} className="mb-2 last:mb-0 border-l-2 border-cyan-500/20 pl-2">
-              <p className="font-bold">→ Executed: {log.tool}</p>
-              <p className="mt-0.5 opacity-80 italic">Params: {JSON.stringify(log.parameters)}</p>
-              <div className="mt-1 bg-white/30 p-1 rounded overflow-x-auto max-h-24">
-                {log.result}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
       <div
         className={`max-w-[85%] w-fit rounded-xl px-4 py-2 text-sm shadow-sm leading-snug break-words overflow-hidden ${
           message.role === "USER"
@@ -99,6 +64,21 @@ const ChatMessageItem = React.memo(({
       >
         {message.role === "ASSISTANT" ? (
           <div className="space-y-3">
+            {/* Operator logs — inside the bubble */}
+            {showToolUse && toolLogs.length > 0 && (
+              <div className="rounded-lg border border-dashed border-cyan-500/30 bg-cyan-500/5 p-2 text-[10px] font-mono text-cyan-700/70 max-h-[200px] overflow-y-auto break-all custom-scrollbar">
+                <p className="mb-1 uppercase tracking-wider font-bold sticky top-0 bg-white/80 backdrop-blur-sm p-1 z-10">Internal Operator Logs:</p>
+                {toolLogs.map((log: any, idx: number) => (
+                  <div key={idx} className="mb-2 last:mb-0 border-l-2 border-cyan-500/20 pl-2">
+                    <p className="font-bold">→ Executed: {log.tool}</p>
+                    <p className="mt-0.5 opacity-80 italic">Params: {JSON.stringify(log.parameters)}</p>
+                    <div className="mt-1 bg-white/30 p-1 rounded overflow-x-auto max-h-24">
+                      {log.result}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
             {/* Thinking state: show live tool activity inside the bubble */}
             {isThinking && (
               <div className="space-y-2 min-w-[200px]">
@@ -175,6 +155,7 @@ const ChatMessageItem = React.memo(({
 ));
 
 type SyncStatusResponse = {
+  userName?: string | null;
   summary: {
     lastSyncedAt: string;
     alignmentStatus: string;
@@ -227,6 +208,8 @@ type JobPreview = {
   description?: string;
   skills?: string;
   datePosted?: string;
+  jobType?: string;
+  score?: number;
   isAlreadyImported?: boolean;
 };
 
@@ -283,37 +266,53 @@ const JobPreviewBox = ({
               <div className="flex-1 min-w-0">
                 <p className="font-semibold text-sm text-slate-800 truncate">{job.title}</p>
                 <p className="text-xs text-slate-600 mt-0.5">{job.company} • {job.location}</p>
-                <div className="flex items-center gap-3 mt-1.5 flex-wrap">
+                <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                  {/* Profile match score */}
+                  {job.score != null && (
+                    (() => {
+                      const pct = job.score > 1 ? Math.round(job.score) : Math.round(job.score * 100);
+                      const color = pct >= 70
+                        ? "bg-emerald-50 text-emerald-700 ring-emerald-200/60"
+                        : pct >= 40
+                          ? "bg-amber-50 text-amber-700 ring-amber-200/60"
+                          : "bg-slate-50 text-slate-500 ring-slate-200/60";
+                      return (
+                        <span className={`inline-flex items-center rounded-md px-2 py-0.5 text-[10px] font-bold ring-1 ${color}`}>
+                          ⚡ {pct}% match
+                        </span>
+                      );
+                    })()
+                  )}
+                  {/* Salary */}
                   <span className={`inline-flex items-center rounded-md px-2 py-0.5 text-[10px] font-bold ring-1 ${job.salary && job.salary !== "Not specified" ? "bg-emerald-50 text-emerald-700 ring-emerald-200/60" : "bg-slate-50 text-slate-500 ring-slate-200/60"}`}>
-                    💰 {job.salary || "Salary not specified"}
+                    💰 {job.salary || "Not disclosed"}
                   </span>
-                  <span className={`inline-flex items-center rounded-md px-2 py-0.5 text-[10px] font-bold border ${job.datePosted ? "bg-cyan-50 text-cyan-700 border-cyan-100" : "bg-slate-50 text-slate-500 border-slate-100"}`}>
-                    🕒 {job.datePosted || "Date not specified"}
-                  </span>
+                  {/* Job type */}
+                  {job.jobType && (
+                    <span className="inline-flex items-center rounded-md px-2 py-0.5 text-[10px] font-bold bg-violet-50 text-violet-700 ring-1 ring-violet-200/60">
+                      {job.jobType}
+                    </span>
+                  )}
+                  {/* Date posted */}
+                  {job.datePosted && (
+                    <span className="inline-flex items-center rounded-md px-2 py-0.5 text-[10px] font-bold bg-cyan-50 text-cyan-700 border border-cyan-100">
+                      🕒 {job.datePosted}
+                    </span>
+                  )}
+                  {/* Source */}
                   {job.source && (
                     <span className="text-[10px] text-slate-400 font-medium bg-slate-50/50 px-1.5 py-0.5 rounded border border-slate-100/50">{job.source}</span>
                   )}
+                  {/* View link */}
                   <a
                     href={job.url && job.url !== "#" ? job.url : `https://www.linkedin.com/jobs/search/?keywords=${encodeURIComponent(`${job.title} ${job.company}`)}&location=${encodeURIComponent(job.location || "")}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-[10px] font-bold text-cyan-600 hover:text-cyan-800 hover:underline transition-all"
                   >
-                    {job.url && job.url !== "#" ? "View listing ↗" : "Search on LinkedIn ↗"}
+                    {job.url && job.url !== "#" ? "View listing ↗" : "Search ↗"}
                   </a>
                 </div>
-                {job.description && (
-                  <p className="mt-2 text-xs text-slate-500 line-clamp-2 leading-relaxed">{job.description}</p>
-                )}
-                {job.skills && (
-                  <div className="flex flex-wrap gap-1.5 mt-2">
-                    {job.skills.split(",").map((skill, i) => (
-                      <span key={i} className="inline-flex items-center rounded-md bg-slate-100 px-1.5 py-0.5 text-[9px] font-semibold text-slate-600">
-                        {skill.trim()}
-                      </span>
-                    ))}
-                  </div>
-                )}
               </div>
               {job.isAlreadyImported ? (
                 <div className="ml-2 flex-none px-2 py-1 text-[10px] font-bold text-emerald-600 bg-emerald-50/50 rounded-md border border-emerald-100/50">
@@ -360,6 +359,7 @@ export function AgentChatStarter() {
   const [loadingTextIndex, setLoadingTextIndex] = useState(0);
   const chatBottomRef = useRef<HTMLDivElement>(null);
   const newChatRef = useRef(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     // History scroll only
@@ -479,6 +479,17 @@ export function AgentChatStarter() {
     };
   }, [sessionId, urlSessionId]);
 
+  // Effect 2b: Personalize initial greeting once user name is known
+  useEffect(() => {
+    if (!syncStatus?.userName) return;
+    setMessages((prev) => {
+      if (prev.length === 1 && prev[0].id === "greeting-msg") {
+        return createInitialChat(syncStatus.userName);
+      }
+      return prev;
+    });
+  }, [syncStatus?.userName]);
+
   // Effect 3: URL Synchronization
   useEffect(() => {
     if (urlSessionId) {
@@ -567,6 +578,9 @@ export function AgentChatStarter() {
       } as any
     ]);
 
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
+
     try {
       const response = await fetch("/api/agents/chat", {
         method: "POST",
@@ -577,6 +591,7 @@ export function AgentChatStarter() {
           message: msg,
           userId: "local-dev-user",
         }),
+        signal: abortController.signal,
       });
 
       if (!response.body) throw new Error("No response body");
@@ -606,6 +621,18 @@ export function AgentChatStarter() {
             } else if (update.type === "status" && update.status) {
               const statusIdx = processingSteps.indexOf(update.status);
               if (statusIdx !== -1) setLoadingTextIndex(statusIdx);
+            } else if (update.type === "delta") {
+              setMessages(prev => prev.map(m =>
+                m.id === assistantMessageId
+                  ? { ...m, content: ((m.content as string) || "") + (update.text as string) } as any
+                  : m
+              ));
+            } else if (update.type === "delta_clear") {
+              setMessages(prev => prev.map(m =>
+                m.id === assistantMessageId
+                  ? { ...m, content: "" } as any
+                  : m
+              ));
             } else if (update.type === "tool_start") {
               setMessages(prev => prev.map(m => 
                 m.id === assistantMessageId 
@@ -663,10 +690,23 @@ export function AgentChatStarter() {
         }
       }
     } catch (error) {
-      console.error("Failed to send message:", error);
+      if (error instanceof DOMException && error.name === "AbortError") {
+        setMessages(prev => prev.map(m =>
+          m.id === assistantMessageId
+            ? { ...m, content: m.content || "_(stopped)_" } as any
+            : m
+        ));
+      } else {
+        console.error("Failed to send message:", error);
+      }
     } finally {
+      abortControllerRef.current = null;
       setLoading(false);
     }
+  }
+
+  function stopGeneration() {
+    abortControllerRef.current?.abort();
   }
 
   async function handleImportAll() {
@@ -863,22 +903,14 @@ export function AgentChatStarter() {
               </div>
             ) : (
               messages.map((message) => {
-                // Highly robust regex that handles markdown bolding, colons, and various marker names
-                const previewRegex = /(?:__|(?:\*\*))?(?:PREVIEW_JOBS|JOB_PREVIEW)(?:__|(?:\*\*))?[\s\W]*(\[[\s\S]*?\])/i;
-                const previewMatch = message.content.match(previewRegex);
+                // Use __END_PREVIEW__ boundary — avoids breaking on ] inside job descriptions
                 let messageJobs: JobPreview[] | null = null;
-                
-                if (previewMatch) {
+                const boundaryMatch = message.content.match(/__PREVIEW_JOBS__([\s\S]*?)__END_PREVIEW__/i);
+                if (boundaryMatch) {
                   try {
-                    const rawJsonStr = previewMatch[1];
-                    // Clean the string of common LLM artifacts like smart quotes
-                    const cleanJsonStr = rawJsonStr
-                      .replace(/[\u201C\u201D\u201E\u201F\u2033\u2036]/g, '"') // Smart double quotes
-                      .replace(/[\u2018\u2019\u201A\u201B\u2032\u2035]/g, "'") // Smart single quotes
-                      .trim();
-                    messageJobs = JSON.parse(cleanJsonStr);
-                  } catch (e) {
-                    console.error("Failed to parse jobs in message", e);
+                    messageJobs = JSON.parse(boundaryMatch[1].trim()) as JobPreview[];
+                  } catch {
+                    // Non-fatal: old messages may have malformed preview JSON — skip gracefully
                   }
                 }
 
@@ -896,14 +928,6 @@ export function AgentChatStarter() {
                 );
               })
             )}
-            {loading && !initialLoading && importingJobs ? (
-              <div className="flex items-center gap-2 pl-2">
-                <div className="h-1.5 w-1.5 animate-bounce rounded-full bg-cyan-600" />
-                <div className="h-1.5 w-1.5 animate-bounce rounded-full bg-cyan-600 [animation-delay:-0.15s]" />
-                <div className="h-1.5 w-1.5 animate-bounce rounded-full bg-cyan-600 [animation-delay:-0.3s]" />
-                <p className="text-xs text-muted italic">Atlas is importing jobs...</p>
-              </div>
-            ) : null}
           </div>
           <div id="chat-bottom" className="h-px w-full opacity-0" ref={chatBottomRef} />
         </div>
@@ -922,13 +946,23 @@ export function AgentChatStarter() {
             placeholder="Type a message..."
             className="field flex-1 bg-transparent border-none shadow-none focus:ring-0"
           />
-          <button
-            onClick={() => void sendMessage()}
-            disabled={loading || !input.trim()}
-            className="btn-primary disabled:opacity-50"
-          >
-            Send
-          </button>
+          {loading ? (
+            <button
+              onClick={stopGeneration}
+              className="flex h-9 w-9 items-center justify-center rounded-full border-2 border-red-500 bg-white text-red-500 transition-colors hover:bg-red-50"
+              title="Stop generation"
+            >
+              <span className="h-3.5 w-3.5 rounded-sm bg-red-500 block" />
+            </button>
+          ) : (
+            <button
+              onClick={() => void sendMessage()}
+              disabled={!input.trim()}
+              className="btn-primary disabled:opacity-50"
+            >
+              Send
+            </button>
+          )}
         </div>
       </section>
 
