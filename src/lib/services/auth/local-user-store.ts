@@ -1,4 +1,5 @@
 import { hashPassword, verifyPassword } from "@/lib/utils/password";
+import { prisma } from "@/lib/db";
 
 export type LocalUser = {
   id: string;
@@ -9,44 +10,57 @@ export type LocalUser = {
   createdAt: string;
 };
 
-let users: LocalUser[] = [];
-let initialized = false;
-
 async function ensureDefaults() {
-  if (initialized) return;
-  initialized = true;
+  const admin = await prisma.user.findUnique({ where: { email: "admin@jobos.local" } });
+  if (!admin) {
+    const passwordHash = await hashPassword("admin123");
+    await prisma.user.create({
+      data: {
+        email: "admin@jobos.local",
+        name: "Admin",
+        passwordHash,
+        role: "ADMIN",
+      },
+    });
+  }
+}
 
-  const adminHash = await hashPassword("admin123");
-  users.push({
-    id: "admin-default",
-    email: "admin@jobos.local",
-    name: "Admin",
-    passwordHash: adminHash,
-    role: "ADMIN",
-    createdAt: new Date().toISOString(),
+export async function findUserByEmail(email: string): Promise<LocalUser | undefined> {
+  await ensureDefaults();
+  const user = await prisma.user.findUnique({
+    where: { email },
+    select: { id: true, email: true, name: true, passwordHash: true, role: true, createdAt: true },
   });
+  if (!user || !user.passwordHash) return undefined;
+  return {
+    id: user.id,
+    email: user.email,
+    name: user.name ?? "",
+    passwordHash: user.passwordHash,
+    role: user.role as "USER" | "ADMIN",
+    createdAt: user.createdAt.toISOString(),
+  };
 }
 
-export async function findUserByEmail(
-  email: string,
-): Promise<LocalUser | undefined> {
+export async function findUserById(id: string): Promise<LocalUser | undefined> {
   await ensureDefaults();
-  return users.find((u) => u.email === email);
+  const user = await prisma.user.findUnique({
+    where: { id },
+    select: { id: true, email: true, name: true, passwordHash: true, role: true, createdAt: true },
+  });
+  if (!user || !user.passwordHash) return undefined;
+  return {
+    id: user.id,
+    email: user.email,
+    name: user.name ?? "",
+    passwordHash: user.passwordHash,
+    role: user.role as "USER" | "ADMIN",
+    createdAt: user.createdAt.toISOString(),
+  };
 }
 
-export async function findUserById(
-  id: string,
-): Promise<LocalUser | undefined> {
-  await ensureDefaults();
-  return users.find((u) => u.id === id);
-}
-
-export async function authenticateUser(
-  email: string,
-  password: string,
-): Promise<LocalUser | null> {
-  await ensureDefaults();
-  const user = users.find((u) => u.email === email);
+export async function authenticateUser(email: string, password: string): Promise<LocalUser | null> {
+  const user = await findUserByEmail(email);
   if (!user) return null;
   const valid = await verifyPassword(password, user.passwordHash);
   return valid ? user : null;
@@ -59,58 +73,65 @@ export async function createUser(
   role: "USER" | "ADMIN" = "USER",
 ): Promise<LocalUser> {
   await ensureDefaults();
-  if (users.find((u) => u.email === email)) {
-    throw new Error("Email already registered");
-  }
+  const existing = await prisma.user.findUnique({ where: { email } });
+  if (existing) throw new Error("Email already registered");
   const passwordHash = await hashPassword(password);
-  const user: LocalUser = {
-    id: `user-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-    email,
-    name,
-    passwordHash,
-    role,
-    createdAt: new Date().toISOString(),
+  const user = await prisma.user.create({
+    data: { email, name, passwordHash, role },
+    select: { id: true, email: true, name: true, passwordHash: true, role: true, createdAt: true },
+  });
+  return {
+    id: user.id,
+    email: user.email,
+    name: user.name ?? "",
+    passwordHash: user.passwordHash!,
+    role: user.role as "USER" | "ADMIN",
+    createdAt: user.createdAt.toISOString(),
   };
-  users.push(user);
-  return user;
 }
 
-export async function getAllUsers(): Promise<
-  Omit<LocalUser, "passwordHash">[]
-> {
+export async function getAllUsers(): Promise<Omit<LocalUser, "passwordHash">[]> {
   await ensureDefaults();
-  return users.map(({ passwordHash, ...rest }) => rest);
+  const users = await prisma.user.findMany({
+    where: { passwordHash: { not: null } },
+    select: { id: true, email: true, name: true, role: true, createdAt: true },
+  });
+  return users.map(u => ({
+    id: u.id,
+    email: u.email,
+    name: u.name ?? "",
+    role: u.role as "USER" | "ADMIN",
+    createdAt: u.createdAt.toISOString(),
+  }));
 }
 
-export async function updateUserRole(
-  id: string,
-  role: "USER" | "ADMIN",
-): Promise<LocalUser | null> {
-  await ensureDefaults();
-  const user = users.find((u) => u.id === id);
-  if (!user) return null;
-  user.role = role;
-  return user;
+export async function updateUserRole(id: string, role: "USER" | "ADMIN"): Promise<LocalUser | null> {
+  const user = await prisma.user.update({
+    where: { id },
+    data: { role },
+    select: { id: true, email: true, name: true, passwordHash: true, role: true, createdAt: true },
+  });
+  if (!user.passwordHash) return null;
+  return {
+    id: user.id,
+    email: user.email,
+    name: user.name ?? "",
+    passwordHash: user.passwordHash,
+    role: user.role as "USER" | "ADMIN",
+    createdAt: user.createdAt.toISOString(),
+  };
 }
 
 export async function deleteUser(id: string): Promise<boolean> {
-  await ensureDefaults();
-  const idx = users.findIndex((u) => u.id === id);
-  if (idx === -1) return false;
-  if (users[idx].role === "ADMIN" && users.filter((u) => u.role === "ADMIN").length <= 1) {
-    throw new Error("Cannot delete the last admin");
-  }
-  users.splice(idx, 1);
+  const admins = await prisma.user.count({ where: { role: "ADMIN" } });
+  const target = await prisma.user.findUnique({ where: { id }, select: { role: true } });
+  if (target?.role === "ADMIN" && admins <= 1) throw new Error("Cannot delete the last admin");
+  await prisma.user.delete({ where: { id } });
   return true;
 }
 
-export async function resetUserPassword(
-  id: string,
-  newPassword: string,
-): Promise<boolean> {
-  await ensureDefaults();
-  const user = users.find((u) => u.id === id);
-  if (!user) return false;
-  user.passwordHash = await hashPassword(newPassword);
+export async function resetUserPassword(id: string, newPassword: string): Promise<boolean> {
+  const passwordHash = await hashPassword(newPassword);
+  await prisma.user.update({ where: { id }, data: { passwordHash } });
   return true;
 }

@@ -33,6 +33,7 @@ export default function AdminUsersPage() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [resetTarget, setResetTarget] = useState<UserEntry | null>(null);
   const [newPassword, setNewPassword] = useState("");
+  const [pushing, setPushing] = useState(false);
 
   // Create form state
   const [createForm, setCreateForm] = useState({
@@ -149,14 +150,38 @@ export default function AdminUsersPage() {
             Create, manage roles, and control access for all users.
           </p>
         </div>
-        <button
-          onClick={() => setShowCreateModal(true)}
-          className="btn-primary flex items-center gap-2"
-        >
-          <UserPlus className="h-4 w-4" />
-          <span className="hidden sm:inline">Create User</span>
-          <span className="sm:hidden">Add</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={async () => {
+              setPushing(true);
+              try {
+                const res = await fetch("/api/admin/push-atlas-config", { method: "POST" });
+                const data = await res.json();
+                if (res.ok) {
+                  setToast({ message: `Atlas config pushed to ${data.pushed} users (${data.failed} failed)`, type: "success" });
+                } else {
+                  setToast({ message: data.error || "Push failed", type: "error" });
+                }
+              } catch {
+                setToast({ message: "Network error during push", type: "error" });
+              } finally {
+                setPushing(false);
+              }
+            }}
+            disabled={pushing}
+            className="flex items-center gap-2 rounded-lg border border-cyan-200 bg-cyan-50 px-3 py-2 text-sm font-semibold text-cyan-700 hover:bg-cyan-100 disabled:opacity-50 transition-colors"
+          >
+            {pushing ? "Pushing…" : "Push Atlas Config"}
+          </button>
+          <button
+            onClick={() => setShowCreateModal(true)}
+            className="btn-primary flex items-center gap-2"
+          >
+            <UserPlus className="h-4 w-4" />
+            <span className="hidden sm:inline">Create User</span>
+            <span className="sm:hidden">Add</span>
+          </button>
+        </div>
       </section>
 
       {toast && (

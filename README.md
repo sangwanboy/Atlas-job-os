@@ -214,14 +214,22 @@ The Atlas AI agent uses **Crawl4AI** with CSS extraction + raw-HTML regex for hi
 - Automatic model fallback on rate-limits — app stays responsive even if quota is exhausted
 - Parallelised orchestrator setup (auth + agent lookup, history + continuity in parallel)
 
-### Admin Settings (`/settings`)
-- **Max Jobs Per Search** — cap how many job cards Atlas shows per search (default: 20, range: 1–200)
-- **Monthly Token Budget** — total token cap across all providers
-- **Per Response Token Cap** — max tokens per single AI response
-- **Soft Limit Percent** — warning threshold before budget runs out
-- **AI Provider & Model** — switch between Gemini, OpenAI, Anthropic etc.
-- **API Keys** — per-provider key management (stored in `.env.local`, never committed)
-- All settings persisted to `.runtime-settings.local.json`
+### Multi-Tenant Isolation
+Every user has completely isolated data:
+- **Jobs pipeline** — each user sees only their own imported jobs
+- **Atlas agent** — auto-created per user on first chat, seeded from admin's template
+- **Chat history** — sessions and messages scoped to userId
+- **User profile** — `user_profile.md`, `mind.md`, `preferences.json` stored in `agents/atlas/users/{userId}/` (not shared)
+- **Settings** — stored in `RuntimeSettingsRecord` table keyed by userId
+
+### Admin Controls
+- **Push Atlas Config** — `/admin/users` page button that copies admin's Atlas soul/identity/mindConfig to all existing users' agents. (Admin must start a chat first to seed their own agent.)
+- **Max Jobs Per Search** — global scraper pool cap, stored under `"global"` key, applies to all users (default: 20)
+- **Output Per Prompt** — global preview box cap, how many top-scored jobs appear in chat (default: 10)
+- **Monthly Token Budget**, **Per Response Token Cap**, **Soft Limit Percent** — runtime budget controls
+- **AI Provider & Model** — global default model for all users
+- **API Keys** — per-provider key management
+- All runtime settings persisted to PostgreSQL `RuntimeSettingsRecord` table (multi-instance safe)
 
 ---
 
@@ -252,10 +260,12 @@ src/
 │   ├── jobs/               # Jobs table + review drawer
 │   └── layout/             # Sidebar + top nav
 ├── lib/
+│   ├── server/
+│   │   └── auth-helpers.ts # requireAuth() + isNextResponse() shared helpers
 │   ├── services/
 │   │   ├── agent/          # Orchestrator, prompt composer, memory sync
 │   │   ├── scraper/        # ScraperService + worker.py (Crawl4AI)
-│   │   ├── auth/           # Local user store (in-memory for dev)
+│   │   ├── auth/           # User store (Prisma-backed, PostgreSQL)
 │   │   └── ai/             # AI provider abstraction (Gemini)
 │   └── utils/
 │       └── password.ts     # PBKDF2 password hashing (Web Crypto API)
@@ -263,14 +273,17 @@ src/
 ├── auth.config.ts          # Edge-safe auth config (middleware compatible)
 └── middleware.ts           # Route protection
 agents/
-└── atlas/                  # Atlas agent memory files
-    ├── mind.md
-    ├── soul.md
-    ├── identity.md
-    ├── user_profile.md
-    ├── operating_rules.md
-    ├── preferences.json
-    └── context_memory.md
+└── atlas/                  # Atlas shared identity files
+    ├── soul.md             # Atlas's core mission (shared — all users)
+    ├── identity.md         # Atlas's name/style (shared)
+    ├── operating_rules.md  # Atlas's rules (shared)
+    ├── search.md           # Search guidelines (shared)
+    ├── context_memory.md   # System event log (shared)
+    └── users/
+        └── {userId}/       # Per-user memory (isolated)
+            ├── user_profile.md   # User's personal profile
+            ├── mind.md           # Atlas's state for this user
+            └── preferences.json  # User's job preferences
 prisma/
 └── schema.prisma           # Full DB schema
 .venv-scraper/              # Python virtual environment for Crawl4AI
@@ -287,7 +300,10 @@ prisma/
 | PUT/DELETE | `/api/jobs/[id]` | Update / delete job |
 | POST | `/api/register` | Create new user account |
 | GET/POST | `/api/admin/users` | Admin user management |
+| POST | `/api/admin/push-atlas-config` | Push admin's Atlas soul/identity to all users |
 | GET | `/api/agents/sessions` | Chat session list |
+| GET/PUT | `/api/settings/runtime` | Runtime settings (admin=global, user=own) |
+| GET | `/api/dashboard/stats` | Per-user dashboard stats |
 | POST | `/api/integrations/gmail/sync` | Sync Gmail inbox |
 | GET | `/api/exports/jobs` | Export jobs as XLSX |
 
@@ -295,7 +311,7 @@ prisma/
 
 ## Notes
 
-- **Auth without DB:** In development, users are stored in-memory via `src/lib/services/auth/local-user-store.ts`. For production, wire Prisma adapter.
+- **Auth:** Users are stored in PostgreSQL via Prisma (`User` table with `passwordHash` + `role` columns). PBKDF2 hashed passwords. Default admin: `admin@jobos.local` / `admin123`.
 - **Crawl4AI scraping:** LinkedIn actively blocks bots. The worker uses persistent Chromium profile + `playwright-stealth` fingerprint spoofing. Results may vary; the agent gracefully handles scraper failures and supports self-healing CSS selector overrides.
 - **AI provider:** Defaults to Gemini. Configure `GEMINI_API_KEY` or Vertex AI credentials in your `.env`. The provider abstraction in `src/lib/services/ai/provider.ts` supports swapping to OpenAI or others.
 - **Streaming:** Atlas uses Gemini SSE (`streamGenerateContent`) for live token-by-token output. Falls back to batch response if SSE fails.

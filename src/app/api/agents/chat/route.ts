@@ -4,9 +4,14 @@ import { tokenBudgetManager } from "@/lib/services/agent/token-budget-manager";
 import { llmSettingsStore } from "@/lib/services/settings/llm-settings-store";
 import { runtimeSettingsStore } from "@/lib/services/settings/runtime-settings-store";
 import { chatRequestSchema } from "@/lib/utils/validation";
+import { requireAuth, isNextResponse } from "@/lib/server/auth-helpers";
 
 export async function POST(request: Request) {
   try {
+    const authResult = await requireAuth();
+    if (isNextResponse(authResult)) return authResult;
+    const { userId: settingsUserId } = authResult;
+
     const json = (await request.json()) as Record<string, unknown>;
 
     const parsed = chatRequestSchema.parse({
@@ -16,8 +21,6 @@ export async function POST(request: Request) {
       context: json.context,
     });
 
-    const userId = typeof json.userId === "string" ? json.userId : undefined;
-    const settingsUserId = userId ?? "local-dev-user";
     const runtimeSettings = runtimeSettingsStore.get(settingsUserId).settings;
     const selection = llmSettingsStore.getRuntimeSelection(settingsUserId);
     const geminiKey = llmSettingsStore.getProviderApiKey("gemini", settingsUserId);
@@ -57,7 +60,7 @@ export async function POST(request: Request) {
           const promptTokens = tokenBudgetManager.estimateTokens(parsed.message);
           const completionTokens = tokenBudgetManager.estimateTokens(result.reply);
           
-          runtimeSettingsStore.trackUsage({
+          void runtimeSettingsStore.trackUsage({
             provider: selectedProvider,
             promptTokens,
             completionTokens,

@@ -6,29 +6,69 @@ import ReactMarkdown from "react-markdown";
 import { activeAgent, initialChat, createInitialChat } from "@/lib/mock/data";
 import type { SyncedAgentProfile } from "@/lib/services/agent/agent-profile-sync";
 import type { ChatMessageView } from "@/types/domain";
-import { Eye } from "lucide-react";
+import { Eye, Clock } from "lucide-react";
 
-const ChatMessageItem = React.memo(({ 
-  message, 
+function ScraperTimer({ startedAt }: { startedAt: number }) {
+  const [elapsed, setElapsed] = useState(Math.floor((Date.now() - startedAt) / 1000));
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      setElapsed(Math.floor((Date.now() - startedAt) / 1000));
+    }, 1000);
+    return () => clearInterval(id);
+  }, [startedAt]);
+
+  const estimated = 60;
+  if (elapsed >= estimated) return null;
+
+  const pct = Math.round((elapsed / estimated) * 100);
+  const remaining = estimated - elapsed;
+
+  return (
+    <div className="mt-2 rounded-lg border border-cyan-200 bg-cyan-50/80 px-3 py-2 text-xs text-cyan-800 space-y-1.5">
+      <div className="flex items-center gap-1 font-semibold">
+        <Clock className="h-3 w-3" />
+        Searching job boards…
+      </div>
+      <div className="h-1.5 w-full rounded-full bg-cyan-200 overflow-hidden">
+        <div
+          className="h-full rounded-full bg-gradient-to-r from-cyan-500 to-cyan-400 transition-all duration-1000"
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+      <p className="text-[10px] text-cyan-600/80">~{remaining}s remaining (typical: ~60s)</p>
+    </div>
+  );
+}
+
+const ChatMessageItem = React.memo(({
+  message,
   showToolUse,
   previewJobs,
   onImportAll,
   onImportSingle,
   onDismiss,
-  importing
-}: { 
-  message: ChatMessageView; 
+  importing,
+  scraperStartedAt,
+}: {
+  message: ChatMessageView;
   showToolUse: boolean;
   previewJobs?: JobPreview[] | null;
   onImportAll?: () => void;
   onImportSingle?: (idx: number) => void;
   onDismiss?: () => void;
   importing?: boolean;
+  scraperStartedAt?: number | null;
 }) => {
   const content = useMemo(() => {
-    // Robust regex to find and remove the hidden job JSON blocks, including suffixes
-    // Strip the entire __PREVIEW_JOBS__....__END_PREVIEW__ block from display text
-    return message.content.replace(/__PREVIEW_JOBS__[\s\S]*?__END_PREVIEW__/gi, "").trim();
+    return message.content
+      // Strip complete preview block (both markers present)
+      .replace(/__PREVIEW_JOBS__[\s\S]*?__END_PREVIEW__/gi, "")
+      // Strip partial preview block still streaming (no closing marker yet)
+      .replace(/__PREVIEW_JOBS__[\s\S]*/gi, "")
+      // Strip raw tool-call JSON blobs that leak during streaming
+      .replace(/\{\s*"tool"\s*:\s*"[a-z_]+"\s*,\s*"parameters"\s*:[\s\S]*/m, "")
+      .trim();
   }, [message.content]);
 
   const extractedJobs = useMemo(() => {
@@ -114,6 +154,9 @@ const ChatMessageItem = React.memo(({
                     Last: {typeof lastCompletedTool.result === "string" ? lastCompletedTool.result.slice(0, 80) : "Done"}
                   </p>
                 )}
+                {scraperStartedAt && activeToolLog?.tool === "browser_extract_jobs" && (
+                  <ScraperTimer startedAt={scraperStartedAt} />
+                )}
               </div>
             )}
             {/* Final response */}
@@ -146,9 +189,10 @@ const ChatMessageItem = React.memo(({
     </div>
   );
 }, (prev, next) => (
-  prev.message.id === next.message.id && 
-  prev.showToolUse === next.showToolUse && 
+  prev.message.id === next.message.id &&
+  prev.showToolUse === next.showToolUse &&
   prev.importing === next.importing &&
+  prev.scraperStartedAt === next.scraperStartedAt &&
   prev.message.content === next.message.content &&
   (prev.message as any).toolLogs?.length === (next.message as any).toolLogs?.length &&
   (prev.message as any).toolLogs?.[(prev.message as any).toolLogs?.length - 1]?.result === (next.message as any).toolLogs?.[(next.message as any).toolLogs?.length - 1]?.result
@@ -350,13 +394,14 @@ export function AgentChatStarter() {
   } = useAgent();
 
   const [input, setInput] = useState("");
-  const [showToolUse, setShowToolUse] = useState(true);
+  const [showToolUse, setShowToolUse] = useState(false);
   const [onboardingComplete, setOnboardingComplete] = useState(activeAgent.onboardingCompleted);
   const [profile, setProfile] = useState<SyncedAgentProfile>(initialProfile);
   const [syncStatus, setSyncStatus] = useState<SyncStatusResponse | null>(null);
   const [showImportSuccess, setShowImportSuccess] = useState(false);
   const [importingJobs, setImportingJobs] = useState(false);
   const [loadingTextIndex, setLoadingTextIndex] = useState(0);
+  const [scraperStartedAt, setScraperStartedAt] = useState<number | null>(null);
   const chatBottomRef = useRef<HTMLDivElement>(null);
   const newChatRef = useRef(false);
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -371,16 +416,40 @@ export function AgentChatStarter() {
     "Formulating response..."
   ];
 
+  async function saveJobDirect(job: JobPreview): Promise<boolean> {
+    try {
+      const res = await fetch("/api/jobs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: job.title,
+          company: job.company,
+          location: job.location || "Unknown",
+          salary: job.salary || "",
+          url: job.url || "",
+          source: job.source || "Atlas",
+          description: job.description || "",
+          skills: Array.isArray(job.skills) ? job.skills.join(", ") : (job.skills || ""),
+          datePosted: job.datePosted || "",
+          score: job.score ?? 0,
+        }),
+      });
+      return res.ok;
+    } catch {
+      return false;
+    }
+  }
+
   async function handleImportAllInMessage(jobsInMessage: JobPreview[]) {
     if (!jobsInMessage || jobsInMessage.length === 0) return;
     setImportingJobs(true);
-    await sendMessage(`Import all ${jobsInMessage.length} jobs from this search`);
+    await Promise.all(jobsInMessage.map(saveJobDirect));
     setImportingJobs(false);
   }
 
   async function handleImportSingleInMessage(job: JobPreview) {
     setImportingJobs(true);
-    await sendMessage(`Import the job "${job.title}" at ${job.company}`);
+    await saveJobDirect(job);
     setImportingJobs(false);
   }
 
@@ -589,7 +658,6 @@ export function AgentChatStarter() {
           agentId: activeAgent.id,
           sessionId,
           message: msg,
-          userId: "local-dev-user",
         }),
         signal: abortController.signal,
       });
@@ -634,16 +702,18 @@ export function AgentChatStarter() {
                   : m
               ));
             } else if (update.type === "tool_start") {
-              setMessages(prev => prev.map(m => 
-                m.id === assistantMessageId 
+              if (update.tool === "browser_extract_jobs") setScraperStartedAt(Date.now());
+              setMessages(prev => prev.map(m =>
+                m.id === assistantMessageId
                 ? { ...m, toolLogs: [...((m as any).toolLogs || []), { tool: update.tool, parameters: update.parameters, result: "Executing..." }] } as any
                 : m
               ));
             } else if (update.type === "tool_end") {
+              if (update.tool === "browser_extract_jobs") setScraperStartedAt(null);
               setMessages(prev => prev.map(m => {
                 if (m.id !== assistantMessageId) return m;
                 const toolLogs = (m as any).toolLogs || [];
-                const newLogs = toolLogs.map((l: any) => 
+                const newLogs = toolLogs.map((l: any) =>
                   l.tool === update.tool && l.result === "Executing..."
                   ? { ...l, result: typeof update.result === "string" ? update.result : (update.result || "Action completed") }
                   : l
@@ -915,15 +985,16 @@ export function AgentChatStarter() {
                 }
 
                 return (
-                  <ChatMessageItem 
+                  <ChatMessageItem
                     key={message.id}
-                    message={message} 
+                    message={message}
                     showToolUse={showToolUse}
                     previewJobs={messageJobs}
                     onImportAll={() => handleImportAllInMessage(messageJobs!)}
                     onImportSingle={(idx) => handleImportSingleInMessage(messageJobs![idx])}
                     onDismiss={handleDismissJobs}
                     importing={importingJobs}
+                    scraperStartedAt={scraperStartedAt}
                   />
                 );
               })

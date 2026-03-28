@@ -43,7 +43,7 @@ export class ContinuitySyncService {
    * interval 1: Selective Hydration based on hydration triggers
    * @param msgCount - Number of messages in the current session (used for smart profile injection)
    */
-  async hydrateTurnContext(agentId: string, sessionId: string, taskType?: string, msgCount = 0): Promise<HydratedLayers> {
+  async hydrateTurnContext(agentId: string, sessionId: string, taskType?: string, msgCount = 0, userId?: string): Promise<HydratedLayers> {
     const now = new Date();
     const cacheKey = `${agentId}:${sessionId}:${msgCount}`;
 
@@ -56,6 +56,7 @@ export class ContinuitySyncService {
     }
 
     // Parallel: read sync state + all file layers simultaneously
+    // user_profile.md, mind.md, preferences.json are per-user; everything else is shared Atlas identity
     const [
       syncState,
       mind,
@@ -69,13 +70,13 @@ export class ContinuitySyncService {
       cvEntries,
     ] = await Promise.all([
       atlasState.readJson<SyncState>(ATLAS_FILES.syncState, { lastHydratedAt: now.toISOString(), persistenceMode: "db-active", healthMarkers: [] }),
-      atlasState.readText(ATLAS_FILES.mind, "Mind: READY"),
+      userId ? atlasState.readUserText(userId, ATLAS_FILES.mind, "Mind: READY") : atlasState.readText(ATLAS_FILES.mind, "Mind: READY"),
       atlasState.readText(ATLAS_FILES.soul, ""),
       atlasState.readText(ATLAS_FILES.identity, ""),
       atlasState.readText(ATLAS_FILES.operatingRules, ""),
       atlasState.readText(ATLAS_FILES.search, ""),
-      atlasState.readText(ATLAS_FILES.userProfile, ""),
-      atlasState.readJson(ATLAS_FILES.preferences, {}),
+      userId ? atlasState.readUserText(userId, ATLAS_FILES.userProfile, "") : atlasState.readText(ATLAS_FILES.userProfile, ""),
+      userId ? atlasState.readUserJson(userId, ATLAS_FILES.preferences, {}) : atlasState.readJson(ATLAS_FILES.preferences, {}),
       atlasState.readText(ATLAS_FILES.cvSummary, ""),
       fs.readdir(path.join(process.cwd(), "uploads", "cv"), { withFileTypes: true }).catch(() => [] as import("node:fs").Dirent[]),
     ]);
@@ -217,17 +218,30 @@ export class ContinuitySyncService {
     });
   }
 
-  async syncLayersWithLlm(agentId: string, sessionId: string, update: { mind?: any; userProfile?: string; preferences?: any }): Promise<void> {
+  async syncLayersWithLlm(agentId: string, sessionId: string, update: { mind?: any; userProfile?: string; preferences?: any }, userId?: string): Promise<void> {
     if (update.mind) {
-      await atlasState.writeText(ATLAS_FILES.mind, JSON.stringify(update.mind, null, 2));
+      const content = JSON.stringify(update.mind, null, 2);
+      if (userId) {
+        await atlasState.writeUserText(userId, ATLAS_FILES.mind, content);
+      } else {
+        await atlasState.writeText(ATLAS_FILES.mind, content);
+      }
       await this.logContextMemory(`Updated mind.md via LLM continuity update.`);
     }
     if (update.userProfile) {
-      await atlasState.writeText(ATLAS_FILES.userProfile, update.userProfile);
+      if (userId) {
+        await atlasState.writeUserText(userId, ATLAS_FILES.userProfile, update.userProfile);
+      } else {
+        await atlasState.writeText(ATLAS_FILES.userProfile, update.userProfile);
+      }
       await this.logContextMemory(`Updated user_profile.md via LLM continuity update.`);
     }
     if (update.preferences) {
-      await atlasState.writeJson(ATLAS_FILES.preferences, update.preferences);
+      if (userId) {
+        await atlasState.writeUserJson(userId, ATLAS_FILES.preferences, update.preferences);
+      } else {
+        await atlasState.writeJson(ATLAS_FILES.preferences, update.preferences);
+      }
       await this.logContextMemory(`Updated preferences.json via LLM continuity update.`);
     }
   }

@@ -116,7 +116,8 @@ type PendingJob = {
   score?: number;
   isAlreadyImported?: boolean;
 };
-const pendingJobsStore = new Map<string, PendingJob[]>();
+const _g = globalThis as any;
+const pendingJobsStore: Map<string, PendingJob[]> = _g.__pendingJobsStore ?? (_g.__pendingJobsStore = new Map());
 
 const toolDescriptors = [
   {
@@ -571,7 +572,7 @@ async function executeToolCall(toolCall: ToolCall, sid: string): Promise<string>
     }
 
     if (!pending || pending.length === 0) {
-      return "No pending jobs to import. Try searching again.";
+      return "IMPORT_ERROR: No staged jobs found in this session. Do NOT search again. Tell the user the staged jobs were lost (likely due to a page reload) and ask them to use the Import button directly from the preview box next time.";
     }
 
     const jobsToImport = (params.action === "import_all" || (!params.action && params.jobs))
@@ -734,15 +735,20 @@ async function executeToolCall(toolCall: ToolCall, sid: string): Promise<string>
       return true;
     });
 
-    // Sort by scraper relevance score descending, take top 10
-    const top10 = unique
+    // Sort by scraper relevance score descending, cap using admin-controlled global settings
+    // maxJobsPerSearch = total pool from scraper; outputPerPrompt = how many show in preview
+    const globalSettings = runtimeSettingsStore.get("global").settings;
+    const maxJobs = globalSettings.maxJobsPerSearch ?? 20;
+    const outputPerPrompt = globalSettings.outputPerPrompt ?? 10;
+    const topJobs = unique
       .sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
-      .slice(0, 10);
+      .slice(0, maxJobs)
+      .slice(0, outputPerPrompt);
 
     const previewResult = await executeToolCall({
       tool: "preview_jobs",
       parameters: {
-        jobs: top10.map((j: RawJob) => ({
+        jobs: topJobs.map((j: RawJob) => ({
           title: j.title || "Untitled Role",
           company: j.company || "Unknown Company",
           location: j.location || location,
@@ -758,7 +764,7 @@ async function executeToolCall(toolCall: ToolCall, sid: string): Promise<string>
       }
     }, sid);
 
-    const scoreList = top10.map((j: RawJob, i: number) =>
+    const scoreList = topJobs.map((j: RawJob, i: number) =>
       `${i + 1}. ${j.title} at ${j.company} [${j._platform}] — score: ${Math.round(j.score ?? 0)}/100`
     ).join("\n");
 
@@ -769,7 +775,7 @@ async function executeToolCall(toolCall: ToolCall, sid: string): Promise<string>
         }).join("\n")}`
       : "";
 
-    return `### Job Discovery: ${query} in ${location}\n\nSearched ${successfulPlatforms.join(", ")} — found ${unique.length} unique jobs, showing top 10 by relevance score.\n\n**SCRAPER MATCH SCORES (use these exact numbers, do NOT invent your own):**\n${scoreList}\n\n${previewResult}${failedNote}`;
+    return `### Job Discovery: ${query} in ${location}\n\nSearched ${successfulPlatforms.join(", ")} — found ${unique.length} unique jobs total. Showing top ${topJobs.length} by relevance score (pool cap: ${maxJobs}, preview cap: ${outputPerPrompt}).\n\n**SCRAPER MATCH SCORES — EXACT VALUES, USE THESE ONLY, DO NOT INVENT OR CHANGE ANY NUMBER:**\n${scoreList}\n\nThe preview box above shows exactly these ${topJobs.length} jobs with their exact scores. Do NOT mention any other counts or scores.\n\n${previewResult}${failedNote}`;
   }
   throw new Error(`Unsupported tool: ${toolCall.tool}`);
 }
@@ -826,7 +832,7 @@ export class ConversationOrchestrator {
     let historyMessageCount = 0;
     const [historyMessages, layers] = await Promise.all([
       sid !== "new" && sid !== "default" ? agentStore.getSessionMessages(sid).catch(() => []) : Promise.resolve([]),
-      continuitySyncService.hydrateTurnContext(agent.id, sid, taskType, 0),
+      continuitySyncService.hydrateTurnContext(agent.id, sid, taskType, 0, effectiveUserId),
     ]);
     if (historyMessages.length > 0) {
       historyMessageCount = historyMessages.length;
@@ -1018,7 +1024,7 @@ export class ConversationOrchestrator {
 
     const continuityUpdate = extractContinuityUpdate(aiResponseText);
     if (continuityUpdate) {
-      void continuitySyncService.syncLayersWithLlm(agent.id, sid, continuityUpdate);
+      void continuitySyncService.syncLayersWithLlm(agent.id, sid, continuityUpdate, effectiveUserId);
     }
 
     return { 

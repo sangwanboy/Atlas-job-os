@@ -769,3 +769,9 @@ model Authenticator {
 
   @@id([userId, credentialID])
 }
+
+model RuntimeSettingsRecord {
+  key       String   @id // userId cuid or "global"
+  data      Json
+  updatedAt DateTime @updatedAt
+}

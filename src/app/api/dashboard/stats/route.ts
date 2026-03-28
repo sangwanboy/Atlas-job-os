@@ -1,29 +1,27 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { localJobsCache } from "@/lib/services/jobs/local-jobs-cache";
+import { requireAuth, isNextResponse } from "@/lib/server/auth-helpers";
 
 export async function GET() {
   try {
+    const authResult = await requireAuth();
+    if (isNextResponse(authResult)) return authResult;
+    const { userId } = authResult;
+
     // 1. Fetch from Local Cache (Most resilient for Dev)
     const cachedJobs = localJobsCache.list();
-    
+
     // 2. Attempt to fetch from Prisma — queries run in parallel
     let dbJobsCount = 0;
     let dbNewCount = 0;
     try {
       const yesterday = new Date();
       yesterday.setHours(yesterday.getHours() - 24);
-
-      const user = await prisma.user.findFirst({
-        where: { email: "local-dev-user@ai-job-os.local" },
-        select: { id: true },
-      });
-      if (user) {
-        [dbJobsCount, dbNewCount] = await Promise.all([
-          prisma.job.count({ where: { userId: user.id } }),
-          prisma.job.count({ where: { userId: user.id, createdAt: { gte: yesterday } } }),
-        ]);
-      }
+      [dbJobsCount, dbNewCount] = await Promise.all([
+        prisma.job.count({ where: { userId } }),
+        prisma.job.count({ where: { userId, createdAt: { gte: yesterday } } }),
+      ]);
     } catch (e) {
       console.warn("Prisma stats failed, falling back to cache:", e);
     }

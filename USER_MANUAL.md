@@ -128,9 +128,34 @@ Switch model mid-conversation — Atlas adapts immediately.
 
 ### Agent Behaviour
 - **Max Turns** — how many tool calls Atlas can chain per response
-- **Max Jobs Per Search** — cap on how many jobs appear in the preview (default 20)
 - **Deterministic Mode** — lower temperature for more consistent responses
 - **Memory Budget** — how much context Atlas retains between turns
+
+### Admin-Controlled Global Settings
+These are set by the admin and apply to **all users**:
+- **Max Jobs Per Search** — total jobs Atlas scrapes per search across all platforms (pool size, default 20)
+- **Output Per Prompt** — how many top-scored jobs appear in the chat preview box (default 10)
+
+---
+
+## Admin Features
+
+### User Management (`/admin/users`)
+Admins can:
+- View all registered users with their roles
+- Promote users to Admin or demote to User
+- Reset any user's password
+- Delete users
+- Create new accounts directly
+
+### Push Atlas Config
+After customising your Atlas agent (go to **Agent Workspace** and send a message first), click **Push Atlas Config** on the Users page to propagate your Atlas soul, identity, and mind configuration to all existing users. New users are automatically seeded when they open Agent Workspace for the first time.
+
+**Workflow:**
+1. Open **Agent Workspace** → send any message (creates your Atlas agent in the database)
+2. Customise Atlas as needed through conversation
+3. Go to **Admin Users → Push Atlas Config**
+4. All users' Atlas agents are updated with your configuration
 
 ---
 
@@ -151,14 +176,20 @@ Atlas injects your active CV profile into every job search turn, so it always kn
 
 Atlas remembers things between sessions using a layered memory system:
 
-| Layer | What it stores |
-|-------|---------------|
-| **Soul** | Core mission and principles |
-| **Identity** | Name, communication style |
-| **History** | Past conversations and decisions |
-| **CV Profile** | Your extracted skills and experience |
+| Layer | What it stores | Scope |
+|-------|---------------|-------|
+| **Soul** | Core mission and principles | Shared — same for all users |
+| **Identity** | Name ("Atlas"), communication style | Shared — same for all users |
+| **Operating Rules** | Job search rules and constraints | Shared — same for all users |
+| **User Profile** | Your name, background, preferences | **Per-user** — completely private |
+| **Mind** | Atlas's current understanding of you | **Per-user** — completely private |
+| **Preferences** | Your job type/location/salary preferences | **Per-user** — completely private |
+| **History** | Past conversations | **Per-user** — completely private |
+| **CV Profile** | Your extracted skills and experience | **Per-user** — completely private |
 
 The **Memory Health** panel (bottom of the Agent Profile sidebar) shows which layers are loaded and when they were last synced.
+
+**Every new user starts with a clean slate.** Atlas has no knowledge of other users — it learns your name, preferences, and work history exclusively through your own conversations.
 
 ---
 

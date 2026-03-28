@@ -68,6 +68,7 @@ export type RuntimeSettings = {
   softLimitPercent: number;
   perResponseTokenCap: number;
   maxJobsPerSearch: number;
+  outputPerPrompt: number;
   autoSummarizeOnHighUsage: boolean;
   strictLoopProtection: boolean;
   strictAgentResponseMode: boolean;

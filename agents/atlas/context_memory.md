@@ -415,3 +415,30 @@
 [2026-03-28T00:00:06.000Z] STABILITY_FIXES: Stream controller closed-flag guard prevents enqueue-after-close errors. User upsert race condition (P2002) caught with findFirst fallback. stale pages/_document.tsx removed — was forcing mixed Pages+App Router webpack compilation causing _not-found module crash.
 [2026-03-28T00:00:07.000Z] BUNDLER: Reverted from --turbopack to standard webpack (Next.js 15.5.x Turbopack has React Client Manifest corruption bug). WeeklyTrendChart lazy-loaded via dynamic() to prevent recharts compile hang. optimizePackageImports added for recharts/lucide-react.
 [2026-03-28T00:00:08.000Z] AUTH_FIX: NEXTAUTH_URL made optional in Zod env schema. Removed from .env files — NextAuth v5 auto-detects from request host. Middleware uses edge-safe NextAuth(authConfig) pattern.
+[2026-03-28T11:15:39.696Z] Updated mind.md via LLM continuity update.
+[2026-03-28T11:22:21.732Z] Updated mind.md via LLM continuity update.
+[2026-03-28T11:33:37.207Z] Updated mind.md via LLM continuity update.
+[2026-03-28T11:36:48.819Z] Updated mind.md via LLM continuity update.
+[2026-03-28T11:39:56.044Z] Updated mind.md via LLM continuity update.
+[2026-03-28T11:45:04.572Z] Updated mind.md via LLM continuity update.
+[2026-03-28T11:45:14.888Z] Updated mind.md via LLM continuity update.
+[2026-03-28T11:51:54.706Z] Updated mind.md via LLM continuity update.
+[2026-03-28T12:13:30.670Z] Updated mind.md via LLM continuity update.
+[2026-03-28T12:14:14.144Z] Updated mind.md via LLM continuity update.
+[2026-03-28T12:21:13.675Z] Updated mind.md via LLM continuity update.
+[2026-03-28T12:28:42.836Z] Updated mind.md via LLM continuity update.
+[2026-03-28T12:28:42.858Z] Updated user_profile.md via LLM continuity update.
+[2026-03-28T12:28:42.876Z] Updated preferences.json via LLM continuity update.
+[2026-03-28T00:00:00.000Z] MULTI_TENANT_ISOLATION: Full per-user data isolation implemented. All API routes (/api/jobs, /api/agents/chat, /api/agents/sessions, /api/settings/runtime, /api/dashboard/stats) now call requireAuth() and scope all DB queries by userId from JWT session. No cross-user data leakage possible.
+[2026-03-28T00:00:01.000Z] PER_USER_AGENT: Atlas agent auto-created per user on first chat via ensureUserAgent(userId, key). Seeded from admin's atlas agent template (soul/identity/mindConfig). Each user gets a fresh isolated Atlas that learns only about them.
+[2026-03-28T00:00:02.000Z] PUSH_ATLAS_CONFIG: Admin endpoint POST /api/admin/push-atlas-config copies admin's soul/identity/mindConfig to all existing users' atlas agents. Button added to /admin/users page. New users auto-seeded on first chat.
+[2026-03-28T00:00:03.000Z] ADMIN_GLOBAL_SETTINGS: maxJobsPerSearch (scraper pool cap, default 20) and outputPerPrompt (preview box cap, default 10) added as admin-controlled global settings. Stored under "global" key in runtimeSettingsStore. All users' chat reads from "global" key in conversation-orchestrator.ts.
+[2026-03-28T00:00:04.000Z] RUNTIME_SETTINGS_PRISMA: runtimeSettingsStore migrated from .runtime-settings.local.json file to PostgreSQL RuntimeSettingsRecord table (key PK + data JSON). In-memory read-through cache preserved. Multi-instance safe — no file-based state.
+[2026-03-28T00:00:05.000Z] AUTH_STORE_PRISMA: local-user-store.ts rewritten to use Prisma User table. Users persist across HMR restarts. Passwords stored as PBKDF2 hashes in passwordHash column.
+[2026-03-28T00:00:06.000Z] DATE_FIX: safeParseDate() added to /api/jobs POST handler. Handles relative date strings ("3 weeks ago") that new Date() can't parse — returns undefined instead of throwing Prisma validation error.
+[2026-03-28T00:00:07.000Z] SCORE_FIX: score field added to saveJobDirect payload in agent-chat-starter.tsx, to createJobSchema, and jobScore.create block in /api/jobs POST. Scores now match Atlas chat output in pipeline.
+[2026-03-28T00:00:08.000Z] REGISTER_THEME: register page rethemed from dark slate-950 to light glassmorphism matching login page — .panel class, text-text/text-muted CSS vars, bg-white/70 border-white/60 inputs, cyan accents.
+[2026-03-28T00:00:09.000Z] SHOW_TOOL_USE: showToolUse defaulted to false in agent-chat-starter.tsx. Internal "### Job Discovery" operator logs no longer shown in chat by default.
+[2026-03-28T00:00:10.000Z] PER_USER_ATLAS_MEMORY: user_profile.md, mind.md, preferences.json moved to agents/atlas/users/{userId}/ per-user directories. soul.md, identity.md, operating_rules.md, search.md stay shared (Atlas identity). AtlasStateManager now has readUserText/writeUserText/readUserJson/writeUserJson. hydrateTurnContext and syncLayersWithLlm accept userId param. All new users start with empty profile — Atlas learns from scratch per user.
+[2026-03-28T14:04:43.978Z] Updated mind.md via LLM continuity update.
+[2026-03-28T14:04:44.027Z] Updated preferences.json via LLM continuity update.

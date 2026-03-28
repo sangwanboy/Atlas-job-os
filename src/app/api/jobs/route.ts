@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { applicationStatuses, priorities } from "@/lib/domain/enums";
 import { mapDbJobToRow } from "@/lib/services/jobs/job-row-mapper";
 import { localJobsCache } from "@/lib/services/jobs/local-jobs-cache";
+import { requireAuth, isNextResponse } from "@/lib/server/auth-helpers";
 
 const createJobSchema = z.object({
   title: z.string().min(1),
@@ -17,18 +18,13 @@ const createJobSchema = z.object({
   description: z.string().optional(),
   skills: z.string().optional(),
   datePosted: z.string().optional(),
+  score: z.number().optional(),
 });
 
-async function ensureLocalDevUser() {
-  return prisma.user.upsert({
-    where: { email: "local-dev-user@ai-job-os.local" },
-    update: { name: "Local Dev User" },
-    create: {
-      email: "local-dev-user@ai-job-os.local",
-      name: "Local Dev User",
-    },
-    select: { id: true },
-  });
+function safeParseDate(value?: string): Date | undefined {
+  if (!value) return undefined;
+  const d = new Date(value);
+  return isNaN(d.getTime()) ? undefined : d;
 }
 
 async function ensureCompany(name: string) {
@@ -64,18 +60,23 @@ function parseSalaryBounds(salary?: string): { salaryMin?: number; salaryMax?: n
 
 export async function GET(request: Request) {
   try {
+    const authResult = await requireAuth();
+    if (isNextResponse(authResult)) return authResult;
+    const { userId } = authResult;
+
     const { searchParams } = new URL(request.url);
     const checkUrls = searchParams.getAll("checkUrl");
 
     if (checkUrls.length > 0) {
       const existing = await prisma.job.findMany({
-        where: { sourceUrl: { in: checkUrls } },
+        where: { sourceUrl: { in: checkUrls }, userId },
         select: { sourceUrl: true },
       });
       return NextResponse.json({ existingUrls: existing.map((j) => j.sourceUrl) });
     }
 
     const jobs = (await prisma.job.findMany({
+      where: { userId },
       include: {
         company: { select: { name: true } },
         scores: {
@@ -115,6 +116,10 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
+    const authResult = await requireAuth();
+    if (isNextResponse(authResult)) return authResult;
+    const { userId } = authResult;
+
     const body = (await request.json()) as unknown;
     const payload = createJobSchema.parse(body);
 
@@ -129,13 +134,12 @@ export async function POST(request: Request) {
     }
 
     try {
-      const user = await ensureLocalDevUser();
       const company = await ensureCompany(payload.company);
       const salaryBounds = parseSalaryBounds(payload.salary);
 
       const job = await prisma.job.create({
         data: {
-          userId: user.id,
+          userId,
           source: payload.source,
           sourceUrl: payload.url,
           title: payload.title,
@@ -148,13 +152,27 @@ export async function POST(request: Request) {
           priority: payload.priority ?? "MEDIUM",
           descriptionRaw: payload.description,
           requiredSkills: payload.skills ? payload.skills.split(",").map(s => s.trim()).filter(Boolean) : [],
-          postedDate: payload.datePosted ? new Date(payload.datePosted) : undefined,
+          postedDate: safeParseDate(payload.datePosted),
         },
         select: {
           id: true,
           title: true,
         },
       });
+
+      if (payload.score && payload.score > 0) {
+        await prisma.jobScore.create({
+          data: {
+            jobId: job.id,
+            userId,
+            totalScore: payload.score,
+            confidence: 0.8,
+            explanation: "Scraper relevance score",
+            factorBreakdown: { scraper: payload.score },
+            missingDataPenalty: 0,
+          },
+        });
+      }
 
       return NextResponse.json({
         success: true,
@@ -176,6 +194,10 @@ export async function POST(request: Request) {
 
 export async function PUT(request: Request) {
   try {
+    const authResult = await requireAuth();
+    if (isNextResponse(authResult)) return authResult;
+    const { userId } = authResult;
+
     const body = (await request.json()) as unknown;
     const { id, ...data } = z.object({ id: z.string().min(1) }).passthrough().parse(body);
     const payload = createJobSchema.partial().parse(data);
@@ -183,7 +205,7 @@ export async function PUT(request: Request) {
     const salaryBounds = payload.salary ? parseSalaryBounds(payload.salary) : {};
 
     const job = await prisma.job.update({
-      where: { id },
+      where: { id, userId },
       data: {
         source: payload.source,
         sourceUrl: payload.url,
@@ -211,21 +233,25 @@ export async function PUT(request: Request) {
 
 export async function DELETE(request: Request) {
   try {
+    const authResult = await requireAuth();
+    if (isNextResponse(authResult)) return authResult;
+    const { userId } = authResult;
+
     const { searchParams } = new URL(request.url);
     const jobId = searchParams.get("id");
     const cleanJunk = searchParams.get("cleanJunk");
     const deleteAll = searchParams.get("deleteAll");
 
     if (deleteAll === "true") {
-      const deleted = await prisma.job.deleteMany({});
+      const deleted = await prisma.job.deleteMany({ where: { userId } });
       localJobsCache.clear();
       return NextResponse.json({ success: true, deletedCount: deleted.count });
     }
 
     if (cleanJunk === "true") {
-      // Clean up junk entries that look like chat messages
       const deleted = await prisma.job.deleteMany({
         where: {
+          userId,
           OR: [
             { title: { contains: "?" } },
             { title: { contains: "status" } },
@@ -242,7 +268,7 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: "Missing job id" }, { status: 400 });
     }
 
-    await prisma.job.delete({ where: { id: jobId } });
+    await prisma.job.delete({ where: { id: jobId, userId } });
     return NextResponse.json({ success: true });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to delete job";

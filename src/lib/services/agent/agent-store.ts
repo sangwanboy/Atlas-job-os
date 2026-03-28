@@ -1,4 +1,4 @@
-import type { MemoryKind, MessageRole } from "@/lib/domain/enums";
+import type { MessageRole } from "@/lib/domain/enums";
 import { prisma } from "@/lib/db";
 import { localSessionStore } from "@/lib/services/agent/local-session-store";
 
@@ -16,34 +16,111 @@ export type AgentRecord = {
 };
 
 export class AgentStore {
+  private toRecord(agent: any): AgentRecord {
+    return {
+      id: agent.id,
+      userId: agent.userId,
+      key: agent.key,
+      soulMission: agent.soul?.mission || "",
+      identityName: agent.identity?.name || "",
+      communicationStyle: agent.identity?.communicationStyle || "",
+      model: agent.mindConfig?.model || "gemini-2.0-flash-preview",
+      onboardingCompleted: agent.onboardingCompleted,
+      responseBudgetTokens: agent.responseBudgetTokens,
+      memoryBudgetTokens: agent.memoryBudgetTokens,
+    };
+  }
+
+  async ensureUserAgent(userId: string, key = "atlas"): Promise<AgentRecord> {
+    // Already exists for this user?
+    const existing = await prisma.agent.findFirst({
+      where: { key, userId },
+      include: { soul: true, identity: true, mindConfig: true },
+    });
+    if (existing) return this.toRecord(existing);
+
+    // Seed from admin's atlas agent as template
+    const template = await prisma.agent.findFirst({
+      where: { key, user: { role: "ADMIN" } },
+      include: { soul: true, identity: true, mindConfig: true },
+    });
+
+    const agent = await prisma.agent.create({
+      data: { userId, key },
+      select: { id: true },
+    });
+
+    if (template?.soul) {
+      const { id: _id, agentId: _aid, createdAt: _ca, updatedAt: _ua, ...soulData } = template.soul;
+      await prisma.agentSoul.create({ data: { agentId: agent.id, ...soulData } });
+    } else {
+      await prisma.agentSoul.create({
+        data: {
+          agentId: agent.id,
+          mission: "Help users discover and land their ideal job through intelligent search, scoring, and outreach.",
+          longTermObjective: "Become the user's trusted career co-pilot.",
+          principles: ["Always act in the user's career interest", "Be honest about job fit"],
+          toneBoundaries: ["Professional", "Encouraging"],
+          decisionPhilosophy: "Prioritise relevance and quality over quantity.",
+          valuesRules: ["No spam outreach", "Respect user privacy"],
+        },
+      });
+    }
+
+    if (template?.identity) {
+      const { id: _id, agentId: _aid, createdAt: _ca, updatedAt: _ua, ...identityData } = template.identity;
+      await prisma.agentIdentity.create({ data: { agentId: agent.id, ...identityData } });
+    } else {
+      await prisma.agentIdentity.create({
+        data: {
+          agentId: agent.id,
+          name: "Atlas",
+          roleTitle: "AI Job Search Agent",
+          specialization: "Job discovery, ranking, and outreach",
+          communicationStyle: "Clear, concise, and encouraging",
+          expertiseProfile: ["Job search", "CV matching", "Outreach"],
+          strengths: ["Fast multi-platform search", "Score-based ranking"],
+          cautionAreas: ["Do not apply without user confirmation"],
+          description: "Atlas is your AI-powered job search operating system.",
+        },
+      });
+    }
+
+    if (template?.mindConfig) {
+      const { id: _id, agentId: _aid, createdAt: _ca, updatedAt: _ua, ...mindData } = template.mindConfig;
+      await prisma.agentMindConfig.create({ data: { agentId: agent.id, ...mindData } });
+    } else {
+      await prisma.agentMindConfig.create({
+        data: {
+          agentId: agent.id,
+          provider: "VERTEX_AI" as any,
+          model: "gemini-2.0-flash-preview",
+          systemPromptTemplate: "",
+          maxTurns: 12,
+        },
+      });
+    }
+
+    const created = await prisma.agent.findFirst({
+      where: { id: agent.id },
+      include: { soul: true, identity: true, mindConfig: true },
+    });
+    return this.toRecord(created!);
+  }
+
   async findAgent(agentId: string, userId: string): Promise<AgentRecord | null> {
     try {
-      // Try exact userId match first, then fall back to any agent with that key/id
-      let agent = await prisma.agent.findFirst({
+      // Try exact userId match first
+      const agent = await prisma.agent.findFirst({
         where: { OR: [{ id: agentId }, { key: agentId }], userId },
         include: { soul: true, identity: true, mindConfig: true },
       });
-      if (!agent) {
-        agent = await prisma.agent.findFirst({
-          where: { OR: [{ id: agentId }, { key: agentId }] },
-          include: { soul: true, identity: true, mindConfig: true },
-        });
-      }
 
-      if (!agent) return null;
+      if (agent) return this.toRecord(agent);
 
-      return {
-        id: agent.id,
-        userId: agent.userId,
-        key: agent.key,
-        soulMission: agent.soul?.mission || "",
-        identityName: agent.identity?.name || "",
-        communicationStyle: agent.identity?.communicationStyle || "",
-        model: agent.mindConfig?.model || "gemini-3.1-pro-preview",
-        onboardingCompleted: agent.onboardingCompleted,
-        responseBudgetTokens: agent.responseBudgetTokens,
-        memoryBudgetTokens: agent.memoryBudgetTokens,
-      };
+      // Not found — auto-create for this user seeded from admin template
+      const key = agentId.length < 30 ? agentId : "atlas";
+      return await this.ensureUserAgent(userId, key);
     } catch (error) {
       console.error("[AgentStore] findAgent failed:", error);
       return null;
@@ -60,28 +137,11 @@ export class AgentStore {
     try {
       if (input.sessionId) {
         const existing = await prisma.chatSession.findFirst({
-          where: {
-            id: input.sessionId,
-            userId: input.userId,
-            agentId: input.agentId,
-          },
+          where: { id: input.sessionId, userId: input.userId, agentId: input.agentId },
           select: { id: true },
         });
-        if (existing) {
-          return existing.id;
-        }
+        if (existing) return existing.id;
       }
-
-      // Ensure the user row exists before creating a session (handles local-dev users)
-      await prisma.user.upsert({
-        where: { id: input.userId },
-        update: {},
-        create: {
-          id: input.userId,
-          email: `${input.userId}@ai-job-os.local`,
-          name: input.userId,
-        },
-      });
 
       const created = await prisma.chatSession.create({
         data: {
@@ -104,10 +164,9 @@ export class AgentStore {
     role: MessageRole;
     content: string;
     tokenEstimate: number;
-    agentId?: string; // Optional for compatibility
-    userId?: string;  // Optional for compatibility
+    agentId?: string;
+    userId?: string;
   }): Promise<void> {
-    // 1. Try DB first (skip if session is a local fallback ID — not persisted in DB)
     try {
       if (input.sessionId.startsWith("local-")) throw new Error("local session");
       await prisma.chatMessage.create({
@@ -122,10 +181,9 @@ export class AgentStore {
       console.warn("[AgentStore] DB failed to save message:", dbError instanceof Error ? dbError.message : "Unknown error");
     }
 
-    // 2. Always write to local store as a robust secondary/fallback
     const agentId = input.agentId || "job_scout";
-    const userId = input.userId || "local-dev-user";
-    
+    const userId = input.userId || "unknown";
+
     try {
       await localSessionStore.saveMessage({
         sessionId: input.sessionId,
@@ -144,12 +202,9 @@ export class AgentStore {
   async saveMemoryChunk(data: any): Promise<void> {}
 
   async listSessions(input: { agentId: string; userId?: string }): Promise<Array<{ id: string; title: string; updatedAt: Date }>> {
-    if (!input.agentId) {
-      return [];
-    }
+    if (!input.agentId) return [];
 
-    const userId = input.userId || "local-dev-user";
-    
+    const userId = input.userId;
     let resolvedAgentId = input.agentId;
     let resolvedAgentKey = input.agentId;
 
@@ -157,7 +212,7 @@ export class AgentStore {
       const agent = await prisma.agent.findFirst({
         where: {
           OR: [{ id: input.agentId }, { key: input.agentId }],
-          ...(input.userId ? { userId: input.userId } : {}),
+          ...(userId ? { userId } : {}),
         },
         select: { id: true, key: true },
       });
@@ -167,30 +222,18 @@ export class AgentStore {
         resolvedAgentKey = agent.key;
       }
     } catch (dbError) {
-      console.warn("[AgentStore] DB error resolving agent in listSessions, using raw ID for filtering.");
+      console.warn("[AgentStore] DB error resolving agent in listSessions.");
     }
 
-    // Pass resolved IDs/keys to local store
-    const localSessions = await localSessionStore.list(resolvedAgentId, userId, resolvedAgentKey);
+    const localSessions = await localSessionStore.list(resolvedAgentId, userId || "unknown", resolvedAgentKey);
 
     try {
-      // If we don't have a resolved agent ID from DB and DB is working, we might still want to try filtering by raw input
       const dbSessions = await prisma.chatSession.findMany({
-        where: {
-          agentId: resolvedAgentId,
-          userId: input.userId,
-          isArchived: false,
-        },
-        select: {
-          id: true,
-          title: true,
-          updatedAt: true,
-        },
+        where: { agentId: resolvedAgentId, userId, isArchived: false },
+        select: { id: true, title: true, updatedAt: true },
         orderBy: { updatedAt: "desc" },
       });
 
-      // Merge and unique-ify by ID, preferring local for recency/updates if desired, 
-      // but here we just combine to ensure everything is visible.
       const merged = [...dbSessions];
       for (const ls of localSessions) {
         if (!merged.find(s => s.id === ls.id)) {
@@ -208,26 +251,20 @@ export class AgentStore {
     try {
       const dbMessages = await prisma.chatMessage.findMany({
         where: { sessionId },
-        select: {
-          role: true,
-          content: true,
-          createdAt: true,
-        },
+        select: { role: true, content: true, createdAt: true },
         orderBy: { createdAt: "asc" },
       });
-      
       if (dbMessages.length > 0) return dbMessages;
     } catch (error) {
       console.warn("[AgentStore] DB error in getSessionMessages");
     }
 
-    // Fallback to local
     const local = await localSessionStore.get(sessionId);
     if (local) {
       return local.messages.map(m => ({
         role: m.role,
         content: m.content,
-        createdAt: new Date(m.createdAt)
+        createdAt: new Date(m.createdAt),
       }));
     }
 

@@ -1,7 +1,5 @@
-import { existsSync, readFileSync } from "fs";
-import { writeFile } from "fs/promises";
-import { join } from "path";
 import { llmProviderCatalog } from "@/lib/services/settings/llm-catalog";
+import { prisma } from "@/lib/db";
 import type {
   LlmProvider,
   RuntimeSettingsResponse,
@@ -20,6 +18,7 @@ type RuntimeState = {
   softLimitPercent: number;
   perResponseTokenCap: number;
   maxJobsPerSearch: number;
+  outputPerPrompt: number;
   autoSummarizeOnHighUsage: boolean;
   strictLoopProtection: boolean;
   strictAgentResponseMode: boolean;
@@ -30,51 +29,18 @@ type RuntimeState = {
   updatedAt: string;
 };
 
-const globalStore = globalThis as unknown as {
-  runtimeSettingsStore?: Map<string, RuntimeState>;
+// In-memory read-through cache keyed by userId/"global" — avoids a DB round-trip on every LLM call
+const globalCache = globalThis as unknown as {
+  runtimeSettingsCache?: Map<string, RuntimeState>;
 };
-
-const store = globalStore.runtimeSettingsStore ?? new Map<string, RuntimeState>();
-globalStore.runtimeSettingsStore = store;
-
-const runtimePersistPath = join(process.cwd(), ".runtime-settings.local.json");
-
-function persistStore(): void {
-  const payload = JSON.stringify(Object.fromEntries(store.entries()), null, 2);
-  void writeFile(runtimePersistPath, payload, "utf-8").catch(() => {
-    // Non-blocking persistence for local runtime metrics/settings.
-  });
-}
-
-function hydrateStoreFromDisk(): void {
-  if (store.size > 0) {
-    return;
-  }
-
-  try {
-    if (!existsSync(runtimePersistPath)) {
-      return;
-    }
-
-    const raw = readFileSync(runtimePersistPath, "utf-8");
-    const parsed = JSON.parse(raw) as Record<string, RuntimeState>;
-    for (const [userId, state] of Object.entries(parsed)) {
-      store.set(userId, state);
-    }
-  } catch {
-    // Fall back to in-memory defaults when local persisted file is invalid/unavailable.
-  }
-}
+const cache = globalCache.runtimeSettingsCache ?? new Map<string, RuntimeState>();
+globalCache.runtimeSettingsCache = cache;
 
 function createDefaultState(): RuntimeState {
   const usageByProvider = Object.fromEntries(
     llmProviderCatalog.map((provider) => [
       provider.provider,
-      {
-        requests: 0,
-        promptTokens: 0,
-        completionTokens: 0,
-      },
+      { requests: 0, promptTokens: 0, completionTokens: 0 },
     ]),
   ) as Record<LlmProvider, ProviderUsageRuntime>;
 
@@ -83,6 +49,7 @@ function createDefaultState(): RuntimeState {
     softLimitPercent: 85,
     perResponseTokenCap: 8_192,
     maxJobsPerSearch: 20,
+    outputPerPrompt: 10,
     autoSummarizeOnHighUsage: true,
     strictLoopProtection: true,
     strictAgentResponseMode: true,
@@ -94,32 +61,39 @@ function createDefaultState(): RuntimeState {
   };
 }
 
-function resolveState(userId: string): RuntimeState {
-  hydrateStoreFromDisk();
+function migrate(state: RuntimeState): RuntimeState {
+  if (state.strictAgentResponseMode === undefined) state.strictAgentResponseMode = true;
+  if ((state as any).maxJobsPerSearch === undefined) (state as any).maxJobsPerSearch = 20;
+  if ((state as any).outputPerPrompt === undefined) (state as any).outputPerPrompt = 10;
+  return state;
+}
 
-  const existing = store.get(userId);
-  if (existing) {
-    // Migrate fields added after initial release
-    let dirty = false;
-    if (existing.strictAgentResponseMode === undefined) {
-      existing.strictAgentResponseMode = true;
-      dirty = true;
-    }
-    if ((existing as any).maxJobsPerSearch === undefined) {
-      (existing as any).maxJobsPerSearch = 20;
-      dirty = true;
-    }
-    if (dirty) {
-      existing.updatedAt = new Date().toISOString();
-      store.set(userId, existing);
-    }
-    return existing;
+async function loadFromDb(key: string): Promise<RuntimeState> {
+  const record = await prisma.runtimeSettingsRecord.findUnique({ where: { key } });
+  if (record) {
+    return migrate(record.data as unknown as RuntimeState);
   }
+  const defaults = createDefaultState();
+  await prisma.runtimeSettingsRecord.create({ data: { key, data: defaults as any } });
+  return defaults;
+}
 
-  const seeded = createDefaultState();
-  store.set(userId, seeded);
-  persistStore();
-  return seeded;
+async function resolveState(key: string): Promise<RuntimeState> {
+  const cached = cache.get(key);
+  if (cached) return cached;
+  const state = await loadFromDb(key);
+  cache.set(key, state);
+  return state;
+}
+
+async function persistState(key: string, state: RuntimeState): Promise<void> {
+  state.updatedAt = new Date().toISOString();
+  cache.set(key, state);
+  await prisma.runtimeSettingsRecord.upsert({
+    where: { key },
+    create: { key, data: state as any },
+    update: { data: state as any },
+  });
 }
 
 function toUsageSummary(state: RuntimeState): TokenUsageSummary {
@@ -156,6 +130,7 @@ function toResponse(state: RuntimeState): RuntimeSettingsResponse {
       softLimitPercent: state.softLimitPercent,
       perResponseTokenCap: state.perResponseTokenCap,
       maxJobsPerSearch: state.maxJobsPerSearch ?? 20,
+      outputPerPrompt: state.outputPerPrompt ?? 10,
       autoSummarizeOnHighUsage: state.autoSummarizeOnHighUsage,
       strictLoopProtection: state.strictLoopProtection,
       strictAgentResponseMode: state.strictAgentResponseMode ?? true,
@@ -168,43 +143,50 @@ function toResponse(state: RuntimeState): RuntimeSettingsResponse {
 }
 
 export class RuntimeSettingsStore {
-  get(userId = "local-dev-user"): RuntimeSettingsResponse {
-    return toResponse(resolveState(userId));
+  // Synchronous get — uses cache only (safe after first async load)
+  get(key = "local-dev-user"): RuntimeSettingsResponse {
+    const cached = cache.get(key);
+    if (cached) return toResponse(cached);
+    // Cache miss: return defaults and trigger async load to warm cache
+    const defaults = createDefaultState();
+    void loadFromDb(key).then((state) => cache.set(key, state));
+    return toResponse(defaults);
   }
 
-  update(payload: RuntimeSettingsUpdatePayload, userId = "local-dev-user"): RuntimeSettingsResponse {
-    const state = resolveState(userId);
+  async getAsync(key = "local-dev-user"): Promise<RuntimeSettingsResponse> {
+    return toResponse(await resolveState(key));
+  }
+
+  async update(payload: RuntimeSettingsUpdatePayload, key = "local-dev-user"): Promise<RuntimeSettingsResponse> {
+    const state = await resolveState(key);
 
     state.monthlyTokenBudget = payload.monthlyTokenBudget;
     state.softLimitPercent = payload.softLimitPercent;
     state.perResponseTokenCap = payload.perResponseTokenCap;
     state.maxJobsPerSearch = payload.maxJobsPerSearch ?? 20;
+    state.outputPerPrompt = payload.outputPerPrompt ?? 10;
     state.autoSummarizeOnHighUsage = payload.autoSummarizeOnHighUsage;
     state.strictLoopProtection = payload.strictLoopProtection;
     state.strictAgentResponseMode = payload.strictAgentResponseMode;
     state.allowProviderFallback = payload.allowProviderFallback;
     state.redactPiiInMemory = payload.redactPiiInMemory;
-    state.updatedAt = new Date().toISOString();
 
-    store.set(userId, state);
-    persistStore();
+    await persistState(key, state);
     return toResponse(state);
   }
 
-  trackUsage(
+  async trackUsage(
     input: { provider: LlmProvider; promptTokens: number; completionTokens: number },
-    userId = "local-dev-user",
+    key = "local-dev-user",
   ) {
-    const state = resolveState(userId);
+    const state = await resolveState(key);
     const providerUsage = state.usageByProvider[input.provider];
 
     providerUsage.requests += 1;
     providerUsage.promptTokens += Math.max(0, Math.floor(input.promptTokens));
     providerUsage.completionTokens += Math.max(0, Math.floor(input.completionTokens));
-    state.updatedAt = new Date().toISOString();
 
-    store.set(userId, state);
-    persistStore();
+    await persistState(key, state);
   }
 }
 
