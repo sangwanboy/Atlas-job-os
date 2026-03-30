@@ -34,9 +34,16 @@ export class ContinuitySyncService {
   /**
    * interval 7: Context Memory Logger
    */
-  async logContextMemory(entry: string): Promise<void> {
+  async logContextMemory(entry: string, userId?: string): Promise<void> {
     const timestamp = `[${new Date().toISOString()}]`;
-    await atlasState.appendText(ATLAS_FILES.contextMemory, `${timestamp} ${entry}`);
+    const line = `${timestamp} ${entry}`;
+    if (userId) {
+      await atlasState.writeUserText(userId, ATLAS_FILES.contextMemory,
+        (await atlasState.readUserText(userId, ATLAS_FILES.contextMemory, "")) + line + "\n"
+      );
+    } else {
+      await atlasState.appendText(ATLAS_FILES.contextMemory, line);
+    }
   }
 
   /**
@@ -70,15 +77,15 @@ export class ContinuitySyncService {
       cvEntries,
     ] = await Promise.all([
       atlasState.readJson<SyncState>(ATLAS_FILES.syncState, { lastHydratedAt: now.toISOString(), persistenceMode: "db-active", healthMarkers: [] }),
-      userId ? atlasState.readUserText(userId, ATLAS_FILES.mind, "Mind: READY") : atlasState.readText(ATLAS_FILES.mind, "Mind: READY"),
+      userId ? atlasState.readUserText(userId, ATLAS_FILES.mind, "Mind: READY") : Promise.resolve("Mind: READY"),
       atlasState.readText(ATLAS_FILES.soul, ""),
       atlasState.readText(ATLAS_FILES.identity, ""),
       atlasState.readText(ATLAS_FILES.operatingRules, ""),
       atlasState.readText(ATLAS_FILES.search, ""),
-      userId ? atlasState.readUserText(userId, ATLAS_FILES.userProfile, "") : atlasState.readText(ATLAS_FILES.userProfile, ""),
-      userId ? atlasState.readUserJson(userId, ATLAS_FILES.preferences, {}) : atlasState.readJson(ATLAS_FILES.preferences, {}),
-      atlasState.readText(ATLAS_FILES.cvSummary, ""),
-      fs.readdir(path.join(process.cwd(), "uploads", "cv"), { withFileTypes: true }).catch(() => [] as import("node:fs").Dirent[]),
+      userId ? atlasState.readUserText(userId, ATLAS_FILES.userProfile, "") : Promise.resolve(""),
+      userId ? atlasState.readUserJson(userId, ATLAS_FILES.preferences, {}) : Promise.resolve({}),
+      userId ? atlasState.readUserText(userId, ATLAS_FILES.cvSummary, "") : Promise.resolve(""),
+      fs.readdir(path.join(process.cwd(), "uploads", "cv", ...(userId ? [userId] : [])), { withFileTypes: true }).catch(() => [] as import("node:fs").Dirent[]),
     ]);
 
     const lastSync = new Date(syncState.lastHydratedAt);
@@ -119,7 +126,7 @@ export class ContinuitySyncService {
 
     // Load CV context — list uploaded CVs with tags so Atlas knows which to use
     try {
-      const metaPath = path.join(process.cwd(), "uploads", "cv", "_metadata.json");
+      const metaPath = path.join(process.cwd(), "uploads", "cv", ...(userId ? [userId] : []), "_metadata.json");
       let metadata: Record<string, { tag?: string; label?: string }> = {};
       try {
         const raw = await fs.readFile(metaPath, "utf-8");

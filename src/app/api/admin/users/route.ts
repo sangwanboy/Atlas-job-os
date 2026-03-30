@@ -7,6 +7,7 @@ import {
   deleteUser,
   resetUserPassword,
 } from "@/lib/services/auth/local-user-store";
+import { atlasState, ATLAS_FILES } from "@/lib/services/agent/atlas-state-manager";
 
 async function requireAdmin() {
   const session = await auth();
@@ -58,6 +59,9 @@ export async function POST(request: Request) {
           name,
           password,
           role || "USER",
+        );
+        await atlasState.writeUserText(user.id, ATLAS_FILES.userProfile,
+          `# User Profile: ${name}\n\nNo profile yet. Atlas will build this as we talk.\n`
         );
         return NextResponse.json({
           user: { id: user.id, email: user.email, name: user.name, role: user.role },

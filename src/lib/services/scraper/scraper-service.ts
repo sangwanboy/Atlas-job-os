@@ -27,8 +27,8 @@ export type JobResult = {
   skills?: string;
 };
 
-// Detail scraping per job adds time — allow up to 3 minutes
-const SCRAPE_TIMEOUT_MS = 180_000;
+// Detail scraping + optional CAPTCHA solve window — allow up to 6 minutes
+const SCRAPE_TIMEOUT_MS = 360_000;
 
 export class ScraperService {
   private static venvPath = path.join(process.cwd(), ".venv-scraper");
@@ -64,8 +64,8 @@ export class ScraperService {
       let child: ReturnType<typeof spawn>;
       try {
         const workerArgs = query
-          ? [this.workerPath, "--query", query, ...args]
-          : [this.workerPath, ...args];
+          ? [this.workerPath, "--query", query, "--headful-on-block", ...args]
+          : [this.workerPath, "--headful-on-block", ...args];
         child = spawn(this.pythonExe, workerArgs);
       } catch (spawnErr) {
         const msg = spawnErr instanceof Error ? spawnErr.message : String(spawnErr);

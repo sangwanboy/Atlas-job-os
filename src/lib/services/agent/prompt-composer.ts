@@ -14,7 +14,8 @@ export interface HydratedLayers {
   cvSummary?: string;     // Upgrade tips and CV quality analysis
 }
 
-export function composeAgentSystemPrompt(agent: RegisteredAgent, layers: HydratedLayers): string {
+export function composeAgentSystemPrompt(agent: RegisteredAgent, layers: HydratedLayers, options?: { lightweight?: boolean }): string {
+  const lightweight = options?.lightweight ?? false;
   // Extract user name if possible
   let userName = "the User";
   if (layers.userProfile) {
@@ -55,12 +56,18 @@ export function composeAgentSystemPrompt(agent: RegisteredAgent, layers: Hydrate
     promptParts.push("");
   }
 
-  if (layers.searchGuidelines) {
+  if (layers.searchGuidelines && !lightweight) {
     promptParts.push("========================================\nIV. SEARCH – HOW TO SEARCH GLOBALLY\n========================================\n");
     promptParts.push(layers.searchGuidelines);
     promptParts.push("");
   }
 
+  if (lightweight) {
+    // Minimal instructions for simple conversational messages — no tools needed
+    promptParts.push(`You are in CONVERSATION MODE. Respond naturally and concisely. No tool calls needed.
+If the user asks about jobs, searching, imports, or CV — tell them you can help and ask what they need.
+Keep responses warm, brief, and personalized.`);
+  } else {
   // Common instructions
   promptParts.push(`AUTONOMY PROTOCOL (CRITICAL):
 - DO NOT stop to summarize or ask for feedback between internal tool steps.
@@ -70,6 +77,7 @@ export function composeAgentSystemPrompt(agent: RegisteredAgent, layers: Hydrate
 TOOLS AVAILABLE:
 - preview_jobs: PREVIEW jobs to show the user BEFORE importing.
 - import_pending_jobs: IMPORT previously previewed jobs.
+- get_pipeline: READ staged/discovered jobs not yet imported. Use when user asks about pipeline jobs.
 - save_job: Directly persist a single job.
 - browser_navigate, browser_click, browser_extract_jobs, browser_type, browser_screenshot.
 - gmail_sync, gmail_get_threads, gmail_generate_followup.
@@ -118,6 +126,7 @@ Continuity Sync Protocol (CRITICAL):
 - MANDATORY: If the user reveals personal details (name, role, goals), update "userProfile".
 - MANDATORY: If the user expresses a preference (salary, remote, location), update "preferences".
 `);
+  } // end of !lightweight block
 
   // Full profile on first turn or re-injection turns
   if (layers.userProfile) {
@@ -131,11 +140,11 @@ Continuity Sync Protocol (CRITICAL):
     promptParts.push(`[PREFERENCES]\n${layers.preferences}\n`);
   }
 
-  if (layers.cvSummary) {
+  if (layers.cvSummary && !lightweight) {
     promptParts.push(`[CV ANALYSIS & UPGRADE TIPS]\n${layers.cvSummary}\n`);
   }
 
-  if (layers.cvContext) {
+  if (layers.cvContext && !lightweight) {
     promptParts.push(`[CV FILES - USER UPLOADED RESUMES]\n${layers.cvContext}\n`);
   }
 

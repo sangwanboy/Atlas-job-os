@@ -15,7 +15,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <AgentProvider>
-      <div className={`app-shell h-screen overflow-hidden lg:grid ${sidebarCollapsed ? "lg:grid-cols-[0px_1fr]" : "lg:grid-cols-[260px_1fr]"} transition-all duration-300`}>
+      <div className={`app-shell h-screen overflow-hidden lg:grid ${sidebarCollapsed ? "lg:grid-cols-[64px_1fr]" : "lg:grid-cols-[260px_1fr]"} transition-all duration-300`}>
         <a
           href="#main-content"
           className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-white focus:px-3 focus:py-2 focus:text-sm focus:font-semibold"

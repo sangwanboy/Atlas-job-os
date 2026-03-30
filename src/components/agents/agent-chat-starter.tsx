@@ -402,6 +402,7 @@ export function AgentChatStarter() {
   const [importingJobs, setImportingJobs] = useState(false);
   const [loadingTextIndex, setLoadingTextIndex] = useState(0);
   const [scraperStartedAt, setScraperStartedAt] = useState<number | null>(null);
+  const [importedJobUrls, setImportedJobUrls] = useState<Set<string>>(new Set());
   const chatBottomRef = useRef<HTMLDivElement>(null);
   const newChatRef = useRef(false);
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -444,12 +445,19 @@ export function AgentChatStarter() {
     if (!jobsInMessage || jobsInMessage.length === 0) return;
     setImportingJobs(true);
     await Promise.all(jobsInMessage.map(saveJobDirect));
+    // Mark all as imported so UI updates
+    setImportedJobUrls(prev => {
+      const next = new Set(prev);
+      for (const j of jobsInMessage) if (j.url) next.add(j.url);
+      return next;
+    });
     setImportingJobs(false);
   }
 
   async function handleImportSingleInMessage(job: JobPreview) {
     setImportingJobs(true);
     await saveJobDirect(job);
+    if (job.url) setImportedJobUrls(prev => new Set(prev).add(job.url!));
     setImportingJobs(false);
   }
 
@@ -979,6 +987,10 @@ export function AgentChatStarter() {
                 if (boundaryMatch) {
                   try {
                     messageJobs = JSON.parse(boundaryMatch[1].trim()) as JobPreview[];
+                    // Merge persisted import state so cards show "Imported" after Import All
+                    if (importedJobUrls.size > 0) {
+                      messageJobs = messageJobs.map(j => j.url && importedJobUrls.has(j.url) ? { ...j, isAlreadyImported: true } : j);
+                    }
                   } catch {
                     // Non-fatal: old messages may have malformed preview JSON — skip gracefully
                   }
@@ -1020,10 +1032,10 @@ export function AgentChatStarter() {
           {loading ? (
             <button
               onClick={stopGeneration}
-              className="flex h-9 w-9 items-center justify-center rounded-full border-2 border-red-500 bg-white text-red-500 transition-colors hover:bg-red-50"
+              className="flex h-9 w-9 items-center justify-center rounded-full border-2 border-cyan-600 bg-white text-cyan-600 transition-colors hover:bg-cyan-50"
               title="Stop generation"
             >
-              <span className="h-3.5 w-3.5 rounded-sm bg-red-500 block" />
+              <span className="h-3.5 w-3.5 rounded-sm bg-cyan-600 block" />
             </button>
           ) : (
             <button

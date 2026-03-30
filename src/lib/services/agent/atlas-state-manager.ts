@@ -6,7 +6,7 @@ import { agentProfileSyncStore } from "@/lib/services/agent/agent-profile-sync";
 const ATLAS_DIR = path.join(process.cwd(), "agents", "atlas");
 
 // Files that are personal to each user — stored in agents/atlas/users/{userId}/
-export const USER_SCOPED_FILES = new Set(["user_profile.md", "mind.md", "preferences.json"]);
+export const USER_SCOPED_FILES = new Set(["user_profile.md", "mind.md", "preferences.json", "cv_summary.md", "context_memory.md"]);
 
 function getUserDir(userId: string): string {
   return path.join(ATLAS_DIR, "users", userId);

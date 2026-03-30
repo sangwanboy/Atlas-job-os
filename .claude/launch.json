@@ -1,0 +1,19 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "Next.js Dev Server",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "port": 3000,
+      "autoPort": true
+    },
+    {
+      "name": "Browser Service",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "browser-server"],
+      "port": 3002,
+      "autoPort": true
+    }
+  ]
+}

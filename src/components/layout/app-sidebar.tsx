@@ -81,10 +81,61 @@ export function AppSidebar({ mobileOpen, onClose, collapsed, onToggleCollapse }:
       {/* Desktop sidebar */}
       <aside
         className={`hidden lg:flex flex-col border-r border-white/60 bg-white/50 backdrop-blur lg:sticky lg:top-0 lg:h-screen overflow-hidden transition-all duration-300 ${
-          collapsed ? "w-0 p-0 border-0" : "w-[260px] p-5"
+          collapsed ? "w-[64px] py-5 px-2" : "w-[260px] p-5"
         }`}
       >
-        {!collapsed && (
+        {collapsed ? (
+          <div className="flex flex-col items-center gap-3 h-full">
+            <div className="w-full flex flex-col items-center gap-2">
+              <div className="rounded-xl border border-white/65 bg-white/70 py-2 px-1 shadow-sm flex items-center justify-center w-full">
+                <span className="text-sm font-black text-cyan-600">JO</span>
+              </div>
+              <button
+                onClick={onToggleCollapse}
+                title="Expand sidebar"
+                className="rounded-lg border border-white/60 bg-white/75 p-1.5 text-muted hover:bg-white hover:text-text transition-colors"
+              >
+                <PanelLeftOpen className="h-4 w-4" />
+              </button>
+            </div>
+            <nav className="mt-2 flex flex-col items-center gap-1 w-full">
+              {navItems.map((item) => {
+                const Icon = item.icon;
+                const active = pathname ? pathname === item.href || pathname.startsWith(`${item.href}/`) : false;
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    title={item.label}
+                    className={`flex items-center justify-center rounded-xl border p-2 w-full transition ${
+                      active
+                        ? "border-cyan-200/80 bg-cyan-50/80 text-slate-900"
+                        : "border-transparent text-muted hover:border-white/70 hover:bg-white/75 hover:text-text"
+                    }`}
+                  >
+                    <Icon className="h-4 w-4" />
+                  </Link>
+                );
+              })}
+              {isAdmin && (
+                <>
+                  <div className="w-full border-t border-white/40 my-1" />
+                  <Link
+                    href="/admin/users"
+                    title="Manage Users"
+                    className={`flex items-center justify-center rounded-xl border p-2 w-full transition ${
+                      pathname?.startsWith("/admin/users")
+                        ? "border-cyan-200/80 bg-cyan-50/80 text-slate-900"
+                        : "border-transparent text-muted hover:border-white/70 hover:bg-white/75 hover:text-text"
+                    }`}
+                  >
+                    <Users className="h-4 w-4" />
+                  </Link>
+                </>
+              )}
+            </nav>
+          </div>
+        ) : (
           <>
             <div className="flex items-start justify-between">
               <div className="rounded-2xl border border-white/65 bg-white/70 p-4 shadow-sm flex-1 mr-2">
@@ -143,11 +194,11 @@ export function AppSidebar({ mobileOpen, onClose, collapsed, onToggleCollapse }:
                 {isLoading && !runtime ? (
                   <div className="space-y-2 animate-pulse">
                     <div className="flex items-center justify-between mb-2">
-                      <div className="h-3 w-20 bg-slate-200 rounded" />
-                      <div className="h-3 w-24 bg-slate-200 rounded" />
+                      <div suppressHydrationWarning className="h-3 w-20 bg-slate-200 rounded" />
+                      <div suppressHydrationWarning className="h-3 w-24 bg-slate-200 rounded" />
                     </div>
-                    <div className="h-1.5 w-full rounded-full bg-slate-200" />
-                    <div className="h-3 w-28 bg-slate-200 rounded mt-2" />
+                    <div suppressHydrationWarning className="h-1.5 w-full rounded-full bg-slate-200" />
+                    <div suppressHydrationWarning className="h-3 w-28 bg-slate-200 rounded mt-2" />
                   </div>
                 ) : (
                   <>

@@ -2,9 +2,7 @@ import { NextResponse } from "next/server";
 import { exchangeCodeForTokens, getValidTokensHelper } from "@/lib/services/integration/gmail/oauth";
 import { prisma } from "@/lib/db";
 import { google } from "googleapis";
-
-// In production, we would get this from active session auth
-const HARDCODED_USER_ID = "cm7c10bsw000008ld6v3cct9q"; 
+import { auth } from "@/auth";
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
@@ -20,9 +18,15 @@ export async function GET(req: Request) {
     return NextResponse.redirect(`${appUrl}/settings?error=NoCodeProvided`);
   }
 
+  const session = await auth();
+  if (!session?.user?.id) {
+    return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/settings?error=Unauthorized`);
+  }
+  const userId = session.user.id;
+
   try {
     const tokens = await exchangeCodeForTokens(code);
-    
+
     // Fetch user email to verify identity and store visually
     const oauth2Client = await getValidTokensHelper(tokens.access_token!, tokens.refresh_token!, tokens.expiry_date || undefined);
     const gmail = google.gmail({ version: "v1", auth: oauth2Client });
@@ -36,12 +40,12 @@ export async function GET(req: Request) {
         where: {
           // @ts-expect-error
           userId_provider: {
-            userId: HARDCODED_USER_ID,
+            userId,
             provider: "google",
           },
         },
         create: {
-          userId: HARDCODED_USER_ID,
+          userId,
           provider: "google",
           // @ts-expect-error
           email: emailAddress,

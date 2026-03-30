@@ -32,6 +32,8 @@ export function GmailIntegrationPanel() {
   });
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [isDisconnecting, setIsDisconnecting] = useState(false);
   const [showApiConfig, setShowApiConfig] = useState(false);
   const searchParams = useSearchParams();
   const errorParam = searchParams?.get("error");
@@ -75,48 +77,48 @@ export function GmailIntegrationPanel() {
   }
 
   async function handleDisconnect() {
-    setIsLoading(true);
+    setIsDisconnecting(true);
     try {
       const res = await fetch("/api/integrations/gmail/disconnect", { method: "POST" });
-      if (res.ok) {
+      const data = await res.json();
+      if (res.ok && data.success) {
         setStatus({ connected: false });
+      } else {
+        console.error("Disconnect failed:", data.error);
+        alert(`Failed to disconnect: ${data.error ?? "Unknown error"}`);
       }
     } catch (err) {
       console.error("Failed to disconnect Gmail", err);
+      alert("Network error while disconnecting. Please try again.");
     } finally {
-      setIsLoading(false);
+      setIsDisconnecting(false);
     }
   }
 
   async function handleSync() {
-    setIsLoading(true);
+    setIsSyncing(true);
+    setStatus(prev => prev ? { ...prev, syncStatus: "SYNCING" } : prev);
     try {
-      const syncRes = await fetch("/api/integrations/gmail/sync", { method: "POST" });
-      const syncData = await syncRes.json();
-      
+      await fetch("/api/integrations/gmail/sync", { method: "POST" });
       const res = await fetch("/api/integrations/gmail/status");
-      if (res.ok) {
-        const newStatus = await res.json();
-        setStatus(newStatus);
-      }
+      if (res.ok) setStatus(await res.json());
     } catch (err) {
       console.error("Sync failed:", err);
-      // Try to reload status anyway
       try {
         const res = await fetch("/api/integrations/gmail/status");
         if (res.ok) setStatus(await res.json());
       } catch {}
     } finally {
-      setIsLoading(false);
+      setIsSyncing(false);
     }
   }
 
   if (isLoading) {
     return (
       <section className="panel p-6 animate-pulse">
-        <div className="h-6 w-48 rounded bg-white/60 mb-4" />
-        <div className="h-4 w-96 rounded bg-white/50 mb-6" />
-        <div className="h-20 w-full rounded-lg bg-white/40" />
+        <div suppressHydrationWarning className="h-6 w-48 rounded bg-white/60 mb-4" />
+        <div suppressHydrationWarning className="h-4 w-96 rounded bg-white/50 mb-6" />
+        <div suppressHydrationWarning className="h-20 w-full rounded-lg bg-white/40" />
       </section>
     );
   }
@@ -229,13 +231,13 @@ export function GmailIntegrationPanel() {
         <div className="flex items-center gap-3">
           {isConnected ? (
             <>
-              <button onClick={handleSync} disabled={status.syncStatus === "SYNCING"} className="rounded-lg border bg-panel px-4 py-2 text-sm font-semibold flex items-center gap-2 hover:bg-bg disabled:opacity-50 transition-all">
-                <RefreshCw className={`h-4 w-4 ${status.syncStatus === "SYNCING" ? "animate-spin" : ""}`} />
-                {status.syncStatus === "SYNCING" ? "Syncing..." : "Sync Now"}
+              <button onClick={handleSync} disabled={isSyncing || status.syncStatus === "SYNCING"} className="rounded-lg border bg-panel px-4 py-2 text-sm font-semibold flex items-center gap-2 hover:bg-bg disabled:opacity-50 transition-all">
+                <RefreshCw className={`h-4 w-4 ${isSyncing || status.syncStatus === "SYNCING" ? "animate-spin" : ""}`} />
+                {isSyncing || status.syncStatus === "SYNCING" ? "Syncing..." : "Sync Now"}
               </button>
-              <button onClick={handleDisconnect} className="rounded-lg border border-danger/50 text-danger px-4 py-2 text-sm font-semibold flex items-center gap-2 hover:bg-danger/10 transition-all">
-                <Unplug className="h-4 w-4" />
-                Disconnect
+              <button onClick={handleDisconnect} disabled={isDisconnecting} className="rounded-lg border border-danger/50 text-danger px-4 py-2 text-sm font-semibold flex items-center gap-2 hover:bg-danger/10 disabled:opacity-50 transition-all">
+                {isDisconnecting ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Unplug className="h-4 w-4" />}
+                {isDisconnecting ? "Disconnecting..." : "Disconnect"}
               </button>
             </>
           ) : (

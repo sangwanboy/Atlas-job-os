@@ -30,14 +30,42 @@ def _load_dynamic_selectors() -> dict:
 
 DYNAMIC_SELECTORS = _load_dynamic_selectors()
 
+# ── Blocked/verification page titles — never use these as job titles ──────────
+
+_BLOCKED_PAGE_TITLES = {
+    "additional verification required", "security verification", "security check",
+    "captcha", "sign in", "log in", "login", "access denied", "403 forbidden",
+    "404", "page not found", "just a moment", "checking your browser",
+    "please enable javascript", "authwall", "join linkedin",
+    "linkedin login", "linkedin: log in or sign up", "error", "blocked",
+    "human verification", "please verify", "verify you are human",
+    "are you a robot", "unusual traffic", "service unavailable",
+}
+
+def _is_blocked_page_title(raw: str) -> bool:
+    low = raw.lower().strip()
+    if low in _BLOCKED_PAGE_TITLES:
+        return True
+    return any(kw in low for kw in (
+        "verification", "captcha", "sign in", "log in", "blocked",
+        "authwall", "robot", "unusual traffic",
+    ))
+
+
 # ── User Agents ────────────────────────────────────────────────────────────────
 
 USER_AGENTS = [
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:125.0) Gecko/20100101 Firefox/125.0",
+    # Chrome 134/135 on Windows (current in 2026)
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36",
+    # Chrome 134/135 on macOS
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36",
+    # Edge on Windows (commonly used — helps avoid Chromium bot fingerprint)
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36 Edg/134.0.0.0",
+    # Firefox 136 on Windows
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:136.0) Gecko/20100101 Firefox/136.0",
 ]
 
 # ── Bezier curve mouse movement ────────────────────────────────────────────────
@@ -249,14 +277,43 @@ CARD_ROOT_SELS = {
 
 DETAIL_SELS = {
     "linkedin": {
-        "description": [".show-more-less-html__markup", ".jobs-description__content", ".jobs-box__html-content"],
-        "title":       ["h1.top-card-layout__title", "h1.jobs-unified-top-card__job-title", "h1"],
-        "company":     [".topcard__org-name-link", ".jobs-unified-top-card__company-name a"],
-        "location":    [".topcard__flavor--bullet", ".jobs-unified-top-card__bullet"],
-        "salary":      [".compensation__salary", ".jobs-unified-top-card__job-insight"],
-        "job_type":    [".job-criteria__text--criteria", ".jobs-unified-top-card__job-insight span"],
-        "date_posted": ["span.posted-time-ago__text", ".jobs-unified-top-card__posted-date"],
-        "applicants":  [".num-applicants__caption", ".jobs-unified-top-card__applicant-count"],
+        "description": [
+            ".show-more-less-html__markup",
+            ".jobs-description__content",
+            ".jobs-box__html-content",
+            "div[class*='jobs-description' i]",
+            "article[class*='jobs-description' i]",
+            "div[id*='job-details']",
+            ".job-details-jobs-unified-top-card__job-description",
+            "div[class*='description' i]",
+        ],
+        "title":       ["h1.top-card-layout__title", "h1.jobs-unified-top-card__job-title",
+                        "h1.job-details-jobs-unified-top-card__job-title", "h1"],
+        "company":     [".topcard__org-name-link", ".jobs-unified-top-card__company-name a",
+                        ".job-details-jobs-unified-top-card__company-name a",
+                        "a[class*='company' i]"],
+        "location":    [".topcard__flavor--bullet", ".jobs-unified-top-card__bullet",
+                        ".job-details-jobs-unified-top-card__bullet",
+                        "span[class*='location' i]"],
+        "salary":      [
+            # 2024/2025 LinkedIn selectors (they rotate class names)
+            "div[class*='compensation' i]",
+            "span[class*='compensation' i]",
+            ".compensation__salary",
+            ".jobs-unified-top-card__job-insight--salary",
+            "li[class*='salary' i]",
+            "span[class*='salary' i]",
+            "div[class*='salary' i]",
+            ".job-details-jobs-unified-top-card__job-insight",
+            ".jobs-unified-top-card__job-insight",
+            # Fallback: look for £/$/€ in insight spans
+        ],
+        "job_type":    [".job-criteria__text--criteria", ".jobs-unified-top-card__job-insight span",
+                        "li[class*='employment' i]", "span[class*='employment' i]"],
+        "date_posted": ["span.posted-time-ago__text", ".jobs-unified-top-card__posted-date",
+                        "span[class*='posted' i]"],
+        "applicants":  [".num-applicants__caption", ".jobs-unified-top-card__applicant-count",
+                        "span[class*='applicant' i]"],
         "apply_url":   ["a.apply-button", "a[data-control-name='jobdetails_topcard_inapply']"],
     },
     "indeed": {
@@ -271,15 +328,36 @@ DETAIL_SELS = {
         "apply_url":   ["a#applyButtonLinkContainer", "a[data-testid='applyButton']"],
     },
     "reed": {
-        "description": ["div[data-qa='job-description']", "div.description-pane", "div[itemprop='description']"],
+        "description": ["div[data-qa='job-description']", "div.description-pane", "div[itemprop='description']",
+                        "div[class*='description' i]"],
         "title":       ["h1[data-qa='job-title']", "h1.job-title", "h1"],
-        "company":     ["a[data-qa='recruiter-link']", "span[data-qa='recruiter-name']"],
-        "location":    ["span[data-qa='job-location']", "li[data-qa='job-card-location']"],
-        "salary":      ["span[data-qa='salary']", "li[data-qa='job-card-salary']"],
-        "job_type":    ["li[data-qa='job-card-type']", "span[data-qa='job-type']"],
-        "date_posted": ["span[data-qa='posted-date']", "time"],
+        "company":     ["a[data-qa='recruiter-link']", "span[data-qa='recruiter-name']",
+                        "span[class*='company' i]"],
+        "location":    ["span[data-qa='job-location']", "li[data-qa='job-card-location']",
+                        "span[class*='location' i]"],
+        "salary":      ["span[data-qa='salary']", "li[data-qa='job-card-salary']",
+                        "li.salary", "span.salary", "div[data-qa='salary']",
+                        "li[class*='salary' i]", "span[class*='salary' i]",
+                        "div[class*='salary' i]"],
+        "job_type":    ["li[data-qa='job-card-type']", "span[data-qa='job-type']",
+                        "li[class*='type' i]", "span[class*='job-type' i]"],
+        "date_posted": ["span[data-qa='posted-date']", "time", "span[class*='date' i]"],
         "applicants":  ["span[data-qa='applicants']"],
         "apply_url":   ["a[data-qa='apply-button']", "a[data-testid='apply']"],
+    },
+    "cvlibrary": {
+        "description": ["div[class*='description' i]", "div[itemprop='description']",
+                        "section[class*='description' i]", "div#job-description"],
+        "title":       ["h1[class*='title' i]", "h1"],
+        "company":     ["span[class*='company' i]", "a[class*='company' i]", "div[class*='company' i]"],
+        "location":    ["span[class*='location' i]", "div[class*='location' i]"],
+        "salary":      ["li[class*='salary' i]", "span[class*='salary' i]", "div[class*='salary' i]",
+                        "li[data-bind*='salary' i]", "span[data-bind*='salary' i]",
+                        "p[class*='salary' i]"],
+        "job_type":    ["li[class*='type' i]", "span[class*='type' i]", "span[class*='employment' i]"],
+        "date_posted": ["time", "span[class*='date' i]", "li[class*='date' i]"],
+        "applicants":  [],
+        "apply_url":   ["a[class*='apply' i]", "button[class*='apply' i]"],
     },
     "generic": {
         "description": ["div[class*='description' i]", "div[class*='job-detail' i]", "section[class*='description' i]", "div[itemprop='description']"],
@@ -346,12 +424,42 @@ Object.defineProperty(navigator, 'mimeTypes', {
 Object.defineProperty(navigator, 'languages', { get: () => ['en-GB', 'en-US', 'en'] });
 Object.defineProperty(navigator, 'language',  { get: () => 'en-GB' });
 
-// ── Hardware concurrency / device memory ───────────────────────────────────
-Object.defineProperty(navigator, 'hardwareConcurrency', { get: () => 8 });
-try { Object.defineProperty(navigator, 'deviceMemory', { get: () => 8 }); } catch(_) {}
+// ── Hardware concurrency / device memory (varied to avoid fingerprint clustering)
+const _hwCores = [4, 6, 8, 12, 16][Math.floor(Math.random() * 5)];
+const _hwMem   = [4, 8, 16][Math.floor(Math.random() * 3)];
+Object.defineProperty(navigator, 'hardwareConcurrency', { get: () => _hwCores });
+try { Object.defineProperty(navigator, 'deviceMemory', { get: () => _hwMem }); } catch(_) {}
 
 // ── Platform ───────────────────────────────────────────────────────────────
 Object.defineProperty(navigator, 'platform', { get: () => 'Win32' });
+
+// ── Screen — match viewport to avoid headless tell (screen > viewport in real browsers)
+try {
+    Object.defineProperty(screen, 'width',       { get: () => window.innerWidth  + Math.floor(Math.random() * 80) + 20 });
+    Object.defineProperty(screen, 'height',      { get: () => window.innerHeight + Math.floor(Math.random() * 80) + 80 });
+    Object.defineProperty(screen, 'availWidth',  { get: () => screen.width });
+    Object.defineProperty(screen, 'availHeight', { get: () => screen.height - 40 });
+    Object.defineProperty(screen, 'colorDepth',  { get: () => 24 });
+    Object.defineProperty(screen, 'pixelDepth',  { get: () => 24 });
+} catch(_) {}
+
+// ── Window outer dimensions ────────────────────────────────────────────────
+try {
+    Object.defineProperty(window, 'outerWidth',  { get: () => window.innerWidth  + 16 });
+    Object.defineProperty(window, 'outerHeight', { get: () => window.innerHeight + 88 });
+} catch(_) {}
+
+// ── Network connection (real browsers expose this) ─────────────────────────
+try {
+    Object.defineProperty(navigator, 'connection', {
+        get: () => ({
+            effectiveType: '4g',
+            rtt: 50 + Math.floor(Math.random() * 30),
+            downlink: 5 + Math.random() * 5,
+            saveData: false,
+        })
+    });
+} catch(_) {}
 
 // ── Permissions ────────────────────────────────────────────────────────────
 const _origPerms = window.navigator.permissions.query.bind(navigator.permissions);
@@ -372,13 +480,29 @@ HTMLCanvasElement.prototype.toDataURL = function(type, ...args) {
     return _origToDataURL.call(this, type, ...args);
 };
 
-// ── WebGL vendor/renderer ──────────────────────────────────────────────────
+// ── WebGL vendor/renderer (randomised to avoid GPU fingerprint clustering) ─
+const _webglGpus = [
+    ['Intel Inc.', 'Intel Iris OpenGL Engine'],
+    ['Intel Inc.', 'Intel(R) UHD Graphics 620'],
+    ['NVIDIA Corporation', 'NVIDIA GeForce GTX 1650 OpenGL Engine'],
+    ['AMD', 'AMD Radeon RX 580 OpenGL Engine'],
+];
+const _gpu = _webglGpus[Math.floor(Math.random() * _webglGpus.length)];
 const _origGetParam = WebGLRenderingContext.prototype.getParameter;
 WebGLRenderingContext.prototype.getParameter = function(param) {
-    if (param === 37445) return 'Intel Inc.';
-    if (param === 37446) return 'Intel Iris OpenGL Engine';
+    if (param === 37445) return _gpu[0];
+    if (param === 37446) return _gpu[1];
     return _origGetParam.call(this, param);
 };
+// Apply to WebGL2 as well
+try {
+    const _origGetParam2 = WebGL2RenderingContext.prototype.getParameter;
+    WebGL2RenderingContext.prototype.getParameter = function(param) {
+        if (param === 37445) return _gpu[0];
+        if (param === 37446) return _gpu[1];
+        return _origGetParam2.call(this, param);
+    };
+} catch(_) {}
 """
 
 async def launch_stealth_browser(playwright):
@@ -484,7 +608,10 @@ def _extract_skills(text: str) -> str:
         r"\b(Git|REST|GraphQL|gRPC|Microservices|Agile|Scrum|Kanban|TDD|BDD)\b",
         r"\b(customer service|cash handling|food safety|food hygiene|health and safety|teamwork|communication|leadership)\b",
         r"\b(management|budgeting|forecasting|planning|stakeholder|project management)\b",
-        r"\b(Excel|PowerPoint|Word|Tableau|Power BI|Looker|Salesforce|HubSpot|SAP)\b",
+        r"\b(Excel|PowerPoint|Word|Tableau|Power BI|Looker|Salesforce|HubSpot|SAP|SharePoint)\b",
+        r"\b(Adobe\s+(?:InDesign|Photoshop|Illustrator|XD|Premiere|After\s*Effects|Acrobat|Creative\s+Suite|Creative\s+Cloud|Lightroom|Audition|Animate|Dreamweaver|Rush|Fresco))\b",
+        r"\b(Figma|Sketch|InVision|Zeplin|Canva|Procreate|Affinity\s+(?:Designer|Photo|Publisher))\b",
+        r"\b(Final\s+Cut\s+Pro|DaVinci\s+Resolve|Blender|Cinema\s+4D|AutoCAD|SketchUp|3ds\s+Max)\b",
     ]
     found = []
     for pat in patterns:
@@ -564,9 +691,50 @@ async def scrape_detail_page(page, url: str, site: str) -> dict:
     No human-like delays — we already have the URL from the listing scan.
     """
     try:
-        await page.goto(url, wait_until="domcontentloaded", timeout=22000)
+        await page.goto(url, wait_until="domcontentloaded", timeout=30000)
+        # Give JS-rendered content time to paint — LinkedIn/Indeed render async, need more time
+        _detail_site = detect_site(url)
+        if _detail_site in ("linkedin", "indeed"):
+            await asyncio.sleep(random.uniform(3.0, 5.5))
+        else:
+            await asyncio.sleep(random.uniform(1.5, 2.5))
+
+        # ── Early bail-out: detect verification/captcha/login walls ───────────
+        page_title = (await page.title() or "").strip()
+        if _is_blocked_page_title(page_title):
+            return {"title": "", "company": "", "location": "", "salary": "",
+                    "job_type": "", "date_posted": "", "applicants": "", "apply_url": url,
+                    "description": "", "skills": "", "url": url,
+                    "_error": f"Blocked page detected: '{page_title}'"}
 
         sels = DETAIL_SELS.get(site, DETAIL_SELS["generic"])
+
+        # ── Expand truncated content (LinkedIn "Show more", etc.) ─────────────
+        if site == "linkedin":
+            for show_more_sel in [
+                "button.show-more-less-html__button--more",
+                "button[aria-label*='more' i]",
+                "button[class*='show-more' i]",
+                ".jobs-description__footer-button",
+            ]:
+                try:
+                    btn = await page.query_selector(show_more_sel)
+                    if btn:
+                        await btn.click()
+                        await asyncio.sleep(0.5)
+                        break
+                except Exception:
+                    pass
+        elif site in ("reed", "cvlibrary", "totaljobs", "cwjobs"):
+            for show_more_sel in ["button[class*='show-more' i]", "a[class*='show-more' i]", "button[class*='expand' i]"]:
+                try:
+                    btn = await page.query_selector(show_more_sel)
+                    if btn:
+                        await btn.click()
+                        await asyncio.sleep(0.4)
+                        break
+                except Exception:
+                    pass
 
         async def get_text_field(field_key):
             for sel in sels.get(field_key, []):
@@ -597,13 +765,26 @@ async def scrape_detail_page(page, url: str, site: str) -> dict:
         company     = await get_text_field("company")
         location    = await get_text_field("location")
         salary      = await get_text_field("salary")
+
+        # Fallback: extract salary from description if not found via selectors
+        if not salary and description:
+            sal_match = re.search(
+                r'(?:£|€|\$|USD|GBP|EUR)\s*[\d,]+(?:\s*[-–]\s*(?:£|€|\$)?[\d,]+)?(?:\s*(?:per\s+(?:annum|year|hour|day)|pa|p\.a\.))?'
+                r'|[\d,]+\s*(?:£|€|\$)(?:\s*[-–]\s*[\d,]+\s*(?:£|€|\$))?(?:\s*(?:per\s+(?:annum|year|hour|day)|pa))?',
+                description, re.IGNORECASE
+            )
+            if sal_match:
+                salary = sal_match.group(0).strip()
+
         job_type    = await get_text_field("job_type")
         date_posted = await get_text_field("date_posted")
         applicants  = await get_text_field("applicants")
         apply_url   = await get_href_field("apply_url") or url
 
         if not title:
-            title = (await page.title() or "").split("|")[0].split("-")[0].strip()
+            raw_title = (await page.title() or "").split("|")[0].split("-")[0].strip()
+            if raw_title and not _is_blocked_page_title(raw_title) and 3 < len(raw_title) < 120:
+                title = raw_title
 
         return {
             "title":       title,
@@ -626,7 +807,81 @@ async def scrape_detail_page(page, url: str, site: str) -> dict:
 
 # ── Main crawl orchestrator ────────────────────────────────────────────────────
 
-async def crawl_site(url: str, query: str) -> dict:
+async def _wait_for_human_solve(pw, url: str, timeout_s: int = 180) -> bool:
+    """
+    Open a VISIBLE browser window so the user can solve a CAPTCHA/verification.
+    Polls every 2s until the page leaves the blocked state or timeout.
+    Returns True if solved, False if timed out.
+    """
+    print(f"[Atlas Scraper] ⚠️  CAPTCHA/verification detected. Opening browser window — please solve it to continue.", file=sys.stderr, flush=True)
+    ua = random.choice(USER_AGENTS)
+    ctx = None
+    try:
+        ctx = await pw.chromium.launch_persistent_context(
+            _PROFILE_DIR,
+            headless=False,
+            args=["--no-sandbox", "--disable-blink-features=AutomationControlled", "--lang=en-GB"],
+            user_agent=ua,
+            locale="en-GB",
+            timezone_id="Europe/London",
+        )
+        page = await ctx.new_page()
+        await page.goto(url, wait_until="domcontentloaded", timeout=30000)
+
+        deadline = asyncio.get_event_loop().time() + timeout_s
+        while asyncio.get_event_loop().time() < deadline:
+            await asyncio.sleep(2)
+            try:
+                title = (await page.title() or "").strip()
+                current_url = page.url
+            except Exception:
+                break
+            if not _is_blocked_page_title(title) and title:
+                print(f"[Atlas Scraper] ✅ Verification passed — resuming headless scrape.", file=sys.stderr, flush=True)
+                return True
+            # Also check if user navigated away from verification page
+            if "linkedin.com/jobs" in current_url or "jobs" in current_url:
+                if not _is_blocked_page_title(title):
+                    print(f"[Atlas Scraper] ✅ Navigation detected — resuming headless scrape.", file=sys.stderr, flush=True)
+                    return True
+
+        print(f"[Atlas Scraper] ⏱  CAPTCHA solve timeout after {timeout_s}s.", file=sys.stderr, flush=True)
+        return False
+    except Exception as e:
+        print(f"[Atlas Scraper] Headful browser error: {e}", file=sys.stderr, flush=True)
+        return False
+    finally:
+        if ctx:
+            try:
+                await ctx.close()
+            except Exception:
+                pass
+
+
+_WARMUP_URLS = {
+    "linkedin": "https://www.google.com/search?q=linkedin+jobs",
+    "indeed":   "https://www.google.com/search?q=indeed+jobs+uk",
+}
+
+async def _warmup_navigation(page, site: str):
+    """
+    Visit a neutral referrer page before the job board to simulate organic navigation.
+    This sets a realistic Referer header and warms up browser history state.
+    """
+    warmup = _WARMUP_URLS.get(site)
+    if not warmup:
+        return
+    try:
+        await page.goto(warmup, wait_until="domcontentloaded", timeout=15000)
+        await asyncio.sleep(random.uniform(1.5, 3.0))
+        # Light scroll — looks like reading the search results
+        await human_scroll(page, random.randint(150, 350))
+        await asyncio.sleep(random.uniform(0.8, 1.8))
+    except Exception:
+        pass  # Warm-up is best-effort
+
+
+async def crawl_site(url: str, query: str, headful_on_block: bool = False) -> dict:
     site = detect_site(url)
 
     try:
@@ -644,12 +899,41 @@ async def crawl_site(url: str, query: str) -> dict:
             if stealth_fn:
                 await stealth_fn(page)
 
+            # ── Warm-up: visit Google first for LinkedIn/Indeed (sets Referer + history)
+            if site in ("linkedin", "indeed"):
+                await _warmup_navigation(page, site)
+
             # ── Step 1: Open listing page ──────────────────────────────────────
             await page.goto(url, wait_until="domcontentloaded", timeout=30000)
-            await asyncio.sleep(random.uniform(2.5, 5.0))
+            # LinkedIn/Indeed need longer initial settle — they render async after load
+            if site in ("linkedin", "indeed"):
+                await asyncio.sleep(random.uniform(4.0, 7.0))
+            else:
+                await asyncio.sleep(random.uniform(2.5, 5.0))
+
+            # ── Blocked page detection at listing level ────────────────────────
+            listing_title = (await page.title() or "").strip()
+            if _is_blocked_page_title(listing_title):
+                if headful_on_block:
+                    await ctx.close()
+                    solved = await _wait_for_human_solve(pw, url)
+                    if not solved:
+                        return {"success": False, "error": f"CAPTCHA/verification timeout on {site}. Please try again.", "site": site}
+                    # Relaunch headless with the now-authenticated persistent profile
+                    ctx, stealth_fn = await launch_stealth_browser(pw)
+                    page = await ctx.new_page()
+                    if stealth_fn:
+                        await stealth_fn(page)
+                    await page.goto(url, wait_until="domcontentloaded", timeout=30000)
+                    await asyncio.sleep(random.uniform(2.5, 4.0))
+                else:
+                    return {"success": False, "error": f"Blocked by {site}: '{listing_title}'. Run with --headful-on-block to solve in browser.", "site": site}
 
             # Extra wait for JS-heavy sites that render cards after initial load
-            if site not in ("linkedin", "indeed"):
+            if site in ("linkedin", "indeed"):
+                # Already waited above — do a short extra settle for lazy content
+                await asyncio.sleep(random.uniform(1.5, 3.0))
+            else:
                 await asyncio.sleep(random.uniform(2.0, 3.5))
 
             # Natural scroll to reveal lazy-loaded cards
@@ -720,8 +1004,11 @@ async def crawl_site(url: str, query: str) -> dict:
                     # Re-score using full detail data (replaces coarse card score)
                     enriched_job["score"] = compute_final_score(enriched_job, query)
                     enriched.append(enriched_job)
-                    # Natural pause between jobs — looks like human reading time
-                    await asyncio.sleep(random.uniform(1.8, 4.0))
+                    # Natural pause between jobs — LinkedIn/Indeed rate-limit on rapid navigation
+                    if site in ("linkedin", "indeed"):
+                        await asyncio.sleep(random.uniform(3.5, 7.0))
+                    else:
+                        await asyncio.sleep(random.uniform(1.8, 4.0))
                 else:
                     # No detail URL: score from card data only
                     card_job = {
@@ -757,6 +1044,8 @@ async def crawl_site(url: str, query: str) -> dict:
 async def main():
     parser = argparse.ArgumentParser(description="Atlas human-like job scraper")
     parser.add_argument("--query", default="", help="Search query for relevance scoring")
+    parser.add_argument("--headful-on-block", action="store_true",
+                        help="Open a visible browser window when a CAPTCHA/verification page is detected so the user can solve it manually")
     parser.add_argument("urls", nargs="*", help="Job board URLs to scrape")
     args = parser.parse_args()
 
@@ -764,11 +1053,12 @@ async def main():
         print(json.dumps({"success": False, "error": "No URL provided"}))
         return
 
-    query = args.query
-    urls  = args.urls
+    query           = args.query
+    urls            = args.urls
+    headful_on_block = args.headful_on_block
 
     if len(urls) == 1:
-        result = await crawl_site(urls[0], query)
+        result = await crawl_site(urls[0], query, headful_on_block=headful_on_block)
         print(json.dumps(result))
         return
 
@@ -776,7 +1066,7 @@ async def main():
     all_jobs = []
     errors   = []
     for url in urls:
-        r = await crawl_site(url, query)
+        r = await crawl_site(url, query, headful_on_block=headful_on_block)
         if r.get("success"):
             all_jobs.extend(r.get("jobs", []))
         else:

@@ -1,0 +1,15 @@
+{
+  "excluded_roles": [
+    "Sales Assistant",
+    "Retail",
+    "Sales"
+  ],
+  "preferred_titles": [
+    "Visual Artist",
+    "Graphic Designer",
+    "Video Editor",
+    "Content Creator",
+    "Motion Graphics Designer",
+    "UX/UI Designer"
+  ]
+}

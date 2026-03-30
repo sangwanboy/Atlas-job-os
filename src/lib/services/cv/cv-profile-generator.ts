@@ -18,6 +18,11 @@ export type ProfileGenerationResult = {
 
 const PROFILE_SYSTEM_PROMPT = `You are an expert career coach and CV analyst. Your task is to read a CV/resume and extract structured information to build a user profile that will be used by an AI job-search assistant named Atlas.
 
+CRITICAL EXTRACTION RULES:
+- Extract EVERY named tool, software, or technology mentioned anywhere in the CV into technicalSkills — including design tools (Adobe InDesign, Photoshop, Illustrator, After Effects, Premiere, Figma, Sketch, XD, Canva, etc.), office tools (Excel, Word, PowerPoint), coding languages, frameworks, databases, cloud platforms, and any other software.
+- Do NOT omit tools just because they seem non-technical. A Graphic Designer's Adobe InDesign is as important as a Developer's Python.
+- Scan the ENTIRE CV text — skills may appear in the Skills section, job descriptions, project summaries, or any other section.
+
 Output a SINGLE JSON object with this exact structure (no markdown fences, just raw JSON):
 {
   "name": "Full name of candidate",
@@ -59,7 +64,7 @@ async function generateProfileViaVertex(cvText: string): Promise<string> {
 }
 
 export class CvProfileGenerator {
-  static async generateAndSave(cvText: string, fileName: string): Promise<ProfileGenerationResult> {
+  static async generateAndSave(cvText: string, fileName: string, userId?: string): Promise<ProfileGenerationResult> {
     try {
       const rawJson = await generateProfileViaVertex(cvText);
 
@@ -83,19 +88,28 @@ export class CvProfileGenerator {
       const upgradeTips = (parsed.upgradeTips as string[]) || [];
       const summary = (parsed.summary as string) || "Profile extracted from uploaded CV.";
 
-      // Write structured profile to user_profile.md
+      // Write structured profile to user_profile.md (per-user if userId provided)
       const timestampedProfile = `${profileMarkdown}\n\n---\n*Profile last updated from CV: ${fileName} at ${new Date().toISOString()}*\n`;
-      await atlasState.writeText(ATLAS_FILES.userProfile, timestampedProfile);
+      if (userId) {
+        await atlasState.writeUserText(userId, ATLAS_FILES.userProfile, timestampedProfile);
+      } else {
+        await atlasState.writeText(ATLAS_FILES.userProfile, timestampedProfile);
+      }
 
-      // Write CV upgrade tips + summary to cv_summary.md
+      // Write CV upgrade tips + summary to cv_summary.md (per-user if userId provided)
       const cvSummaryMd = buildCvSummaryMarkdown(parsed, upgradeTips, fileName);
-      await atlasState.writeText(ATLAS_FILES.cvSummary, cvSummaryMd);
+      if (userId) {
+        await atlasState.writeUserText(userId, ATLAS_FILES.cvSummary, cvSummaryMd);
+      } else {
+        await atlasState.writeText(ATLAS_FILES.cvSummary, cvSummaryMd);
+      }
 
-      // Log to context memory
+      // Log to context memory (per-user)
       await continuitySyncService.logContextMemory(
         `CV profile updated from file: ${fileName}. Name: ${parsed.name || "Unknown"}. Skills: ${
           Array.isArray(parsed.technicalSkills) ? (parsed.technicalSkills as string[]).slice(0, 5).join(", ") : "N/A"
         }`,
+        userId,
       );
 
       return {
@@ -110,8 +124,12 @@ export class CvProfileGenerator {
 
       // Fallback: write a minimal stub — do NOT dump raw CV text which may be binary garbage
       const fallbackProfile = `# User Profile\n\n*Profile extraction failed for ${fileName}. Please re-process the file once Vertex AI is available.*\n\nError: ${message}`;
-      await atlasState.writeText(ATLAS_FILES.userProfile, fallbackProfile);
-      await continuitySyncService.logContextMemory(`CV profile (fallback) saved from: ${fileName}`);
+      if (userId) {
+        await atlasState.writeUserText(userId, ATLAS_FILES.userProfile, fallbackProfile);
+      } else {
+        await atlasState.writeText(ATLAS_FILES.userProfile, fallbackProfile);
+      }
+      await continuitySyncService.logContextMemory(`CV profile (fallback) saved from: ${fileName}`, userId);
 
       return {
         success: false,

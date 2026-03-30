@@ -1,0 +1,2 @@
+[2026-03-30T11:55:22.927Z] CV profile updated from file: 1774871699288_Tushar_Sangwan_CV_Kitchen.pdf. Name: Tushar Sangwan. Skills: Deep fryers, Kitchen equipment, Inventory management, Logistics scheduling, Customer record management
+[2026-03-30T13:13:45.949Z] CV profile updated from file: 1774876401776_Tushar_CV_Professional__1_.pdf. Name: Tushar Sangwan. Skills: Full-stack web development, E-commerce platforms, Website optimization, SEO, SEM

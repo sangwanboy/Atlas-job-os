@@ -1,13 +1,25 @@
 import { NextResponse } from "next/server";
 import { syncGmail } from "@/lib/services/integration/gmail/sync-engine";
+import { auth } from "@/auth";
 
-const HARDCODED_USER_ID = "cm7c10bsw000008ld6v3cct9q";
+export async function POST(req: Request) {
+  const session = await auth();
 
-// Forced recompile to pick up fast-fail offline timeout prevention
-export async function POST() {
+  // Accept userId from body for internal (server-side) agent calls that have no session cookie
+  let userId = session?.user?.id;
+  if (!userId) {
+    try {
+      const body = await req.json();
+      userId = body?.userId;
+    } catch {}
+  }
+
+  if (!userId) {
+    return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+  }
 
   try {
-    const result = await syncGmail(HARDCODED_USER_ID);
+    const result = await syncGmail(userId);
     if (!result.success) {
       return NextResponse.json({ success: false, error: result.error }, { status: 500 });
     }

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createUser, findUserByEmail } from "@/lib/services/auth/local-user-store";
+import { atlasState, ATLAS_FILES } from "@/lib/services/agent/atlas-state-manager";
 
 export async function POST(request: Request) {
   try {
@@ -33,6 +34,12 @@ export async function POST(request: Request) {
     }
 
     const user = await createUser(email, name, password);
+
+    // Create blank per-user Atlas profile so Atlas never falls back to shared data
+    await atlasState.writeUserText(user.id, ATLAS_FILES.userProfile,
+      `# User Profile: ${name}\n\nNo profile yet. Atlas will build this as we talk.\n`
+    );
+
     return NextResponse.json(
       { id: user.id, email: user.email, name: user.name, role: user.role },
       { status: 201 },

@@ -159,10 +159,11 @@ class GeminiApiProvider implements AiProvider {
     }
 
     const requestBody = {
+      system_instruction: { parts: [{ text: request.systemPrompt }] },
       contents: [
         {
           role: "user",
-          parts: [{ text: `${request.systemPrompt}\n\nUser: ${request.userPrompt}` }],
+          parts: [{ text: request.userPrompt }],
         },
       ],
       generationConfig: { temperature: request.temperature ?? 0.4 },
@@ -233,7 +234,8 @@ class GeminiApiProvider implements AiProvider {
     }
 
     const requestBody = {
-      contents: [{ role: "user", parts: [{ text: `${request.systemPrompt}\n\nUser: ${request.userPrompt}` }] }],
+      system_instruction: { parts: [{ text: request.systemPrompt }] },
+      contents: [{ role: "user", parts: [{ text: request.userPrompt }] }],
       generationConfig: { temperature: request.temperature ?? 0.4 },
     };
 
@@ -281,13 +283,7 @@ class GeminiApiProvider implements AiProvider {
               if (chunk) {
                 fullText += chunk;
                 // Split chunk into word tokens and emit with typing delay
-                const tokens = chunk.split(/(\s+)/);
-                for (const tok of tokens) {
-                  if (tok) {
-                    onToken(tok);
-                    await new Promise<void>((r) => setTimeout(r, 18));
-                  }
-                }
+                onToken(chunk);
               }
             } catch { /* malformed SSE chunk — skip */ }
           }

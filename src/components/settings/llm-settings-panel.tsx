@@ -30,37 +30,37 @@ type RuntimeDraftState = RuntimeSettingsUpdatePayload;
 
 function SettingsSkeleton() {
   return (
-    <div className="space-y-6 animate-pulse">
+    <div suppressHydrationWarning className="space-y-6 animate-pulse">
       <section className="panel p-6">
         <div className="flex items-start justify-between gap-4">
           <div className="space-y-2">
-            <div className="h-7 w-56 rounded bg-white/60" />
-            <div className="h-4 w-80 rounded bg-white/50" />
+            <div suppressHydrationWarning className="h-7 w-56 rounded bg-white/60" />
+            <div suppressHydrationWarning className="h-4 w-80 rounded bg-white/50" />
           </div>
-          <div className="h-10 w-36 rounded bg-white/60" />
+          <div suppressHydrationWarning className="h-10 w-36 rounded bg-white/60" />
         </div>
         <div className="mt-5 grid gap-4 md:grid-cols-2">
           <div className="space-y-2">
-            <div className="h-4 w-32 rounded bg-white/50" />
-            <div className="h-11 rounded-lg bg-white/60" />
+            <div suppressHydrationWarning className="h-4 w-32 rounded bg-white/50" />
+            <div suppressHydrationWarning className="h-11 rounded-lg bg-white/60" />
           </div>
           <div className="space-y-2">
-            <div className="h-4 w-32 rounded bg-white/50" />
-            <div className="h-11 rounded-lg bg-white/60" />
+            <div suppressHydrationWarning className="h-4 w-32 rounded bg-white/50" />
+            <div suppressHydrationWarning className="h-11 rounded-lg bg-white/60" />
           </div>
         </div>
       </section>
 
       <section className="panel p-6">
         <div className="space-y-2">
-          <div className="h-6 w-56 rounded bg-white/60" />
-          <div className="h-4 w-96 rounded bg-white/50" />
+          <div suppressHydrationWarning className="h-6 w-56 rounded bg-white/60" />
+          <div suppressHydrationWarning className="h-4 w-96 rounded bg-white/50" />
         </div>
         <div className="mt-4 grid gap-3 md:grid-cols-4">
           {Array.from({ length: 4 }).map((_, index) => (
-            <div key={index} className="rounded-lg border bg-bg p-3">
-              <div className="h-4 w-20 rounded bg-white/50" />
-              <div className="mt-2 h-6 w-28 rounded bg-white/60" />
+            <div suppressHydrationWarning key={index} className="rounded-lg border bg-bg p-3">
+              <div suppressHydrationWarning className="h-4 w-20 rounded bg-white/50" />
+              <div suppressHydrationWarning className="mt-2 h-6 w-28 rounded bg-white/60" />
             </div>
           ))}
         </div>
@@ -69,10 +69,10 @@ function SettingsSkeleton() {
       <section className="grid gap-4 lg:grid-cols-2">
         {Array.from({ length: 4 }).map((_, index) => (
           <article key={index} className="panel p-5">
-            <div className="h-6 w-40 rounded bg-white/60" />
-            <div className="mt-4 h-10 rounded-lg bg-white/60" />
-            <div className="mt-3 h-10 rounded-lg bg-white/50" />
-            <div className="mt-3 h-24 rounded-lg bg-white/50" />
+            <div suppressHydrationWarning className="h-6 w-40 rounded bg-white/60" />
+            <div suppressHydrationWarning className="mt-4 h-10 rounded-lg bg-white/60" />
+            <div suppressHydrationWarning className="mt-3 h-10 rounded-lg bg-white/50" />
+            <div suppressHydrationWarning className="mt-3 h-24 rounded-lg bg-white/50" />
           </article>
         ))}
       </section>

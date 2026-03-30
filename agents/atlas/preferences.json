@@ -1,16 +1,15 @@
 {
-  "preferred_name": "Tushar",
   "preferred_titles": [
     "Software Development Engineer",
-    "Junior Software Engineer",
-    "New Grad Software Engineer",
-    "Web Developer",
-    "Front End Developer"
+    "Security Officer",
+    "Warehouse Operative",
+    "Staff Nurse",
+    "Junior Software Engineer"
   ],
   "preferred_locations": [
     "London",
     "Coventry",
-    "Manchester"
-  ],
-  "recency_preference": "past-month"
+    "Manchester",
+    "United Kingdom"
+  ]
 }

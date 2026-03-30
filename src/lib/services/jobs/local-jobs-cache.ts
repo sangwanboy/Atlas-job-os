@@ -15,7 +15,10 @@ export type LocalJobRecord = {
   source: string;
   postedAt: string;
   sourceUrl?: string;
+  discoveredAt?: string;
 };
+
+const TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 const MEMORY_DIR = path.join(process.cwd(), "project_memory");
 const JOBS_FILE = path.join(MEMORY_DIR, "local_jobs.json");
@@ -49,7 +52,14 @@ function writeJobs(jobs: LocalJobRecord[]) {
 
 export const localJobsCache = {
   list(): LocalJobRecord[] {
-    return readJobs();
+    const all = readJobs();
+    const now = Date.now();
+    const fresh = all.filter(j => {
+      if (!j.discoveredAt) return true; // legacy entries kept
+      return now - new Date(j.discoveredAt).getTime() < TTL_MS;
+    });
+    if (fresh.length !== all.length) writeJobs(fresh); // auto-purge stale
+    return fresh;
   },
   upsert(job: LocalJobRecord): void {
     const cache = readJobs();
@@ -63,12 +73,13 @@ export const localJobsCache = {
   },
   upsertMany(jobs: LocalJobRecord[]): void {
     const cache = readJobs();
+    const now = new Date().toISOString();
     for (const job of jobs) {
       const index = cache.findIndex((item) => item.id === job.id);
       if (index >= 0) {
-        cache[index] = job;
+        cache[index] = { ...job, discoveredAt: cache[index].discoveredAt ?? now };
       } else {
-        cache.unshift(job);
+        cache.unshift({ ...job, discoveredAt: now });
       }
     }
     writeJobs(cache);

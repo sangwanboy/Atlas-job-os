@@ -7,120 +7,33 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-enum WorkMode {
-  REMOTE
-  HYBRID
-  ONSITE
-}
-
-enum EmploymentType {
-  FULL_TIME
-  PART_TIME
-  CONTRACT
-  INTERNSHIP
-  FREELANCE
-}
-
-enum Seniority {
-  INTERN
-  JUNIOR
-  MID
-  SENIOR
-  STAFF
-  LEAD
-  PRINCIPAL
-}
-
-enum ApplicationStatus {
-  NEW
-  SAVED
-  APPLIED
-  INTERVIEW
-  OFFER
-  REJECTED
-  ARCHIVED
-}
-
-enum OutreachStatus {
-  NONE
-  DRAFTED
-  SENT
-  REPLIED
-}
-
-enum Priority {
-  LOW
-  MEDIUM
-  HIGH
-  CRITICAL
-}
-
-enum FollowUpStatus {
-  PENDING
-  DONE
-  SNOOZED
-  CANCELLED
-}
-
-enum MessageRole {
-  SYSTEM
-  USER
-  ASSISTANT
-  TOOL
-}
-
-enum AgentStatus {
-  ACTIVE
-  INACTIVE
-}
-
-enum AiProvider {
-  OPENAI
-  ANTHROPIC
-  GEMINI
-}
-
-enum MemoryKind {
-  SHORT_TERM
-  WORKING
-  SESSION
-  LONG_TERM
-  STRUCTURED
-  SUMMARY
-}
-
-enum Role {
-  USER
-  ADMIN
-}
-
 model User {
   id                  String               @id @default(cuid())
   email               String               @unique
   name                String?
-  passwordHash        String?
   emailVerified       DateTime?
   image               String?
   role                Role                 @default(USER)
   createdAt           DateTime             @default(now())
   updatedAt           DateTime             @updatedAt
+  passwordHash        String?
   accounts            Account[]
-  sessions            Session[]
-  Authenticator       Authenticator[]
-  preferences         UserPreference?
-  resumes             Resume[]
-  jobs                Job[]
-  recruiters          Recruiter[]
-  integrations        IntegrationAccount[]
-  imports             ImportBatch[]
   activities          ActivityLog[]
-  snapshots           DashboardSnapshot[]
   agents              Agent[]
+  Authenticator       Authenticator[]
   chatSessions        ChatSession[]
-  followUpTasks       FollowUpTask[]
-  outreachMessages    OutreachMessage[]
+  snapshots           DashboardSnapshot[]
   emailThreads        EmailThread[]
+  followUpTasks       FollowUpTask[]
+  imports             ImportBatch[]
+  integrations        IntegrationAccount[]
   integrationSettings IntegrationSettings?
+  jobs                Job[]
+  outreachMessages    OutreachMessage[]
+  recruiters          Recruiter[]
+  resumes             Resume[]
+  sessions            Session[]
+  preferences         UserPreference?
 }
 
 model UserPreference {
@@ -177,11 +90,11 @@ model Recruiter {
   relationship  String?
   createdAt     DateTime          @default(now())
   updatedAt     DateTime          @updatedAt
-  user          User              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  company       Company?          @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  followUpTasks FollowUpTask[]
   jobs          Job[]
   outreach      OutreachMessage[]
-  followUpTasks FollowUpTask[]
+  company       Company?          @relation(fields: [companyId], references: [id])
+  user          User              @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, fullName])
 }
@@ -229,15 +142,15 @@ model Job {
   notes             String?
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
+  emailThreads      EmailThread[]
+  followUpTasks     FollowUpTask[]
+  company           Company?          @relation(fields: [companyId], references: [id])
+  recruiter         Recruiter?        @relation(fields: [recruiterId], references: [id])
+  sourceRef         JobSource?        @relation(fields: [sourceId], references: [id])
   user              User              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  sourceRef         JobSource?        @relation(fields: [sourceId], references: [id], onDelete: SetNull)
-  company           Company?          @relation(fields: [companyId], references: [id], onDelete: SetNull)
-  recruiter         Recruiter?        @relation(fields: [recruiterId], references: [id], onDelete: SetNull)
   scores            JobScore[]
   tags              JobTagOnJob[]
   outreachMessages  OutreachMessage[]
-  followUpTasks     FollowUpTask[]
-  emailThreads      EmailThread[]
 
   @@unique([userId, source, externalId])
   @@index([userId, createdAt])
@@ -276,9 +189,9 @@ model OutreachMessage {
   sentAt           DateTime?
   createdAt        DateTime       @default(now())
   updatedAt        DateTime       @updatedAt
+  job              Job?           @relation(fields: [jobId], references: [id])
+  recruiter        Recruiter?     @relation(fields: [recruiterId], references: [id])
   user             User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  job              Job?           @relation(fields: [jobId], references: [id], onDelete: SetNull)
-  recruiter        Recruiter?     @relation(fields: [recruiterId], references: [id], onDelete: SetNull)
 
   @@index([userId, status, createdAt])
 }
@@ -293,9 +206,9 @@ model FollowUpTask {
   note        String?
   createdAt   DateTime       @default(now())
   updatedAt   DateTime       @updatedAt
+  job         Job?           @relation(fields: [jobId], references: [id])
+  recruiter   Recruiter?     @relation(fields: [recruiterId], references: [id])
   user        User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  job         Job?           @relation(fields: [jobId], references: [id], onDelete: SetNull)
-  recruiter   Recruiter?     @relation(fields: [recruiterId], references: [id], onDelete: SetNull)
 
   @@index([userId, dueAt, status])
 }
@@ -399,22 +312,22 @@ model Agent {
   createdAt            DateTime                  @default(now())
   updatedAt            DateTime                  @updatedAt
   user                 User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  soul                 AgentSoul?
-  identity             AgentIdentity?
-  mindConfig           AgentMindConfig?
-  memoryProfile        AgentMemory?
-  chatSessions         ChatSession[]
   actionLogs           AgentActionLog[]
+  identity             AgentIdentity?
   instructions         AgentInstruction[]
+  memoryProfile        AgentMemory?
+  memoryChunks         AgentMemoryChunk[]
+  mindConfig           AgentMindConfig?
+  onboardingProfile    AgentOnboardingProfile?
+  profileSnapshots     AgentProfileSnapshot[]
+  soul                 AgentSoul?
   summaryMemories      AgentSummaryMemory[]
   toolPermissions      AgentToolPermission[]
-  onboardingProfile    AgentOnboardingProfile?
-  personalityTraits    PersonalityTrait[]
-  personalityLogs      PersonalityEvolutionLog[]
-  compactionLogs       MemoryCompactionLog[]
+  chatSessions         ChatSession[]
   loopRules            LoopPreventionRule[]
-  memoryChunks         AgentMemoryChunk[]
-  profileSnapshots     AgentProfileSnapshot[]
+  compactionLogs       MemoryCompactionLog[]
+  personalityLogs      PersonalityEvolutionLog[]
+  personalityTraits    PersonalityTrait[]
 
   @@unique([userId, key])
   @@index([userId, status])
@@ -521,9 +434,9 @@ model ChatSession {
   isArchived Boolean       @default(false)
   createdAt  DateTime      @default(now())
   updatedAt  DateTime      @updatedAt
-  user       User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  agent      Agent         @relation(fields: [agentId], references: [id], onDelete: Cascade)
   messages   ChatMessage[]
+  agent      Agent         @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  user       User          @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, updatedAt])
   @@index([agentId, updatedAt])
@@ -665,21 +578,21 @@ model LoopPreventionRule {
 model EmailThread {
   id              String         @id @default(cuid())
   userId          String
-  externalId      String         @unique // Gmail Thread ID
+  externalId      String         @unique
   jobId           String?
   subject         String?
   snippet         String?
   firstMessageAt  DateTime?
   lastMessageAt   DateTime?
   messageCount    Int            @default(0)
-  status          String         @default("REVIEW") // REVIEW, MATCHED, DISMISSED, SNOOZED
+  status          String         @default("REVIEW")
   matchConfidence Float?
   matchReason     String?
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
-  user            User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  job             Job?           @relation(fields: [jobId], references: [id], onDelete: SetNull)
   messages        EmailMessage[]
+  job             Job?           @relation(fields: [jobId], references: [id])
+  user            User           @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, status])
   @@index([jobId])
@@ -688,7 +601,7 @@ model EmailThread {
 model EmailMessage {
   id         String      @id @default(cuid())
   threadId   String
-  externalId String      @unique // Gmail Message ID
+  externalId String      @unique
   sender     String?
   recipients String[]    @default([])
   subject    String?
@@ -728,11 +641,9 @@ model Account {
   scope             String?
   id_token          String?
   session_state     String?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@id([provider, providerAccountId])
 }
@@ -741,10 +652,9 @@ model Session {
   sessionToken String   @unique
   userId       String
   expires      DateTime
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
 }
 
 model VerificationToken {
@@ -764,14 +674,100 @@ model Authenticator {
   credentialDeviceType String
   credentialBackedUp   Boolean
   transports           String?
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user                 User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@id([userId, credentialID])
 }
 
 model RuntimeSettingsRecord {
-  key       String   @id // userId cuid or "global"
+  key       String   @id
   data      Json
   updatedAt DateTime @updatedAt
+}
+
+enum WorkMode {
+  REMOTE
+  HYBRID
+  ONSITE
+}
+
+enum EmploymentType {
+  FULL_TIME
+  PART_TIME
+  CONTRACT
+  INTERNSHIP
+  FREELANCE
+}
+
+enum Seniority {
+  INTERN
+  JUNIOR
+  MID
+  SENIOR
+  STAFF
+  LEAD
+  PRINCIPAL
+}
+
+enum ApplicationStatus {
+  NEW
+  SAVED
+  APPLIED
+  INTERVIEW
+  OFFER
+  REJECTED
+  ARCHIVED
+}
+
+enum OutreachStatus {
+  NONE
+  DRAFTED
+  SENT
+  REPLIED
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum FollowUpStatus {
+  PENDING
+  DONE
+  SNOOZED
+  CANCELLED
+}
+
+enum MessageRole {
+  SYSTEM
+  USER
+  ASSISTANT
+  TOOL
+}
+
+enum AgentStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum AiProvider {
+  OPENAI
+  ANTHROPIC
+  GEMINI
+}
+
+enum MemoryKind {
+  SHORT_TERM
+  WORKING
+  SESSION
+  LONG_TERM
+  STRUCTURED
+  SUMMARY
+}
+
+enum Role {
+  USER
+  ADMIN
 }

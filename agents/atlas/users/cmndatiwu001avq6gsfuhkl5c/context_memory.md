@@ -1,0 +1,1 @@
+[2026-03-30T14:45:34.070Z] CV profile updated from file: 1774881889786_Resume__1_.pdf. Name: Sahil Sehrawat. Skills: Adobe Creative Suite, Adobe Photoshop, Adobe Illustrator, Adobe After Effects, Adobe Premiere Pro

@@ -1,12 +1,17 @@
 import { NextResponse } from "next/server";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
+import { auth } from "@/auth";
 
-const CV_DIR = path.join(process.cwd(), "uploads", "cv");
+const CV_BASE_DIR = path.join(process.cwd(), "uploads", "cv");
 
 // POST /api/cv/process?name=filename — Manually re-process a CV file
 export async function POST(req: Request) {
   try {
+    const session = await auth();
+    if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const userId = session.user.id;
+
     const { searchParams } = new URL(req.url);
     const name = searchParams.get("name");
 
@@ -15,9 +20,10 @@ export async function POST(req: Request) {
     }
 
     const safe = path.basename(name);
-    const filePath = path.join(CV_DIR, safe);
+    const userCvDir = path.join(CV_BASE_DIR, userId);
+    const filePath = path.join(userCvDir, safe);
 
-    if (!filePath.startsWith(CV_DIR)) {
+    if (!filePath.startsWith(userCvDir)) {
       return NextResponse.json({ error: "Invalid file name" }, { status: 400 });
     }
 
@@ -41,7 +47,7 @@ export async function POST(req: Request) {
       }, { status: 422 });
     }
 
-    const result = await CvProfileGenerator.generateAndSave(extraction.text, safe);
+    const result = await CvProfileGenerator.generateAndSave(extraction.text, safe, userId);
 
     return NextResponse.json({
       success: result.success,
@@ -61,9 +67,13 @@ export async function POST(req: Request) {
 // GET /api/cv/process/status — Check if a user profile exists and when it was last updated
 export async function GET() {
   try {
+    const session = await auth();
+    if (!session?.user?.id) return NextResponse.json({ hasProfile: false, lastUpdated: null });
+    const userId = session.user.id;
+
     const { atlasState, ATLAS_FILES } = await import("@/lib/services/agent/atlas-state-manager");
-    const profile = await atlasState.readText(ATLAS_FILES.userProfile, "");
-    const summary = await atlasState.readText(ATLAS_FILES.cvSummary, "");
+    const profile = await atlasState.readUserText(userId, ATLAS_FILES.userProfile, "");
+    const summary = await atlasState.readUserText(userId, ATLAS_FILES.cvSummary, "");
 
     const hasProfile = profile.length > 100;
     const lastUpdatedMatch = profile.match(/Profile last updated from CV: .+ at (.+)\*/);

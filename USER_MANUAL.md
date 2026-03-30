@@ -48,7 +48,7 @@ Type naturally — Atlas understands intent:
 5. Extracts full details: description, salary, job type, date posted, applicant count, apply link
 6. Presents them in the **Job Discovery Preview** box
 
-Atlas types its response word-by-word as it thinks — just like ChatGPT. You can click the **red stop button** at any time to cancel a response mid-generation.
+Atlas streams its response in real-time as it thinks. Simple messages like "hi" get a response in ~3 seconds. Job searches take longer (8–15s) due to browser automation. You can click the **cyan stop button** at any time to cancel a response mid-generation.
 
 ---
 
@@ -195,6 +195,15 @@ The **Memory Health** panel (bottom of the Agent Profile sidebar) shows which la
 
 ## Email Integration (Gmail)
 
+### Connecting Gmail
+Go to **Settings** → **Gmail Integration** → click **Connect Gmail**. This opens Google's OAuth consent screen where you grant read-only + draft access. Atlas never sends emails without your approval.
+
+### Syncing
+- Click **Sync Now** to manually pull new job-related email threads
+- **Auto-attach Threads** — automatically links incoming emails to matching jobs in your pipeline
+- **Draft-First Mode** — Atlas generates reply drafts for your review, never sends directly
+
+### Using Gmail with Atlas
 Tell Atlas:
 
 > "Sync my inbox"
@@ -205,6 +214,9 @@ Atlas scans your Gmail for job-related threads and links them to pipeline entrie
 Generate follow-up emails:
 
 > "Write a follow-up email for the Tata Technologies interview thread"
+
+### Disconnecting
+Go to **Settings** → click **Disconnect**. This revokes the OAuth token and removes all stored credentials. Your emails remain untouched in Gmail.
 
 ---
 
@@ -236,7 +248,7 @@ Import a broad set first, then tell Atlas:
 | Send message | Enter |
 | New line in message | Shift + Enter |
 | New chat | Click **+ New Chat** |
-| Stop generation | Click the **red circular button** (appears while Atlas is typing) |
+| Stop generation | Click the **cyan circular button** (appears while Atlas is typing) |
 
 ---
 
@@ -250,7 +262,7 @@ LinkedIn rate-limits scrapers periodically. Wait 2–3 minutes and try again, or
 Many employers don't publish salaries. Atlas shows "Not disclosed" rather than inventing a figure.
 
 **Atlas seems slow**
-Response time is 8–15 seconds for job searches (browser automation takes time). For chat-only messages you should see the first word appear within 2–3 seconds (Gemini time-to-first-token). The model in use (shown in Agent Profile) affects speed — Gemini Flash is the fastest option.
+Simple conversational messages (greetings, questions) respond in ~3 seconds using a lightweight fast-path. Job searches take 8–15 seconds due to browser automation. If Atlas feels slow on simple messages, check the model in use (shown in Agent Profile) — Gemini Flash is the fastest option.
 
 **Atlas shows `<continuity_update>` or JSON in the chat**
 This was a known bug (fixed). Update to the latest version — internal sync blocks are now stripped from the stream before display.
@@ -270,7 +282,8 @@ User chat → Next.js API (immediate status flush)
                     [history + continuity in parallel]
                               ↓
                     Gemini (Vertex AI) ← CV profile + memory layers
-                    [SSE streaming → word-by-word tokens]
+                    [SSE streaming with system_instruction separation]
+                    [Fast-path: lightweight prompt for simple messages]
                     [<continuity_update> blocks filtered in real-time]
                               ↓
                     Tool: browser_extract_jobs

@@ -442,3 +442,24 @@
 [2026-03-28T00:00:10.000Z] PER_USER_ATLAS_MEMORY: user_profile.md, mind.md, preferences.json moved to agents/atlas/users/{userId}/ per-user directories. soul.md, identity.md, operating_rules.md, search.md stay shared (Atlas identity). AtlasStateManager now has readUserText/writeUserText/readUserJson/writeUserJson. hydrateTurnContext and syncLayersWithLlm accept userId param. All new users start with empty profile — Atlas learns from scratch per user.
 [2026-03-28T14:04:43.978Z] Updated mind.md via LLM continuity update.
 [2026-03-28T14:04:44.027Z] Updated preferences.json via LLM continuity update.
+[2026-03-30T05:30:00.000Z] PERF_FAST_PATH: Added isSimpleChat detection in conversation-orchestrator.ts — messages under 120 chars without tool keywords trigger lightweight prompt mode. maxToolRounds set to 1 for simple chats.
+[2026-03-30T05:30:01.000Z] PERF_LIGHTWEIGHT_PROMPT: prompt-composer.ts now accepts { lightweight: true } option — skips tool definitions, search guidelines, CV context, and heavy protocol instructions. ~1KB prompt instead of ~12KB for simple messages.
+[2026-03-30T05:30:02.000Z] PERF_SYSTEM_INSTRUCTION: provider.ts now uses Gemini's proper system_instruction field instead of concatenating system prompt into user content. Major latency reduction — API calls dropped from 36s to 3s.
+[2026-03-30T05:30:03.000Z] PERF_TYPING_DELAY_REMOVED: Removed 18ms artificial typing delay per token in chatStream (provider.ts). Chunks now emitted immediately as received from Gemini SSE.
+[2026-03-30T05:30:04.000Z] GMAIL_VERIFIED: Gmail sync tested end-to-end — Sync Now (updates timestamp), Disconnect (revokes token, shows Not Connected), Connect (redirects to OAuth). All working.
+[2026-03-30T05:30:05.000Z] DOCS_UPDATED: README.md and USER_MANUAL.md updated — corrected model references (gemini-3-flash-preview), scraper description (Patchright stealth), stop button color (cyan), response time (~3s for simple messages), Gmail section expanded.
+[2026-03-30T05:30:06.000Z] CONTEXT_MEMORY_PRESERVED: context_memory.md is agent-only (NOT injected into LLM prompt). recentContext is never set in hydrateTurnContext(). Never trim or cap this file.
+[2026-03-30T11:54:00.006Z] Updated mind.md via LLM continuity update.
+[2026-03-30T11:54:00.028Z] Updated user_profile.md via LLM continuity update.
+[2026-03-30T12:51:27.173Z] Updated mind.md via LLM continuity update.
+[2026-03-30T12:52:01.220Z] Updated mind.md via LLM continuity update.
+[2026-03-30T12:53:25.606Z] Updated mind.md via LLM continuity update.
+[2026-03-30T13:10:09.765Z] Updated mind.md via LLM continuity update.
+[2026-03-30T13:14:56.357Z] Updated mind.md via LLM continuity update.
+[2026-03-30T13:14:56.405Z] Updated user_profile.md via LLM continuity update.
+[2026-03-30T13:14:56.431Z] Updated preferences.json via LLM continuity update.
+[2026-03-30T14:37:07.894Z] Updated mind.md via LLM continuity update.
+[2026-03-30T14:47:39.696Z] Updated mind.md via LLM continuity update.
+[2026-03-30T14:47:39.739Z] Updated user_profile.md via LLM continuity update.
+[2026-03-30T14:47:39.773Z] Updated preferences.json via LLM continuity update.
+[2026-03-30T14:48:33.829Z] Updated mind.md via LLM continuity update.

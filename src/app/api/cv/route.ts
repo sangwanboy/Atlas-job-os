@@ -1,23 +1,31 @@
 import { NextResponse } from "next/server";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
+import { auth } from "@/auth";
 
-const CV_DIR = path.join(process.cwd(), "uploads", "cv");
-const METADATA_FILE = path.join(CV_DIR, "_metadata.json");
+const CV_BASE_DIR = path.join(process.cwd(), "uploads", "cv");
 
 export type CvTag = "professional" | "part-time" | "role-specific" | "general";
 
-async function readMetadata(): Promise<Record<string, { tag?: CvTag; label?: string }>> {
+function getUserCvDir(userId: string): string {
+  return path.join(CV_BASE_DIR, userId);
+}
+
+function getMetadataFile(userId: string): string {
+  return path.join(getUserCvDir(userId), "_metadata.json");
+}
+
+async function readMetadata(userId: string): Promise<Record<string, { tag?: CvTag; label?: string }>> {
   try {
-    const raw = await fs.readFile(METADATA_FILE, "utf-8");
+    const raw = await fs.readFile(getMetadataFile(userId), "utf-8");
     return JSON.parse(raw) as Record<string, { tag?: CvTag; label?: string }>;
   } catch {
     return {};
   }
 }
 
-async function writeMetadata(data: Record<string, { tag?: CvTag; label?: string }>) {
-  await fs.writeFile(METADATA_FILE, JSON.stringify(data, null, 2), "utf-8");
+async function writeMetadata(userId: string, data: Record<string, { tag?: CvTag; label?: string }>) {
+  await fs.writeFile(getMetadataFile(userId), JSON.stringify(data, null, 2), "utf-8");
 }
 
 const ALLOWED_EXTENSIONS = new Set([
@@ -38,12 +46,12 @@ const ALLOWED_TYPES = new Set([
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
 
-async function ensureCvDir() {
-  await fs.mkdir(CV_DIR, { recursive: true });
+async function ensureUserCvDir(userId: string) {
+  await fs.mkdir(getUserCvDir(userId), { recursive: true });
 }
 
 // Background: extract text from CV and update Atlas user profile
-async function processCvInBackground(fileName: string, filePath: string, ext: string): Promise<void> {
+async function processCvInBackground(fileName: string, filePath: string, ext: string, userId: string): Promise<void> {
   try {
     const { CvExtractor } = await import("@/lib/services/cv/cv-extractor");
     const { CvProfileGenerator } = await import("@/lib/services/cv/cv-profile-generator");
@@ -54,8 +62,8 @@ async function processCvInBackground(fileName: string, filePath: string, ext: st
       return;
     }
 
-    await CvProfileGenerator.generateAndSave(extraction.text, fileName);
-    console.log(`[CV] Profile updated from ${fileName} via ${extraction.method} (${extraction.charCount} chars)`);
+    await CvProfileGenerator.generateAndSave(extraction.text, fileName, userId);
+    console.log(`[CV] Profile updated for user ${userId} from ${fileName} via ${extraction.method} (${extraction.charCount} chars)`);
   } catch (err) {
     console.error(`[CV] Background processing failed for ${fileName}:`, err);
   }
@@ -63,16 +71,21 @@ async function processCvInBackground(fileName: string, filePath: string, ext: st
 
 export async function GET() {
   try {
-    await ensureCvDir();
+    const session = await auth();
+    if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const userId = session.user.id;
+
+    await ensureUserCvDir(userId);
+    const userCvDir = getUserCvDir(userId);
     const [entries, metadata] = await Promise.all([
-      fs.readdir(CV_DIR, { withFileTypes: true }),
-      readMetadata(),
+      fs.readdir(userCvDir, { withFileTypes: true }),
+      readMetadata(userId),
     ]);
     const files = await Promise.all(
       entries
         .filter((e) => e.isFile() && e.name !== "_metadata.json")
         .map(async (e) => {
-          const filePath = path.join(CV_DIR, e.name);
+          const filePath = path.join(userCvDir, e.name);
           const stat = await fs.stat(filePath);
           const ext = path.extname(e.name).toLowerCase();
           const meta = metadata[e.name] ?? {};
@@ -105,7 +118,12 @@ export async function GET() {
 
 export async function POST(req: Request) {
   try {
-    await ensureCvDir();
+    const session = await auth();
+    if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const userId = session.user.id;
+
+    await ensureUserCvDir(userId);
+    const userCvDir = getUserCvDir(userId);
 
     const formData = await req.formData();
     const file = formData.get("file") as File | null;
@@ -136,18 +154,18 @@ export async function POST(req: Request) {
     const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
     const timestamp = Date.now();
     const finalName = `${timestamp}_${safeName}`;
-    const savePath = path.join(CV_DIR, finalName);
+    const savePath = path.join(userCvDir, finalName);
 
     const buffer = Buffer.from(await file.arrayBuffer());
     await fs.writeFile(savePath, buffer);
     const stat = await fs.stat(savePath);
 
     // Fire-and-forget background processing: extract CV text → update user profile
-    void processCvInBackground(finalName, savePath, ext);
+    void processCvInBackground(finalName, savePath, ext, userId);
 
     return NextResponse.json({
       success: true,
-      processing: true, // Indicates background processing has started
+      processing: true,
       file: {
         name: finalName,
         originalName: file.name,
@@ -165,14 +183,18 @@ export async function POST(req: Request) {
 
 export async function PATCH(req: Request) {
   try {
+    const session = await auth();
+    if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const userId = session.user.id;
+
     const json = (await req.json()) as { name: string; tag?: CvTag; label?: string };
     const { name, tag, label } = json;
     if (!name) return NextResponse.json({ error: "Missing file name" }, { status: 400 });
 
     const safe = path.basename(name);
-    const metadata = await readMetadata();
+    const metadata = await readMetadata(userId);
     metadata[safe] = { ...metadata[safe], ...(tag ? { tag } : {}), ...(label !== undefined ? { label } : {}) };
-    await writeMetadata(metadata);
+    await writeMetadata(userId, metadata);
     return NextResponse.json({ success: true, name: safe, tag: metadata[safe].tag, label: metadata[safe].label });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Update failed";
@@ -182,6 +204,10 @@ export async function PATCH(req: Request) {
 
 export async function DELETE(req: Request) {
   try {
+    const session = await auth();
+    if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const userId = session.user.id;
+
     const { searchParams } = new URL(req.url);
     const name = searchParams.get("name");
 
@@ -190,16 +216,17 @@ export async function DELETE(req: Request) {
     }
 
     const safe = path.basename(name);
-    const filePath = path.join(CV_DIR, safe);
+    const userCvDir = getUserCvDir(userId);
+    const filePath = path.join(userCvDir, safe);
 
-    if (!filePath.startsWith(CV_DIR)) {
+    if (!filePath.startsWith(userCvDir)) {
       return NextResponse.json({ error: "Invalid file path" }, { status: 400 });
     }
 
     await fs.unlink(filePath);
-    const metadata = await readMetadata();
+    const metadata = await readMetadata(userId);
     delete metadata[safe];
-    await writeMetadata(metadata);
+    await writeMetadata(userId, metadata);
     return NextResponse.json({ success: true });
   } catch (err) {
     console.error("[CV API] DELETE error:", err);

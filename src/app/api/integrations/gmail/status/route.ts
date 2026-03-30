@@ -1,16 +1,18 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { localIntegrationCache as cache } from "@/lib/services/integration/gmail/local-integration-cache";
-
-const HARDCODED_USER_ID = "cm7c10bsw000008ld6v3cct9q";
+import { auth } from "@/auth";
 
 export async function GET() {
+  const session = await auth();
+  const userId = session?.user?.id;
+
   try {
     // @ts-ignore
-    const account = await prisma.integrationAccount.findUnique({
+    const account = userId ? await prisma.integrationAccount.findUnique({
       where: {
         userId_provider: {
-          userId: HARDCODED_USER_ID,
+          userId,
           provider: "google",
         },
       },
@@ -25,7 +27,7 @@ export async function GET() {
         // @ts-ignore
         syncError: true,
       },
-    });
+    }) : null;
 
     if (account) {
       return NextResponse.json({

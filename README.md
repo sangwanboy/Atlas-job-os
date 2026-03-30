@@ -13,8 +13,8 @@ A production-minded, full-stack SaaS application for intelligent job discovery, 
 | Language | TypeScript 5 |
 | Auth | NextAuth v5 (beta) — JWT + Credentials |
 | ORM | Prisma 6 + PostgreSQL |
-| AI Provider | Gemini via Vertex AI (service account) — `gemini-3.1-flash-lite-preview` default |
-| Job Scraping | Crawl4AI (Python, `JsonCssExtractionStrategy`) |
+| AI Provider | Gemini via Vertex AI (service account) — `gemini-3-flash-preview` default |
+| Job Scraping | Playwright + Patchright (Python, human-like stealth scraper) |
 | Browser Automation | Playwright (Chromium) |
 | Tables | TanStack React Table v8 |
 | Charts | Recharts |
@@ -136,7 +136,8 @@ npm run prisma:seed
 ### 6. Start the dev server
 
 ```bash
-npm run dev        # Next.js on port 3000
+npm run dev            # Next.js on port 3000
+npm run browser-server # Browser automation service on port 3002 (required for job scraping)
 ```
 
 ---
@@ -165,7 +166,7 @@ Admin users can manage all users at `/admin/users`:
 ## Features
 
 ### Job Discovery (Atlas Agent)
-The Atlas AI agent uses **Crawl4AI** with CSS extraction + raw-HTML regex for high-fidelity structured job extraction from LinkedIn, Indeed, Reed, TotalJobs, Adzuna, CV-Library, Monster, and CWJobs.
+The Atlas AI agent uses a **stealth Playwright browser** with human-like behavior (Bezier mouse curves, randomized fingerprints, warm-up navigation) for high-fidelity structured job extraction from LinkedIn, Indeed, Reed, TotalJobs, Adzuna, CV-Library, Monster, and CWJobs.
 
 **How it works:**
 1. User asks Atlas to find jobs (e.g. "Find nursing jobs in London")
@@ -176,13 +177,13 @@ The Atlas AI agent uses **Crawl4AI** with CSS extraction + raw-HTML regex for hi
 6. Atlas previews jobs in rich cards inside the chat bubble with **"View listing ↗"** links
 7. User clicks **Import All** or **Import** (per card) to save to the pipeline
 
-**Stealth browser:** Persistent Chromium profile (`agents/atlas/browser_profile/`) with `playwright-stealth` + comprehensive fingerprint spoofing (canvas noise, WebGL vendor override, realistic plugins/hardwareConcurrency).
+**Stealth browser:** Persistent Chromium profile (`src/agents/atlas/browser_profile/`) with Patchright + comprehensive fingerprint spoofing (canvas noise, WebGL vendor/renderer override, screen/connection spoofing, Bezier mouse movements, warm-up navigation via Google for realistic referrer chains).
 
 **Self-healing selectors:** If a platform's DOM changes, Atlas receives a `dom_sample` and can call `update_scraper_selectors` to write new CSS overrides to `agents/atlas/scraper_selectors.json` — loaded at worker startup without a restart.
 
 **Timeout protection:** Scraper has a 45-second hard timeout with SIGKILL to prevent hangs.
 
-**AI Model:** Uses `gemini-3.1-pro-preview` by default with an automatic fallback chain on rate-limits: `gemini-3.1-flash-lite-preview` → `gemini-3-flash-preview` → `gemini-2.5-pro` → `gemini-2.5-flash`. The configured default is never silently changed.
+**AI Model:** Uses `gemini-3-flash-preview` by default with an automatic fallback chain on rate-limits: `gemini-3.1-flash-lite-preview` → `gemini-3.1-pro-preview` → `gemini-2.5-pro` → `gemini-2.5-flash`. The configured default is never silently changed.
 
 ### Job Pipeline
 - View, filter, sort, and paginate all discovered jobs
@@ -202,15 +203,16 @@ The Atlas AI agent uses **Crawl4AI** with CSS extraction + raw-HTML regex for hi
 - Score distribution charts
 
 ### Agent Chat (Atlas)
-- Stateful multi-turn AI chat powered by Gemini (`gemini-3.1-pro-preview` default)
-- **Live word-by-word streaming** — tokens emitted at 18ms intervals (ChatGPT-style typing effect)
-- **Stop button** — red circular abort button cancels in-flight generation instantly
+- Stateful multi-turn AI chat powered by Gemini (`gemini-3-flash-preview` default)
+- **Live streaming** — tokens emitted in real-time via Gemini SSE with proper `system_instruction` separation
+- **Fast-path for simple messages** — greetings and conversational messages use a lightweight prompt (skips tool definitions, search guidelines, CV context) for ~3s response time instead of 30s+
+- **Stop button** — cyan circular abort button cancels in-flight generation instantly
 - Internal `<continuity_update>` blocks stripped from stream in real-time (never shown to user)
 - Live tool execution shown inside the chat bubble (tool names animate as they run)
 - Session history with persistent memory across conversations
 - Continuity sync: Soul, Identity, Mind, Rules layers loaded every turn
-- Loop prevention guard
-- Context memory logged to `agents/atlas/context_memory.md`
+- Loop prevention guard (max 10 tool rounds for users, 15 for admin)
+- Context memory logged to `agents/atlas/context_memory.md` (agent-only log, not injected into LLM prompt)
 - Automatic model fallback on rate-limits — app stays responsive even if quota is exhausted
 - Parallelised orchestrator setup (auth + agent lookup, history + continuity in parallel)
 
@@ -314,6 +316,6 @@ prisma/
 - **Auth:** Users are stored in PostgreSQL via Prisma (`User` table with `passwordHash` + `role` columns). PBKDF2 hashed passwords. Default admin: `admin@jobos.local` / `admin123`.
 - **Crawl4AI scraping:** LinkedIn actively blocks bots. The worker uses persistent Chromium profile + `playwright-stealth` fingerprint spoofing. Results may vary; the agent gracefully handles scraper failures and supports self-healing CSS selector overrides.
 - **AI provider:** Defaults to Gemini. Configure `GEMINI_API_KEY` or Vertex AI credentials in your `.env`. The provider abstraction in `src/lib/services/ai/provider.ts` supports swapping to OpenAI or others.
-- **Streaming:** Atlas uses Gemini SSE (`streamGenerateContent`) for live token-by-token output. Falls back to batch response if SSE fails.
+- **Streaming:** Atlas uses Gemini SSE (`streamGenerateContent`) with proper `system_instruction` separation for fast responses. Falls back to batch response if SSE fails. Simple conversational messages use a lightweight prompt path for ~3s response times.
 - **Bundler:** Uses standard webpack (not Turbopack) — Turbopack has a known React Client Manifest corruption bug in Next.js 15.5.x.
 - **Mobile responsive:** Full mobile support with hamburger sidebar, responsive tables, and adaptive layouts.

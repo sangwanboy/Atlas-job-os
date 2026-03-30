@@ -12,8 +12,10 @@ import { tokenBudgetManager } from "@/lib/services/agent/token-budget-manager";
 import type { AgentRuntimeContext, AgentRuntimeResponse } from "@/lib/services/agent/types";
 import { auth } from "@/auth";
 import { ScraperService } from "@/lib/services/scraper/scraper-service";
+import { syncGmail } from "@/lib/services/integration/gmail/sync-engine";
 import { runtimeSettingsStore } from "@/lib/services/settings/runtime-settings-store";
 import { prisma } from "@/lib/db";
+import { localJobsCache } from "@/lib/services/jobs/local-jobs-cache";
 import fs from "node:fs/promises";
 import path from "node:path";
 
@@ -56,6 +58,12 @@ async function saveJobToDB(params: {
     // Race condition on concurrent saves — row already exists, just fetch it
     user = (await prisma.user.findFirst({ where: { email: "local-dev-user@ai-job-os.local" }, select: { id: true } }))!;
   }
+  // Deduplicate by sourceUrl
+  if (params.url) {
+    const dupe = await prisma.job.findFirst({ where: { userId: user.id, sourceUrl: params.url }, select: { id: true, title: true } });
+    if (dupe) return { id: dupe.id, title: params.title, company: params.company };
+  }
+
   const existing = await prisma.company.findFirst({ where: { name: params.company }, select: { id: true } });
   const company = existing ?? await prisma.company.create({ data: { name: params.company }, select: { id: true } });
   const salary = parseSalaryBounds(params.salary);
@@ -98,7 +106,7 @@ async function saveJobToDB(params: {
   return { id: job.id, title: job.title, company: params.company };
 }
 
-const maxToolRounds = 25;
+const maxToolRounds = 10;
 
 const toolIntentPattern = /(\bfind\b|\bsearch\b|\bjob\b|\bsave\b|\badd\b|\bcreate\b|\bnavigate\b|\bopen\b|\bclick\b|\bextract\b|\bbrowser\b|\bgmail\b|\bemail\b|\bsync\b)/i;
 
@@ -134,6 +142,13 @@ const toolDescriptors = [
       action: "string?",
       indices: "number[]?",
       jobs: "Job[]?",
+    },
+  },
+  {
+    name: "get_pipeline",
+    description: "Get jobs currently staged in the discovery pipeline (discovered but not yet imported/saved). Use this to answer user questions like 'what jobs are in my pipeline?', 'show me staged jobs', 'any hospitality jobs found?'. Parameters: { query?: string }",
+    parameters: {
+      query: "string?",
     },
   },
   {
@@ -524,7 +539,7 @@ function inferToolCallFromUserMessage(_input: string): ToolCall | null {
   return null;
 }
 
-async function executeToolCall(toolCall: ToolCall, sid: string): Promise<string> {
+async function executeToolCall(toolCall: ToolCall, sid: string, userId?: string): Promise<string> {
   if (toolCall.tool === "preview_jobs") {
     const params = previewJobsToolSchema.parse(toolCall.parameters);
     const existing = pendingJobsStore.get(sid) || [];
@@ -615,6 +630,19 @@ async function executeToolCall(toolCall: ToolCall, sid: string): Promise<string>
       ? `${reply}\n\nALL_JOBS_IMPORTED_SUCCESSFULLY\nAll jobs have been imported to your job pipeline. You can see them on the Jobs table.`
       : reply;
   }
+  if (toolCall.tool === "get_pipeline") {
+    const { query } = (toolCall.parameters ?? {}) as { query?: string };
+    const jobs = localJobsCache.list();
+    if (jobs.length === 0) return "No jobs currently in the pipeline. Run a job search to discover new roles.";
+    const filtered = query
+      ? jobs.filter(j => `${j.title} ${j.company} ${j.location}`.toLowerCase().includes(query.toLowerCase()))
+      : jobs;
+    if (filtered.length === 0) return `No pipeline jobs match "${query}".`;
+    const list = filtered.slice(0, 50).map((j, i) =>
+      `${i + 1}. **${j.title}** at ${j.company} (${j.location}) — Score: ${j.score ?? "N/A"}, Salary: ${j.salaryRange || "Not disclosed"}, Source: ${j.source}`
+    ).join("\n");
+    return `### 📋 Pipeline (${filtered.length} staged job${filtered.length !== 1 ? "s" : ""})\n${list}\n\nThese jobs have not been imported yet. Tell the user to say "import all" to save them.`;
+  }
   if (toolCall.tool === "save_job") {
     const params = saveJobToolSchema.parse(toolCall.parameters);
     const saved = await saveJobToDB(params);
@@ -635,13 +663,27 @@ async function executeToolCall(toolCall: ToolCall, sid: string): Promise<string>
     return `### 🧠 Context Memory\n${fullContext}`;
   }
   if (toolCall.tool === "gmail_sync") {
-    const payload = await postInternalJson<{ success: boolean; count: number; threads?: any[] }>("/api/integrations/gmail/sync", {});
-    return `Successfully synced ${payload.count} new/updated job threads.`;
+    if (!userId) return "Gmail sync failed: no user session available.";
+    const result = await syncGmail(userId);
+    if (!result.success) return `Gmail sync failed: ${result.error}`;
+    return `Successfully synced ${result.count} new/updated job threads.`;
   }
   if (toolCall.tool === "gmail_get_threads") {
-    const jobId = String(toolCall.parameters.jobId || "");
-    const payload = await postInternalJson<{ threads: any[] }>(`/api/jobs/${jobId}/emails`, {});
-    return `Found ${payload.threads?.length || 0} threads.`;
+    if (!userId) return "Cannot retrieve threads: no user session.";
+    const limit = Number(toolCall.parameters.limit) || 10;
+    try {
+      // @ts-ignore
+      const threads = await prisma.emailThread.findMany({
+        where: { userId },
+        orderBy: { lastMessageAt: "desc" },
+        take: limit,
+      });
+      if (!threads.length) return "No email threads found. Try syncing Gmail first.";
+      const summary = threads.map((t: any) => `• **${t.subject}** — ${t.snippet || ""}`.slice(0, 120)).join("\n");
+      return `Found ${threads.length} email threads:\n${summary}`;
+    } catch (e: any) {
+      return `Could not retrieve threads: ${e.message}`;
+    }
   }
   if (toolCall.tool === "gmail_generate_followup") {
     return "Draft generated and saved to review queue.";
@@ -675,11 +717,15 @@ async function executeToolCall(toolCall: ToolCall, sid: string): Promise<string>
     return `✅ Scraper selectors updated for **${site}**: \`${cardSelectors.join(", ")}\`. These will be used on the next search.`;
   }
   if (toolCall.tool === "browser_extract_jobs") {
-    const { query, location } = toolCall.parameters as { query: string, location: string };
+    const params = toolCall.parameters as any;
+    // Atlas may send singular or plural parameter names — normalise both
+    const query: string = params.query || (Array.isArray(params.queries) ? params.queries[0] : "") || "";
+    const location: string = params.location || (Array.isArray(params.locations) ? params.locations[0] : "") || "";
+    if (!query) return "⚠️ No search query provided. Please specify a job title to search for.";
     const searchQuery = `${query} ${location}`.trim();
 
-    // Build search URLs for 8 reputable UK platforms — all run in parallel
-    const platforms: { name: string; url: string }[] = [
+    // Build search URLs for reputable UK platforms — all run in parallel
+    const allPlatforms: { name: string; url: string }[] = [
       { name: "LinkedIn",   url: `https://www.linkedin.com/jobs/search/?keywords=${encodeURIComponent(query)}&location=${encodeURIComponent(location)}` },
       { name: "Indeed",     url: `https://uk.indeed.com/jobs?q=${encodeURIComponent(query)}&l=${encodeURIComponent(location)}` },
       { name: "Reed",       url: `https://www.reed.co.uk/jobs?keywords=${encodeURIComponent(query)}&location=${encodeURIComponent(location)}` },
@@ -689,6 +735,12 @@ async function executeToolCall(toolCall: ToolCall, sid: string): Promise<string>
       { name: "Monster",    url: `https://www.monster.co.uk/jobs/search?q=${encodeURIComponent(query)}&where=${encodeURIComponent(location)}` },
       { name: "CWJobs",     url: `https://www.cwjobs.co.uk/jobs/${encodeURIComponent(query.replace(/\s+/g, "-").toLowerCase())}/in-${encodeURIComponent(location.replace(/\s+/g, "-").toLowerCase())}` },
     ];
+
+    // Atlas may request specific platforms — filter if provided
+    const requestedPlatforms: string[] | undefined = params.platforms || params.platform;
+    const platforms = requestedPlatforms?.length
+      ? allPlatforms.filter(p => requestedPlatforms.some((rp: string) => p.name.toLowerCase().includes(rp.toLowerCase())))
+      : allPlatforms;
 
     console.log(`[browser_extract_jobs] Searching ${platforms.length} UK platforms in parallel for: ${searchQuery}`);
 
@@ -726,9 +778,18 @@ async function executeToolCall(toolCall: ToolCall, sid: string): Promise<string>
       return `SCRAPER_ERROR: All platforms returned no results for "${query}" in "${location}".${domHints ? `\n\nDOM samples from failed platforms (call update_scraper_selectors to fix):${domHints}` : " Try a broader search term or different location."}`;
     }
 
+    // Filter out CAPTCHA/verification pages that leaked through as job cards
+    const BLOCKED_TITLES = ["additional verification required", "security verification", "security check",
+      "captcha", "sign in", "log in", "just a moment", "access denied", "authwall", "blocked",
+      "human verification", "verify you are human", "are you a robot", "unusual traffic"];
+    const cleaned = allJobs.filter(j => {
+      const t = (j.title || "").toLowerCase().trim();
+      return t.length > 3 && !BLOCKED_TITLES.includes(t) && !t.includes("verification") && !t.includes("captcha");
+    });
+
     // Deduplicate by title+company key
     const seen = new Set<string>();
-    const unique = allJobs.filter(j => {
+    const unique = cleaned.filter(j => {
       const key = `${(j.title || "").toLowerCase().trim()}|${(j.company || "").toLowerCase().trim()}`;
       if (seen.has(key)) return false;
       seen.add(key);
@@ -799,8 +860,12 @@ export class ConversationOrchestrator {
       agentRegistry.getAgent(context.agentId, context.userId),
     ]);
     const isDeveloper = session?.user?.role === "ADMIN" || session?.user?.email === "admin@aijobos.local";
-    const dynamicMaxRounds = isDeveloper ? 100 : maxToolRounds;
     const effectiveUserId = context.userId ?? agent.userId;
+
+    // Fast-path: detect simple conversational messages that don't need tools
+    const msgLower = context.message.toLowerCase().trim();
+    const isSimpleChat = msgLower.length < 120 && !/(search|find|discover|import|save|extract|scrape|browse|navigate|screenshot|gmail|sync|email|cv|resume|upload|score|filter|draft|write|apply|follow.?up)/.test(msgLower);
+    const dynamicMaxRounds = isSimpleChat ? 1 : (isDeveloper ? 15 : maxToolRounds);
 
     // Wave 2: session creation (needs agent.id)
     let effectiveSessionId = context.sessionId;
@@ -819,7 +884,7 @@ export class ConversationOrchestrator {
 
     // Detect task type early for status message
     let taskType: string | undefined;
-    const msg = context.message.toLowerCase();
+    const msg = msgLower;
     if (msg.includes("search") || msg.includes("find") || msg.includes("discovery")) taskType = "search";
     else if (msg.includes("import") || msg.includes("save") || msg.includes("add")) taskType = "validate";
     else if (msg.includes("score") || msg.includes("filter") || msg.includes("fit")) taskType = "score";
@@ -859,7 +924,7 @@ export class ConversationOrchestrator {
     const budget = tokenBudgetManager.checkResponseBudget({ message: context.message, budget: agent.responseBudgetTokens });
     
     console.time("Prompt Composition");
-    const systemPrompt = composeAgentSystemPrompt(agent, layers);
+    const systemPrompt = composeAgentSystemPrompt(agent, layers, { lightweight: isSimpleChat });
     console.timeEnd("Prompt Composition");
 
     const provider = getAiProvider(context.preferredProvider);
@@ -869,7 +934,7 @@ export class ConversationOrchestrator {
 
     const formattedHistory = (historyContext && historyContext !== "No history yet.") ? historyContext : null;
     const rehydrated = layers.soul ? true : false;
-    const internalStateStr = [
+    const internalStateStr = isSimpleChat ? "" : [
       layers.mind ? `[MIND]\n${layers.mind}` : "",
       layers.recentContext ? `[RECENT CONTEXT]\n${layers.recentContext}` : ""
     ].filter(Boolean).join("\n\n");
@@ -982,10 +1047,11 @@ export class ConversationOrchestrator {
       for (const call of toolCalls) {
         context.onUpdate?.({ type: "tool_start", tool: call.tool, parameters: call.parameters });
         try {
-          const res = await executeToolCall(call, sid);
+          const res = await executeToolCall(call, sid, effectiveUserId);
           context.onUpdate?.({ type: "tool_end", tool: call.tool, parameters: call.parameters, result: res });
           toolLogs.push({ tool: call.tool, parameters: call.parameters, result: res });
-          turnRes += `\nTool: ${call.tool}\nResult: ${res}\n`;
+          const hasFailed = res.startsWith("SCRAPER_ERROR") || res.startsWith("Error") || res.includes("Failed platforms") || res.includes("No job cards found");
+          turnRes += `\nTool: ${call.tool}\n${hasFailed ? "⚠️ [TOOL_FAILED] You MUST explicitly tell the user which site(s) failed and what the error was.\n" : ""}Result: ${res}\n`;
         } catch (e) {
           const errorMsg = e instanceof Error ? e.message : "Unknown error";
           context.onUpdate?.({ type: "tool_end", tool: call.tool, parameters: call.parameters, result: `Error: ${errorMsg}` });

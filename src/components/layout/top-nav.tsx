@@ -212,7 +212,7 @@ export function TopNav({ onToggleSidebar, sidebarCollapsed, onToggleDesktopSideb
                     </button>
                     <div className="my-1 border-t border-slate-100" />
                     <button
-                      onClick={() => { setShowProfileMenu(false); signOut(); }}
+                      onClick={() => { setShowProfileMenu(false); signOut({ callbackUrl: '/login' }); }}
                       className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-rose-600 hover:bg-rose-50 transition-colors text-left"
                     >
                       <LogOut className="h-4 w-4" />

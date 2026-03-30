@@ -7,9 +7,9 @@ const SYNC_PAGE_LIMIT = 50; // Sync in small batches
 const QUERY = "(job OR interview OR application OR recruiter OR offer OR rejected OR hiring OR opportunity OR career OR resume OR cv OR portfolio OR onboarding OR joining OR compensation OR status OR position) newer_than:30d";
 
 export async function syncGmail(userId: string) {
+  let account: any = null;
+  let skipPrisma = false;
   try {
-    let account: any = null;
-    let skipPrisma = false;
     
     try {
       // @ts-ignore
@@ -39,11 +39,11 @@ export async function syncGmail(userId: string) {
     }
 
     // Set sync status to locking (try Prisma, ignore if fail)
-    if (!skipPrisma) {
+    if (!skipPrisma && account.id) {
       try {
         // @ts-ignore
         await prisma.integrationAccount.update({
-          where: { id: account.id || "local" },
+          where: { userId_provider: { userId, provider: "google" } },
           data: { syncStatus: "SYNCING", syncError: null }
         });
       } catch {
@@ -237,11 +237,13 @@ export async function syncGmail(userId: string) {
   } catch (error: any) {
     console.error("[Gmail Sync Error]:", error);
     try {
-      // @ts-ignore
-      await prisma.integrationAccount.update({
-        where: { id: account?.id || "local" },
-        data: { syncStatus: "ERROR", syncError: error.message }
-      });
+      if (account?.id) {
+        // @ts-ignore
+        await prisma.integrationAccount.update({
+          where: { userId_provider: { userId, provider: "google" } },
+          data: { syncStatus: "ERROR", syncError: error.message }
+        });
+      }
     } catch {}
     
     // Update Local Cache on Error

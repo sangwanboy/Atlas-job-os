@@ -14,38 +14,39 @@ export async function GET() {
 
     // 2. Attempt to fetch from Prisma — queries run in parallel
     let dbJobsCount = 0;
-    let dbNewCount = 0;
     try {
-      const yesterday = new Date();
-      yesterday.setHours(yesterday.getHours() - 24);
-      [dbJobsCount, dbNewCount] = await Promise.all([
-        prisma.job.count({ where: { userId } }),
-        prisma.job.count({ where: { userId, createdAt: { gte: yesterday } } }),
-      ]);
+      dbJobsCount = await prisma.job.count({ where: { userId } });
     } catch (e) {
       console.warn("Prisma stats failed, falling back to cache:", e);
     }
 
-    // 3. Resolve Metrics (Prefer real discovery data from Cache if DB is empty)
-    const finalTotal = Math.max(dbJobsCount, cachedJobs.length);
-    const finalNew = Math.max(dbNewCount, cachedJobs.filter(j => {
-      const d = new Date(j.postedAt || 0);
-      return d.getTime() > (Date.now() - 86400000);
-    }).length);
-    const applied = cachedJobs.filter(j => j.status === "APPLIED").length;
-    const interviewing = cachedJobs.filter(j => j.status === "INTERVIEW").length;
+    // 3. Resolve Metrics
+    // Total Pipeline = staged/discovered jobs not yet imported (local cache)
+    // Jobs Saved = jobs imported into the jobs table (DB)
+    const finalTotal = cachedJobs.length;
+    const finalNew = dbJobsCount;
+    let applied = 0;
+    let interviewing = 0;
+    try {
+      [applied, interviewing] = await Promise.all([
+        prisma.job.count({ where: { userId, status: "APPLIED" } }),
+        prisma.job.count({ where: { userId, status: "INTERVIEW" } }),
+      ]);
+    } catch {
+      // fall through with 0s
+    }
 
     const kpiMetrics = [
       {
-        label: "Total Pipeline",
+        label: "Pipeline",
         value: finalTotal.toString(),
-        delta: "Real-time",
+        delta: "Discovered",
         trend: "up" as const,
       },
       {
-        label: "New Discovered",
+        label: "Jobs Saved",
         value: finalNew.toString(),
-        delta: "Last 24h",
+        delta: "Shortlisted",
         trend: finalNew > 0 ? "up" : "flat",
       },
       {
@@ -74,8 +75,8 @@ export async function GET() {
     const weeklyTrend = last7Days.map((date) => {
       return {
         date: date.toLocaleDateString("en-US", { weekday: "short" }),
-        applied: cachedJobs.filter(j => j.status === "APPLIED").length, // Simple mock for trend until history is deeper
-        interviews: cachedJobs.filter(j => j.status === "INTERVIEW").length,
+        applied,
+        interviews: interviewing,
         replies: 0,
       };
     });
