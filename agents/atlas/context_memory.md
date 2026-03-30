@@ -416,6 +416,15 @@
 [2026-03-28T00:00:07.000Z] BUNDLER: Reverted from --turbopack to standard webpack (Next.js 15.5.x Turbopack has React Client Manifest corruption bug). WeeklyTrendChart lazy-loaded via dynamic() to prevent recharts compile hang. optimizePackageImports added for recharts/lucide-react.
 [2026-03-28T00:00:08.000Z] AUTH_FIX: NEXTAUTH_URL made optional in Zod env schema. Removed from .env files — NextAuth v5 auto-detects from request host. Middleware uses edge-safe NextAuth(authConfig) pattern.
 [2026-03-28T11:15:39.696Z] Updated mind.md via LLM continuity update.
+[2026-03-30T00:00:00.000Z] MULTI_TENANT_ISOLATION: Full per-user Atlas memory implemented. Each user gets their own agents/atlas/users/{userId}/ directory with mind.md, preferences.json, user_profile.md. Admin is the template; all other users seeded from admin's config. Prisma-backed settings per user.
+[2026-03-30T00:00:01.000Z] SESSION_FIXES: SessionProvider refetchInterval=300, refetchOnWindowFocus=false — eliminates excessive session calls on every refresh. sync-status useEffect debounced 300ms to prevent 3x firing on rapid sessionId changes.
+[2026-03-30T00:00:02.000Z] MOCK_DATA_REMOVED: All mock arrays (kpiMetrics, dashboardTrend, jobs) removed. agentId fixed from "job_scout" to "atlas". App now fully connected to real DB and live scraper data.
+[2026-03-30T00:00:03.000Z] PIPELINE_SEMANTICS: Dashboard stats redefined — "Pipeline" = local cache jobs not yet imported (local_jobs.json, 24h TTL auto-purge); "Jobs Saved" = DB-imported jobs count. No duplicate imports enforced by sourceUrl check. get_pipeline tool added so Atlas can answer questions about staged pipeline jobs.
+[2026-03-30T00:00:04.000Z] EXPORT_FIX: CSV and XLSX export routes now query Prisma DB with user auth instead of returning empty mock arrays.
+[2026-03-30T00:00:05.000Z] SIDEBAR_COLLAPSE: Collapsed sidebar now shows 64px icon-only mode with "JO" logo, nav icons, and expand button — does not fully disappear. Layout grid updated from 0px to 64px for collapsed state.
+[2026-03-30T00:00:06.000Z] HEADED_BROWSER: BROWSER_MODE=headed added to .env.local. Browser service (port 3001) now launches a visible Playwright window. Python scraper (worker.py) also set headless=False. User can watch every Atlas navigation step in real time.
+[2026-03-30T00:00:07.000Z] FULL_BROWSER_CONTROL: Atlas now has direct wired Playwright tools — browser_navigate, browser_click, browser_type, browser_scroll, browser_screenshot, browser_extract_text — all routed to Node.js browser server (port 3001) via callBrowserServer() helper. Tool definitions with full parameter schemas added to orchestrator. Atlas can do step-by-step manual navigation OR use browser_extract_jobs for bulk searches.
+[2026-03-30T00:00:08.000Z] PREVIEW_BOX_FIX: ChatMessageItem memo comparison updated to include previewJobs import state — "Imported" badges now correctly update after importing without full re-render bypass.
 [2026-03-28T11:22:21.732Z] Updated mind.md via LLM continuity update.
 [2026-03-28T11:33:37.207Z] Updated mind.md via LLM continuity update.
 [2026-03-28T11:36:48.819Z] Updated mind.md via LLM continuity update.
@@ -463,3 +472,5 @@
 [2026-03-30T14:47:39.739Z] Updated user_profile.md via LLM continuity update.
 [2026-03-30T14:47:39.773Z] Updated preferences.json via LLM continuity update.
 [2026-03-30T14:48:33.829Z] Updated mind.md via LLM continuity update.
+[2026-03-30T16:45:26.386Z] Updated mind.md via LLM continuity update.
+[2026-03-30T16:46:19.343Z] Updated mind.md via LLM continuity update.

@@ -59,6 +59,9 @@ DEFAULT_AI_MODEL=gemini-3.1-flash-lite-preview
 GMAIL_CLIENT_ID=
 GMAIL_CLIENT_SECRET=
 GMAIL_REDIRECT_URI=http://localhost:3000/api/integrations/gmail/callback
+
+# Browser service mode — "headed" shows Playwright window, "headless" runs silently
+BROWSER_MODE=headed
 ```
 
 ---
@@ -137,8 +140,10 @@ npm run prisma:seed
 
 ```bash
 npm run dev            # Next.js on port 3000
-npm run browser-server # Browser automation service on port 3002 (required for job scraping)
+npm run browser-server # Browser automation service on port 3001 (required for job scraping)
 ```
+
+> **Both servers must run simultaneously.** The browser server powers all Playwright tools (navigate, click, type, screenshot, extract_text) and the job scraper.
 
 ---
 
@@ -170,12 +175,14 @@ The Atlas AI agent uses a **stealth Playwright browser** with human-like behavio
 
 **How it works:**
 1. User asks Atlas to find jobs (e.g. "Find nursing jobs in London")
-2. Atlas calls `browser_extract_jobs` → spawns Python worker → Crawl4AI scrapes 8 UK platforms in parallel
-3. Structured job data (title, company, location, salary, date) extracted via CSS selectors
-4. Real job URLs extracted from `data-entity-urn` attributes in raw HTML → `linkedin.com/jobs/view/{id}/`
-5. Results capped to **Max Jobs Per Search** limit (admin-configurable, default 20)
-6. Atlas previews jobs in rich cards inside the chat bubble with **"View listing ↗"** links
-7. User clicks **Import All** or **Import** (per card) to save to the pipeline
+2. Atlas chooses its approach:
+   - **Bulk mode**: `browser_extract_jobs` → Python worker → Crawl4AI scrapes platforms in parallel
+   - **Step-by-step mode**: `browser_navigate` → `browser_type` → `browser_click` → `browser_extract_text` (Atlas drives the browser manually, visible in real time)
+3. Structured job data (title, company, location, salary, date) extracted
+4. Results capped to **Max Jobs Per Search** limit (admin-configurable, default 20)
+5. Atlas previews jobs in rich cards inside the chat bubble with **"View listing ↗"** links
+6. User clicks **Import All** or **Import** (per card) to save to the pipeline
+7. Pipeline (local cache, 24h TTL) → Jobs Saved (DB-imported, permanent)
 
 **Stealth browser:** Persistent Chromium profile (`src/agents/atlas/browser_profile/`) with Patchright + comprehensive fingerprint spoofing (canvas noise, WebGL vendor/renderer override, screen/connection spoofing, Bezier mouse movements, warm-up navigation via Google for realistic referrer chains).
 

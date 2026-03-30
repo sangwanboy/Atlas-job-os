@@ -1,20 +1,11 @@
 import type {
   AgentProfile,
   ChatMessageView,
-  DashboardTrendPoint,
-  JobRow,
-  KpiMetric,
 } from "@/types/domain";
 
-export const kpiMetrics: KpiMetric[] = [];
-
-export const dashboardTrend: DashboardTrendPoint[] = [];
-
-export const jobs: JobRow[] = [];
-
 export const activeAgent: AgentProfile = {
-  id: "job_scout",
-  key: "job_scout",
+  id: "atlas",
+  key: "atlas",
   soul: {
     mission: "Ready to assist.",
     principles: [],

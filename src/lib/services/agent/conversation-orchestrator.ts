@@ -218,12 +218,37 @@ const toolDescriptors = [
   },
   {
     name: "browser_navigate",
-    description: "Crawl a website using Crawl4AI and return its LLM-optimized Markdown content. Use this to research specific job descriptions, company about pages, or career portals. Parameters: { url: string }",
-    parameters: { url: "string" },
+    description: "Navigate the visible browser to a URL and return page content. Atlas has full browser control — use this to open any website step by step. Parameters: { url: string, sessionId?: string }",
+    parameters: { url: "string", sessionId: "string?" },
+  },
+  {
+    name: "browser_click",
+    description: "Click an element in the browser by CSS selector. Parameters: { selector: string, sessionId?: string }",
+    parameters: { selector: "string", sessionId: "string?" },
+  },
+  {
+    name: "browser_type",
+    description: "Type text into a browser input field. Parameters: { selector: string, text: string, sessionId?: string }",
+    parameters: { selector: "string", text: "string", sessionId: "string?" },
+  },
+  {
+    name: "browser_scroll",
+    description: "Scroll the page up or down. Parameters: { direction?: 'down'|'up', amount?: number, sessionId?: string }",
+    parameters: { direction: "string?", amount: "number?", sessionId: "string?" },
+  },
+  {
+    name: "browser_screenshot",
+    description: "Take a screenshot of the current browser state. Parameters: { sessionId?: string, label?: string }",
+    parameters: { sessionId: "string?", label: "string?" },
+  },
+  {
+    name: "browser_extract_text",
+    description: "Extract text content from the current page or a specific selector. Parameters: { selector?: string, sessionId?: string }",
+    parameters: { selector: "string?", sessionId: "string?" },
   },
   {
     name: "browser_extract_jobs",
-    description: "Search for jobs on LinkedIn or other boards and extract structured data using Crawl4AI discovery. Parameters: { query: string, location: string, limit?: number }",
+    description: "High-level bulk job search via scraper — searches LinkedIn and job boards in parallel and returns structured job data. Best for fast searches. Parameters: { query: string, location: string, limit?: number }",
     parameters: { query: "string", location: "string", limit: "number?" },
   },
   {
@@ -451,6 +476,31 @@ async function postInternalJson<TResponse extends Record<string, unknown>>(
     }
   }
   throw lastError ?? new Error(`Unable to reach internal route: ${path}`);
+}
+
+const BROWSER_SERVER_URL = "http://localhost:3001/api/browser";
+
+async function callBrowserServer(action: string, sessionId: string, params: Record<string, unknown>): Promise<string> {
+  try {
+    const response = await fetch(BROWSER_SERVER_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action, sessionId, params }),
+    });
+    const result = await response.json() as Record<string, unknown>;
+    if (!response.ok) {
+      return `❌ Browser action '${action}' failed: ${String(result.error || "unknown error")}`;
+    }
+    // Return a concise summary — content/text truncated to avoid flooding the context
+    if (result.content && typeof result.content === "string") {
+      const truncated = result.content.length > 4000 ? result.content.slice(0, 4000) + "\n…[truncated]" : result.content;
+      return `✅ ${action} completed.\n\n${truncated}`;
+    }
+    if (result.screenshotPath) return `✅ Screenshot saved: ${result.screenshotPath}`;
+    return `✅ ${action} completed: ${JSON.stringify(result).slice(0, 500)}`;
+  } catch (err) {
+    return `❌ Browser server unreachable for '${action}': ${err instanceof Error ? err.message : String(err)}. Ensure the browser server is running (npm run browser-server).`;
+  }
 }
 
 function extractToolCalls(input: string): ToolCall[] {
@@ -694,15 +744,28 @@ async function executeToolCall(toolCall: ToolCall, sid: string, userId?: string)
     return `Found ${payload.results?.length || 0} emails for "${query}".`;
   }
   if (toolCall.tool === "browser_navigate") {
-    const { url } = toolCall.parameters as { url: string };
-    const result = await ScraperService.scrape(url);
-    if (!result.success) return `Error scraping ${url}: ${result.error}`;
-    
-    let response = `### 📄 Web Content: ${url}\n\n${result.markdown}`;
-    if (result.jobs && result.jobs.length > 0) {
-      response += `\n\n**STRUCTURED_DATA_FOUND**: I extracted ${result.jobs.length} structured items from this page. Use these for high-fidelity extraction.\n${JSON.stringify(result.jobs, null, 2)}`;
-    }
-    return response;
+    const params = toolCall.parameters as { url: string; sessionId?: string };
+    return callBrowserServer("navigate", params.sessionId || sid, { url: params.url });
+  }
+  if (toolCall.tool === "browser_click") {
+    const params = toolCall.parameters as { selector: string; sessionId?: string };
+    return callBrowserServer("click", params.sessionId || sid, { selector: params.selector });
+  }
+  if (toolCall.tool === "browser_type") {
+    const params = toolCall.parameters as { selector: string; text: string; sessionId?: string };
+    return callBrowserServer("type", params.sessionId || sid, { selector: params.selector, text: params.text });
+  }
+  if (toolCall.tool === "browser_screenshot") {
+    const params = toolCall.parameters as { sessionId?: string; label?: string };
+    return callBrowserServer("screenshot", params.sessionId || sid, { label: params.label });
+  }
+  if (toolCall.tool === "browser_extract_text") {
+    const params = toolCall.parameters as { selector?: string; sessionId?: string };
+    return callBrowserServer("extract_text", params.sessionId || sid, { selector: params.selector });
+  }
+  if (toolCall.tool === "browser_scroll") {
+    const params = toolCall.parameters as { direction?: string; amount?: number; sessionId?: string };
+    return callBrowserServer("scroll", params.sessionId || sid, { direction: params.direction, amount: params.amount });
   }
   if (toolCall.tool === "update_scraper_selectors") {
     const { site, cardSelectors } = toolCall.parameters as { site: string; cardSelectors: string[] };

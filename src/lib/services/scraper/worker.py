@@ -513,7 +513,7 @@ async def launch_stealth_browser(playwright):
 
     ctx = await playwright.chromium.launch_persistent_context(
         _PROFILE_DIR,
-        headless=True,
+        headless=False,
         args=[
             "--no-sandbox",
             "--disable-setuid-sandbox",

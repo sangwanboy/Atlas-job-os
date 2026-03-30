@@ -1,9 +1,9 @@
 {
   "mode": "PREVIEW",
-  "strategy": "20 jobs found across Reed, TotalJobs, CV-Library, and CWJobs. LinkedIn timed out.",
+  "strategy": "Reed search successful (5 jobs); LinkedIn blocked/failed. Transitioning to import or next category.",
   "todos": [
-    "Import 20 previewed jobs upon confirmation",
-    "Retry LinkedIn isolated search if requested",
-    "Search for 'Technical Product Manager' roles next"
+    "Import 5 Reed jobs upon confirmation",
+    "Search for Technical Product Manager roles",
+    "Investigate 'Unknown Company' details during import"
   ]
 }

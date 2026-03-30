@@ -194,6 +194,8 @@ const ChatMessageItem = React.memo(({
   prev.importing === next.importing &&
   prev.scraperStartedAt === next.scraperStartedAt &&
   prev.message.content === next.message.content &&
+  prev.previewJobs?.length === next.previewJobs?.length &&
+  prev.previewJobs?.filter(j => j.isAlreadyImported).length === next.previewJobs?.filter(j => j.isAlreadyImported).length &&
   (prev.message as any).toolLogs?.length === (next.message as any).toolLogs?.length &&
   (prev.message as any).toolLogs?.[(prev.message as any).toolLogs?.length - 1]?.result === (next.message as any).toolLogs?.[(next.message as any).toolLogs?.length - 1]?.result
 ));
@@ -534,24 +536,29 @@ export function AgentChatStarter() {
     return () => { ignore = true; };
   }, [activeAgent.id, urlSessionId]);
 
-  // Effect 2: Loading Sync Status (reaction to active session)
+  // Effect 2: Loading Sync Status (reaction to active session, debounced)
   useEffect(() => {
     let ignore = false;
-    async function loadSyncStatus() {
-      const targetSid = sessionId || urlSessionId || "default";
-      try {
-        const response = await fetch(`/api/agents/sync-status?agentId=atlas&sessionId=${targetSid}`);
-        const payload = (await response.json()) as SyncStatusResponse;
-        if (!ignore) setSyncStatus(payload);
-      } catch {
-        if (!ignore) setSyncStatus(null);
-      }
-    }
+    let interval: ReturnType<typeof setInterval>;
 
-    void loadSyncStatus();
-    const interval = window.setInterval(loadSyncStatus, 20_000); // 20s for better feedback
+    const debounce = setTimeout(() => {
+      async function loadSyncStatus() {
+        const targetSid = sessionId || urlSessionId || "default";
+        try {
+          const response = await fetch(`/api/agents/sync-status?agentId=atlas&sessionId=${targetSid}`);
+          const payload = (await response.json()) as SyncStatusResponse;
+          if (!ignore) setSyncStatus(payload);
+        } catch {
+          if (!ignore) setSyncStatus(null);
+        }
+      }
+      void loadSyncStatus();
+      interval = window.setInterval(loadSyncStatus, 20_000);
+    }, 300); // debounce — skip if sessionId changes rapidly
+
     return () => {
       ignore = true;
+      clearTimeout(debounce);
       window.clearInterval(interval);
     };
   }, [sessionId, urlSessionId]);

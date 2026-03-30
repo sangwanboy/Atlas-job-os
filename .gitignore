@@ -52,3 +52,8 @@ ts_errors.txt
 
 # User uploads - never commit
 uploads/
+
+# Runtime memory / OAuth tokens — never commit
+project_memory/gmail_settings.json
+browser_server_out.txt
+dev_server_out.txt
