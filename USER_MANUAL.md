@@ -79,7 +79,7 @@ When Atlas finds jobs, a preview panel appears in the chat:
 
 **Badges explained:**
 - **⚡ % match** — how well the job title/company matches your search query (green = strong, amber = partial, grey = weak)
-- **💰** — salary range or "Not disclosed"
+- **💰** — salary badge is colour-coded: **grey** = not disclosed/N/A, **blue** = competitive/negotiable/market rate, **green** = actual figures stated
 - **Job type** — Full-time / Part-time / Contract / Temporary (violet badge)
 - **🕒** — how long ago it was posted
 - **Source** — which job board it came from
@@ -90,7 +90,7 @@ When Atlas finds jobs, a preview panel appears in the chat:
 - **Dismiss** — clears the preview without saving
 - **View listing ↗** — opens the original job page in a new tab
 
-> Jobs already in your pipeline are marked **✅ Imported** automatically — no duplicates.
+> Jobs already in your pipeline are marked **✅ Imported** automatically — duplicates are detected by job title + company name, so tracking-parameter URL variations don't create false duplicates.
 
 ---
 
@@ -243,6 +243,12 @@ Import a broad set first, then tell Atlas:
 > "Remove all the jobs that require 5+ years experience"
 > "Prioritise the remote roles"
 
+**Managing your pipeline from chat:**
+You can control the pipeline directly through Atlas without opening the Jobs page:
+> "Clear the pipeline" — removes all staged jobs from the current session
+> "Delete the Tata Technologies job" — removes a specific job by name
+> "Show me the pipeline in the preview box" — renders your current staged jobs as preview cards
+
 **Check the match score:**
 - ⚡ 80%+ — strong keyword match to your query
 - ⚡ 40–79% — partial match, worth reviewing
@@ -293,7 +299,13 @@ If the extension is not connected, LinkedIn rate-limits scrapers periodically. I
 > "Search Indeed for software engineer jobs in London"
 
 **Jobs have no salary shown**
-Many employers don't publish salaries. Atlas shows "Not disclosed" rather than inventing a figure.
+Many employers don't publish salaries. Atlas shows a grey "Not disclosed" badge. If the listing says "Competitive" or "Negotiable", Atlas shows a blue badge. A green badge means an actual figure was stated.
+
+**Port conflict — `ClientFetchError: Unexpected token '<'`**
+A stale Node.js process is occupying port 3000, forcing Next.js onto port 3001, while `AUTH_URL` still points to :3000 — Auth.js gets HTML back instead of JSON. Fix: kill all node processes before starting dev.
+- Windows: `taskkill /F /IM node.exe`
+- Linux/macOS: `pkill node`
+Then restart with `npm run dev`.
 
 **Atlas seems slow**
 Simple conversational messages (greetings, questions) respond in ~3 seconds using a lightweight fast-path. Job searches take 8–15 seconds due to browser automation. If Atlas feels slow on simple messages, check the model in use (shown in Agent Profile) — Gemini Flash is the fastest option.

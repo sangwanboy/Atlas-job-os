@@ -42,6 +42,7 @@ NEXT_PUBLIC_APP_URL=http://localhost:3000
 
 # Auth (generate with: openssl rand -hex 32)
 AUTH_SECRET=your_secret_here
+AUTH_URL=http://localhost:3000
 
 # Database
 DATABASE_URL=postgresql://user:password@localhost:5432/atlas_db
@@ -144,10 +145,10 @@ npm run dev            # Next.js on port 3000
 
 In a second terminal (keep it open):
 ```bash
-D:\Projects\Atlas-job-os\start-browser-server.cmd   # Windows
-# or
-npx tsx --env-file=.env --env-file=.env.local src/lib/services/browser/server.ts
+npm run browser-server
 ```
+
+> **Note:** `npm run browser-server` uses `node --env-file=.env --env-file=.env.local --import=tsx/esm` to ensure `.env.local` is loaded. Do not use `tsx` directly — it won't load `.env.local` and Zod env validation will crash on startup.
 
 > **Both servers must run simultaneously.** The browser server (port 3001) powers Playwright tools and the job scraper. It also runs the Chrome Extension bridge on **port 3002**.
 
@@ -237,6 +238,7 @@ Used when extension is not connected. Stealth Chromium with Bezier mouse curves,
 ### Agent Chat (Atlas)
 - Stateful multi-turn AI chat powered by Gemini (`gemini-3-flash-preview` default)
 - **Live streaming** — tokens emitted in real-time via Gemini SSE with proper `system_instruction` separation
+- **Full tool registry** — all 20 tools are described in the system prompt (PIPELINE, GMAIL, MEMORY, BROWSER groups). Atlas reasons from descriptions alone — no hardcoded trigger phrases. New tools are auto-available once added to the registry.
 - **Fast-path for simple messages** — greetings and conversational messages use a lightweight prompt (skips tool definitions, search guidelines, CV context) for ~3s response time instead of 30s+
 - **Stop button** — cyan circular abort button cancels in-flight generation instantly
 - Internal `<continuity_update>` blocks stripped from stream in real-time (never shown to user)
@@ -350,4 +352,5 @@ prisma/
 - **AI provider:** Defaults to Gemini. Configure `GEMINI_API_KEY` or Vertex AI credentials in your `.env`. The provider abstraction in `src/lib/services/ai/provider.ts` supports swapping to OpenAI or others.
 - **Streaming:** Atlas uses Gemini SSE (`streamGenerateContent`) with proper `system_instruction` separation for fast responses. Falls back to batch response if SSE fails. Simple conversational messages use a lightweight prompt path for ~3s response times.
 - **Bundler:** Uses standard webpack (not Turbopack) — Turbopack has a known React Client Manifest corruption bug in Next.js 15.5.x.
+- **Port conflict:** If `AUTH_URL` and Next.js are on different ports (e.g. stale node process forces Next.js to :3001), Auth.js will return HTML instead of JSON causing `ClientFetchError`. Always kill stale node processes before starting dev: `taskkill /F /IM node.exe` (Windows) or `pkill node` (Linux/macOS).
 - **Mobile responsive:** Full mobile support with hamburger sidebar, responsive tables, and adaptive layouts.
