@@ -29,8 +29,8 @@ export async function GET() {
     let interviewing = 0;
     try {
       [applied, interviewing] = await Promise.all([
-        prisma.job.count({ where: { userId, status: "APPLIED" } }),
-        prisma.job.count({ where: { userId, status: "INTERVIEW" } }),
+        prisma.job.count({ where: { userId, applicationStatus: "APPLIED" } }),
+        prisma.job.count({ where: { userId, applicationStatus: "INTERVIEW" } }),
       ]);
     } catch {
       // fall through with 0s

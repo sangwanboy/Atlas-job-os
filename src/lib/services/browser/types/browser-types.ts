@@ -11,8 +11,13 @@ export type BrowserToolName =
   | "browser_extract_jobs"
   | "browser_enrich_jobs"
   | "browser_screenshot"
+  | "browser_accept_cookies"
+  | "browser_capture_dom"
   | "browser_close_session"
-  | "browser_resume";
+  | "browser_resume"
+  | "browser_extension_status"
+  | "browser_extension_extract_jobs"
+  | "browser_extension_enrich_job";
 
 export type BrowserActionStatus = "ok" | "error";
 
@@ -137,6 +142,18 @@ export type BrowserScreenshotInput = {
   pageId?: string;
 };
 
+export type BrowserAcceptCookiesInput = {
+  sessionId: string;
+  pageId?: string;
+};
+
+export type BrowserCaptureDomInput = {
+  sessionId: string;
+  pageId?: string;
+  prompt?: string;
+  includeScreenshot?: boolean;
+};
+
 export type BrowserCloseSessionInput = {
   sessionId: string;
 };
@@ -154,8 +171,13 @@ export type BrowserToolInputMap = {
   browser_extract_jobs: BrowserExtractJobsInput;
   browser_enrich_jobs: BrowserEnrichJobsInput;
   browser_screenshot: BrowserScreenshotInput;
+  browser_accept_cookies: BrowserAcceptCookiesInput;
+  browser_capture_dom: BrowserCaptureDomInput;
   browser_close_session: BrowserCloseSessionInput;
   browser_resume: { sessionId: string };
+  browser_extension_status: Record<string, never>;
+  browser_extension_extract_jobs: { searchUrl: string; query?: string; location?: string };
+  browser_extension_enrich_job: { url: string };
 };
 
 export type BrowserToolResultMap = {
@@ -171,8 +193,13 @@ export type BrowserToolResultMap = {
   browser_extract_jobs: { sessionId: string; pageId: string; jobs: Array<{ title?: string; company?: string; location?: string; link?: string; salary?: string; datePosted?: string; description?: string; skills?: string }> };
   browser_enrich_jobs: { sessionId: string; pageId: string; jobs: Array<{ title: string; company: string; location: string; url: string; salary?: string; description: string; skills: string }> };
   browser_screenshot: { sessionId: string; pageId: string; filePath: string };
+  browser_accept_cookies: { sessionId: string; pageId: string; accepted: boolean; selector?: string };
+  browser_capture_dom: { sessionId: string; pageId: string; raw: string; extracted: Record<string, unknown> };
   browser_close_session: { closed: boolean };
   browser_resume: { sessionId: string; status: BrowserSessionStatus };
+  browser_extension_status: { connected: boolean; tabOpen: boolean };
+  browser_extension_extract_jobs: { jobs: any[]; count: number; source: string };
+  browser_extension_enrich_job: { job: any };
 };
 
 export type BrowserSessionSnapshot = {

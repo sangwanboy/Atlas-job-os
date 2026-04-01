@@ -1,9 +1,9 @@
 {
-  "mode": "PREVIEW",
-  "strategy": "Reed search successful (5 jobs); LinkedIn blocked/failed. Transitioning to import or next category.",
+  "mode": "RECOVERY",
+  "strategy": "Browser server is currently unreachable. Need to wait for system restoration or retry connection. Will pivot to reviewing existing pipeline jobs until connectivity is confirmed.",
   "todos": [
-    "Import 5 Reed jobs upon confirmation",
-    "Search for Technical Product Manager roles",
-    "Investigate 'Unknown Company' details during import"
+    "Wait for browser server connectivity restoration",
+    "Review pipeline jobs with the user",
+    "Retry LinkedIn search once browser is stable"
   ]
 }

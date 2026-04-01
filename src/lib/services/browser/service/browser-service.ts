@@ -9,6 +9,9 @@ import {
   browserSessionManager,
   BrowserSessionManager,
 } from "../session-manager/browser-session-manager";
+import { callVertexMultimodal } from "../../ai/vertex-client";
+import { extensionBridge } from "../extension-bridge";
+import { extractJobFromScreenshot } from "../llm-ocr-extractor";
 import type {
   BrowserActionResult,
   BrowserConfirmationHook,
@@ -25,6 +28,8 @@ import type {
   LinkedInFilters,
   BrowserEnrichJobsInput,
   BrowserScreenshotInput,
+  BrowserAcceptCookiesInput,
+  BrowserCaptureDomInput,
   BrowserCloseSessionInput,
   BrowserRuntimeConfig,
   BrowserSessionSnapshot,
@@ -99,28 +104,103 @@ export class BrowserService extends EventEmitter {
     this.emit("observation", fullEvent);
   }
 
-  // --- Human-Like Stealth Helpers ---
-  
+  // ─── Human-Like Stealth Helpers ─────────────────────────────────────────────
+
   private async humanDelay(min = 800, max = 2500) {
     const delay = Math.floor(Math.random() * (max - min + 1) + min);
     await new Promise(resolve => setTimeout(resolve, delay));
   }
 
-  private async mouseJiggle(page: any) {
+  /** Cubic Bezier curve interpolation for natural mouse paths */
+  private bezierPoint(t: number, p0: number, p1: number, p2: number, p3: number): number {
+    const mt = 1 - t;
+    return mt * mt * mt * p0 + 3 * mt * mt * t * p1 + 3 * mt * t * t * p2 + t * t * t * p3;
+  }
+
+  /** Move mouse along a Bezier curve from current position to (tx, ty) */
+  private async bezierMouseMove(page: any, tx: number, ty: number, steps = 20) {
     try {
-      const { width, height } = page.viewportSize() || { width: 1280, height: 800 };
-      const x = Math.floor(Math.random() * width);
-      const y = Math.floor(Math.random() * height);
-      await page.mouse.move(x, y, { steps: 5 });
+      const vp = page.viewportSize() || { width: 1280, height: 800 };
+      // Random control points create natural arc
+      const cx1 = Math.random() * vp.width;
+      const cy1 = Math.random() * vp.height;
+      const cx2 = Math.random() * vp.width;
+      const cy2 = Math.random() * vp.height;
+      const sx = Math.random() * vp.width;
+      const sy = Math.random() * vp.height;
+
+      for (let i = 0; i <= steps; i++) {
+        const t = i / steps;
+        const x = Math.round(this.bezierPoint(t, sx, cx1, cx2, tx));
+        const y = Math.round(this.bezierPoint(t, sy, cy1, cy2, ty));
+        await page.mouse.move(x, y);
+        // Variable speed: slower at start/end, faster in middle
+        const speedFactor = Math.sin(Math.PI * t) + 0.1;
+        await new Promise(r => setTimeout(r, Math.floor((15 + Math.random() * 10) / speedFactor)));
+      }
     } catch {}
   }
 
-  private async smoothScroll(page: any, distance: number) {
-    const steps = 5;
-    const stepSize = distance / steps;
-    for (let i = 0; i < steps; i++) {
-      await page.mouse.wheel(0, stepSize);
-      await this.humanDelay(100, 300);
+  /** Move mouse to element then click — more natural than direct click */
+  private async humanClick(page: any, selector: string) {
+    try {
+      const el = page.locator(selector).first();
+      const box = await el.boundingBox().catch(() => null);
+      if (box) {
+        // Target a random point within the element (not always dead-center)
+        const tx = box.x + box.width * (0.3 + Math.random() * 0.4);
+        const ty = box.y + box.height * (0.3 + Math.random() * 0.4);
+        await this.bezierMouseMove(page, tx, ty);
+        await this.humanDelay(80, 200);
+        await page.mouse.click(tx, ty);
+      } else {
+        await el.click();
+      }
+    } catch {
+      await page.locator(selector).first().click().catch(() => {});
+    }
+  }
+
+  /** Human-like scroll: variable speed, occasional pause, rare scroll-back */
+  private async humanScroll(page: any, totalDistance: number) {
+    let scrolled = 0;
+    while (scrolled < totalDistance) {
+      const chunk = Math.floor(80 + Math.random() * 160); // 80–240px per tick
+      await page.mouse.wheel(0, chunk);
+      scrolled += chunk;
+      await new Promise(r => setTimeout(r, Math.floor(60 + Math.random() * 120)));
+
+      // 15% chance: pause as if reading
+      if (Math.random() < 0.15) await this.humanDelay(600, 1800);
+      // 8% chance: slight scroll back (human overshoots sometimes)
+      if (Math.random() < 0.08) {
+        await page.mouse.wheel(0, -(Math.floor(30 + Math.random() * 60)));
+        await this.humanDelay(200, 500);
+      }
+    }
+  }
+
+  /** Simulate reading time proportional to content on page */
+  private async simulateReading(page: any) {
+    try {
+      const wordCount = await page.evaluate(() =>
+        (document.body?.innerText?.split(/\s+/).length ?? 200)
+      ).catch(() => 200);
+      // ~200 wpm reading speed, capped between 1s and 4s
+      const readMs = Math.min(4000, Math.max(1000, (wordCount / 200) * 1000 * 0.3));
+      await this.humanDelay(readMs * 0.7, readMs * 1.3);
+    } catch {}
+  }
+
+  /** Random micro-movement to show "attention" without navigating */
+  private async idleMovement(page: any) {
+    const moves = Math.floor(1 + Math.random() * 3);
+    const vp = page.viewportSize() || { width: 1280, height: 800 };
+    for (let i = 0; i < moves; i++) {
+      const tx = Math.floor(Math.random() * vp.width);
+      const ty = Math.floor(Math.random() * vp.height);
+      await this.bezierMouseMove(page, tx, ty, 10);
+      await this.humanDelay(300, 800);
     }
   }
 
@@ -255,17 +335,62 @@ export class BrowserService extends EventEmitter {
           ]
         });
 
-        // 6. Canvas Stealth (Subtle noise injection)
+        // 6. Canvas fingerprint noise
         const originalGetContext = HTMLCanvasElement.prototype.getContext;
         (HTMLCanvasElement.prototype as any).getContext = function(type: string, attributes: any) {
-          const context = originalGetContext.call(this, type, attributes);
-          if (type === '2d' && context) {
-            const originalFillText = (context as CanvasRenderingContext2D).fillText;
-            (context as any).fillText = function() {
-              return originalFillText.apply(this, arguments as any);
+          const ctx = originalGetContext.call(this, type, attributes);
+          if (type === '2d' && ctx) {
+            const orig = (ctx as CanvasRenderingContext2D).getImageData.bind(ctx);
+            (ctx as any).getImageData = function(x: number, y: number, w: number, h: number) {
+              const data = orig(x, y, w, h);
+              // Inject imperceptible noise
+              for (let i = 0; i < data.data.length; i += 100) {
+                data.data[i] ^= 1;
+              }
+              return data;
             };
           }
-          return context;
+          return ctx;
+        };
+
+        // 7. WebGL vendor/renderer spoofing
+        const getParameter = WebGLRenderingContext.prototype.getParameter;
+        WebGLRenderingContext.prototype.getParameter = function(parameter: number) {
+          if (parameter === 37445) return "Intel Inc.";   // UNMASKED_VENDOR_WEBGL
+          if (parameter === 37446) return "Intel Iris OpenGL Engine"; // UNMASKED_RENDERER_WEBGL
+          return getParameter.call(this, parameter);
+        };
+
+        // 8. AudioContext fingerprint noise
+        const origCreateAnalyser = AudioContext.prototype.createAnalyser;
+        AudioContext.prototype.createAnalyser = function() {
+          const analyser = origCreateAnalyser.call(this);
+          const orig = analyser.getFloatFrequencyData.bind(analyser);
+          analyser.getFloatFrequencyData = function(array: Float32Array<ArrayBuffer>) {
+            orig(array);
+            for (let i = 0; i < array.length; i++) {
+              array[i] += (Math.random() - 0.5) * 0.0001;
+            }
+          };
+          return analyser;
+        };
+
+        // 9. Screen resolution — match viewport exactly (no mismatch signal)
+        Object.defineProperty(screen, "width",       { get: () => window.innerWidth });
+        Object.defineProperty(screen, "height",      { get: () => window.innerHeight });
+        Object.defineProperty(screen, "availWidth",  { get: () => window.innerWidth });
+        Object.defineProperty(screen, "availHeight", { get: () => window.innerHeight });
+
+        // 10. Realistic connection type
+        Object.defineProperty(navigator, "connection", {
+          get: () => ({ effectiveType: "4g", rtt: 50, downlink: 10, saveData: false })
+        });
+
+        // 11. Conceal automation via toString checks
+        const originalToString = Function.prototype.toString;
+        Function.prototype.toString = function() {
+          if (this === Function.prototype.toString) return "function toString() { [native code] }";
+          return originalToString.call(this);
         };
       });
 
@@ -376,19 +501,25 @@ export class BrowserService extends EventEmitter {
     await new Promise((resolve) => setTimeout(resolve, delay));
   }
 
+  private readonly BLOCKED_SIGNALS = [
+    (url: string, _title: string) => url.includes("google.com/sorry"),
+    (url: string, _title: string) => url.includes("consent.google.com"),
+    (url: string, _title: string) => url.includes("linkedin.com/checkpoint"),
+    (url: string, _title: string) => url.includes("linkedin.com/authwall"),
+    (_url: string, title: string) => title.toLowerCase().includes("robot"),
+    (_url: string, title: string) => title.toLowerCase().includes("captcha"),
+    (_url: string, title: string) => title.toLowerCase().includes("verify you are human"),
+    (_url: string, title: string) => title.toLowerCase().includes("access denied"),
+    (_url: string, title: string) => title.includes("Before you continue"),
+    (_url: string, title: string) => title.toLowerCase().includes("just a moment"), // Cloudflare
+    (_url: string, title: string) => title.toLowerCase().includes("are you a human"),
+  ];
+
   private async detectProtection(sessionId: string, page: any): Promise<BrowserSessionStatus> {
     const url = page.url();
-    const title = await page.title();
-    
-    const isBlocked = 
-      url.includes("google.com/sorry") || 
-      url.includes("consent.google.com") ||
-      url.includes("linkedin.com/checkpoint") ||
-      title.toLowerCase().includes("robot") || 
-      title.toLowerCase().includes("captcha") ||
-      title.toLowerCase().includes("verify you are human") ||
-      title.toLowerCase().includes("access denied") ||
-      title.includes("Before you continue");
+    const title = await page.title().catch(() => "");
+
+    const isBlocked = this.BLOCKED_SIGNALS.some(fn => fn(url, title));
 
     if (isBlocked) {
       this.sessionManager.updateStatus(sessionId, "protected");
@@ -405,6 +536,26 @@ export class BrowserService extends EventEmitter {
 
     this.sessionManager.updateStatus(sessionId, "active");
     return "active";
+  }
+
+  // Fallback site order when one job board blocks Atlas
+  private readonly JOB_SITE_FALLBACKS: Record<string, string[]> = {
+    "linkedin.com": ["indeed.com", "glassdoor.com"],
+    "indeed.com":   ["linkedin.com", "glassdoor.com"],
+    "glassdoor.com":["linkedin.com", "indeed.com"],
+  };
+
+  private buildFallbackUrl(blockedUrl: string, searchTerm: string, location: string): string | null {
+    const blocked = Object.keys(this.JOB_SITE_FALLBACKS).find(site => blockedUrl.includes(site));
+    if (!blocked) return null;
+    const fallbacks = this.JOB_SITE_FALLBACKS[blocked];
+    const next = fallbacks[0];
+    const q = encodeURIComponent(searchTerm);
+    const l = encodeURIComponent(location);
+    if (next === "indeed.com")    return `https://www.indeed.com/jobs?q=${q}&l=${l}`;
+    if (next === "glassdoor.com") return `https://www.glassdoor.com/Job/jobs.htm?sc.keyword=${q}&locT=C&locId=0`;
+    if (next === "linkedin.com")  return `https://www.linkedin.com/jobs/search/?keywords=${q}&location=${l}`;
+    return null;
   }
 
   private updateSessionHistory(sessionId: string, tool: string, status: "ok" | "error", url?: string, detail?: string) {
@@ -435,7 +586,7 @@ export class BrowserService extends EventEmitter {
         detail: `Navigating to ${input.url}...`
       });
 
-      await this.humanizedDelay(300, 800);
+      await this.humanDelay(300, 800);
 
       let usedScrapling = false;
       let title = "";
@@ -460,9 +611,10 @@ export class BrowserService extends EventEmitter {
 
       if (!usedScrapling) {
         await this.captureObserverScreenshot(input.sessionId, resolved.pageId, "navigate_start");
+        const isJobBoard = /linkedin|indeed|glassdoor|jobs\.|careers\./i.test(input.url);
         await resolved.page.goto(input.url, {
           waitUntil: "domcontentloaded",
-          timeout: this.config.defaultTimeoutMs,
+          timeout: isJobBoard ? 12_000 : this.config.defaultTimeoutMs,
         });
         await this.captureObserverScreenshot(input.sessionId, resolved.pageId, "navigate_end");
         title = await resolved.page.title();
@@ -470,9 +622,20 @@ export class BrowserService extends EventEmitter {
 
       const status = await this.detectProtection(input.sessionId, resolved.page);
       this.updateSessionHistory(input.sessionId, "browser_navigate", "ok", input.url, status === "protected" ? "Security wall detected" : undefined);
+
+      // Auto-accept cookie/GDPR banners after every navigation
+      if (status === "active") {
+        await this.acceptCookies({ sessionId: input.sessionId, pageId: resolved.pageId }).catch(() => {});
+      }
+
       await this.captureObserverScreenshot(input.sessionId, resolved.pageId, "browser_navigate");
 
-      await this.humanizedDelay(500, 1500);
+      // Simulate reading the loaded page before returning
+      if (status === "active") {
+        await this.simulateReading(resolved.page);
+        await this.idleMovement(resolved.page);
+      }
+      await this.humanDelay(500, 1500);
 
       return {
         sessionId: input.sessionId,
@@ -527,9 +690,9 @@ export class BrowserService extends EventEmitter {
     return this.executeSessionAction("browser_click", input.sessionId, async () => {
       await this.requireConfirmation("browser_click", input.sessionId, "Click selector", input.selector);
       const resolved = this.sessionManager.getPage(input.sessionId, input.pageId);
-      await this.humanizedDelay(200, 600);
+      await this.humanDelay(200, 600);
       await this.captureObserverScreenshot(input.sessionId, resolved.pageId, "click_start");
-      await resolved.page.locator(input.selector).first().click({ timeout: this.config.defaultTimeoutMs });
+      await this.humanClick(resolved.page, input.selector);
       await this.captureObserverScreenshot(input.sessionId, resolved.pageId, "click_end");
       this.updateSessionHistory(input.sessionId, "browser_click", "ok", undefined, `Clicked ${input.selector}`);
       return { sessionId: input.sessionId, pageId: resolved.pageId, selector: input.selector };
@@ -582,6 +745,116 @@ export class BrowserService extends EventEmitter {
     });
   }
 
+  private readonly COOKIE_SELECTORS = [
+    // Generic GDPR / consent patterns
+    'button[id*="accept"]',
+    'button[class*="accept-all"]',
+    '[aria-label*="Accept all"]',
+    '[aria-label*="Accept cookies"]',
+    // OneTrust (Indeed, many sites)
+    '#onetrust-accept-btn-handler',
+    'button.onetrust-close-btn-handler',
+    // LinkedIn
+    'button.artdeco-button--primary[action-type="ACCEPT"]',
+    // Glassdoor
+    'button[data-test="accept-btn"]',
+    // CookieBot
+    '#CybotCookiebotDialogBodyLevelButtonLevelOptinAllowAll',
+    // Text-match fallbacks (Playwright :has-text)
+    'button:has-text("Accept all")',
+    'button:has-text("Accept All")',
+    'button:has-text("Accept cookies")',
+    'button:has-text("Allow all")',
+    'button:has-text("I agree")',
+    'button:has-text("Agree")',
+    'button:has-text("Got it")',
+  ];
+
+  async acceptCookies(
+    input: BrowserAcceptCookiesInput,
+  ): Promise<BrowserActionResult<{ sessionId: string; pageId: string; accepted: boolean; selector?: string }>> {
+    return this.executeSessionAction("browser_accept_cookies", input.sessionId, async () => {
+      const resolved = this.sessionManager.getPage(input.sessionId, input.pageId);
+      for (const selector of this.COOKIE_SELECTORS) {
+        try {
+          const locator = resolved.page.locator(selector).first();
+          const visible = await locator.isVisible({ timeout: 1500 }).catch(() => false);
+          if (visible) {
+            await locator.click({ timeout: 2000 });
+            await this.humanizedDelay(300, 700);
+            console.log(`[BrowserService] Cookie banner accepted via: ${selector}`);
+            this.updateSessionHistory(input.sessionId, "browser_accept_cookies", "ok", undefined, `Accepted via ${selector}`);
+            return { sessionId: input.sessionId, pageId: resolved.pageId, accepted: true, selector };
+          }
+        } catch {
+          // silently try next selector
+        }
+      }
+      this.updateSessionHistory(input.sessionId, "browser_accept_cookies", "ok", undefined, "No cookie banner found");
+      return { sessionId: input.sessionId, pageId: resolved.pageId, accepted: false };
+    });
+  }
+
+  async captureAndExtractDom(
+    input: BrowserCaptureDomInput,
+  ): Promise<BrowserActionResult<{ sessionId: string; pageId: string; raw: string; extracted: Record<string, unknown> }>> {
+    return this.executeSessionAction("browser_capture_dom", input.sessionId, async () => {
+      const resolved = this.sessionManager.getPage(input.sessionId, input.pageId);
+      const includeScreenshot = input.includeScreenshot ?? true;
+
+      // 1. Capture DOM (trimmed to stay within LLM token budget)
+      const fullHtml = await resolved.page.content();
+      const trimmedHtml = fullHtml.slice(0, 50_000);
+
+      // 2. Optionally capture screenshot as base64
+      let screenshotBase64: string | null = null;
+      if (includeScreenshot) {
+        try {
+          const buf = await resolved.page.screenshot({ fullPage: false, type: "png" });
+          screenshotBase64 = buf.toString("base64");
+        } catch (err) {
+          console.warn("[BrowserService] captureAndExtractDom: screenshot failed, continuing without it", err);
+        }
+      }
+
+      // 3. Build extraction prompt
+      const extractionPrompt = input.prompt ??
+        `Extract ALL job listings visible on this page. For each job return a JSON object with these fields:
+title (string), company (string), location (string), salary (string or null),
+jobType (string or null), datePosted (string or null), url (string or null), description (string or null).
+Return ONLY a valid JSON array of job objects — no markdown, no explanation.`;
+
+      // 4. Build multimodal parts
+      const parts: Array<{ text: string } | { inline_data: { mime_type: string; data: string } }> = [];
+      if (screenshotBase64) {
+        parts.push({ inline_data: { mime_type: "image/png", data: screenshotBase64 } });
+      }
+      parts.push({ text: extractionPrompt });
+      parts.push({ text: `Page HTML (for grounding):\n${trimmedHtml}` });
+
+      // 5. Call LLM
+      const llmResult = await callVertexMultimodal({ parts, responseMimeType: "application/json", temperature: 0.1 });
+
+      let extracted: Record<string, unknown> = {};
+      if (llmResult.ok && llmResult.text) {
+        try {
+          const parsed = JSON.parse(llmResult.text);
+          extracted = Array.isArray(parsed) ? { jobs: parsed } : parsed;
+        } catch {
+          // LLM returned non-JSON — store raw text
+          extracted = { raw_text: llmResult.text };
+        }
+      } else {
+        console.warn("[BrowserService] captureAndExtractDom: LLM extraction failed:", llmResult.error);
+      }
+
+      this.updateSessionHistory(input.sessionId, "browser_capture_dom", "ok", undefined, `Extracted via LLM, jobs: ${Array.isArray((extracted as any).jobs) ? (extracted as any).jobs.length : "unknown"}`);
+      await this.captureObserverScreenshot(input.sessionId, resolved.pageId, "browser_capture_dom");
+
+      return { sessionId: input.sessionId, pageId: resolved.pageId, raw: trimmedHtml, extracted };
+    });
+  }
+
   async extractJobs(
     input: BrowserExtractJobsInput,
   ): Promise<any> {
@@ -590,10 +863,32 @@ export class BrowserService extends EventEmitter {
       const currentUrl = resolved.page.url();
       const isLinkedIn = currentUrl.includes("linkedin.com");
 
-      // 1. Behavioral Stealth: Jiggle and Scroll to trigger hydration/loaders
-      await this.mouseJiggle(resolved.page);
-      await this.smoothScroll(resolved.page, 400);
-      await this.humanizedDelay(1500, 3000);
+      // ── Extension path: real Chrome browser, two-phase extraction ─────────
+      const isJobBoard = /linkedin\.com|indeed\.com|glassdoor\.com/.test(currentUrl);
+      if (isJobBoard && extensionBridge.isConnected()) {
+        console.log("[BrowserService] Using Chrome extension for job extraction:", currentUrl);
+        try {
+          const extJobs = await this.extractJobsViaExtension(currentUrl, input.searchTerm, input.location);
+          if (extJobs.length > 0) {
+            this.updateSessionHistory(input.sessionId, "browser_extract_jobs", "ok", undefined, `Extracted ${extJobs.length} jobs via extension+OCR`);
+            return {
+              sessionId: input.sessionId,
+              pageId: resolved.pageId,
+              url: currentUrl,
+              jobs: extJobs,
+              count: extJobs.length,
+            };
+          }
+        } catch (err) {
+          console.warn("[BrowserService] Extension extraction failed, falling back to Playwright:", err);
+        }
+      }
+
+      // 1. Behavioral Stealth: simulate human landing on page
+      await this.simulateReading(resolved.page);
+      await this.idleMovement(resolved.page);
+      await this.humanScroll(resolved.page, 300 + Math.floor(Math.random() * 400));
+      await this.humanDelay(800, 2000);
 
       // 2. URL Correction if needed (LinkedIn specific)
       if (input.searchTerm && isLinkedIn && (currentUrl.includes("undefined") || !currentUrl.includes("keywords="))) {
@@ -604,20 +899,50 @@ export class BrowserService extends EventEmitter {
         await resolved.page.goto(filteredUrl, { waitUntil: "domcontentloaded", timeout: 20000 });
       }
 
-      // 3. Live DOM Extraction
-      const html = await resolved.page.content();
-      const scraplingResult = await this.runScrapling(html, "job", currentUrl);
-      const rawJobs = scraplingResult.status === "ok" ? scraplingResult.jobs : [];
-      
+      // 3. Check if site is blocked — switch to fallback immediately
+      const sessionStatus = this.sessionManager.getSession(input.sessionId).status;
+      if (sessionStatus === "protected") {
+        const fallbackUrl = this.buildFallbackUrl(currentUrl, input.searchTerm ?? "jobs", input.location ?? "London");
+        if (fallbackUrl) {
+          console.log(`[BrowserService] Site blocked at ${currentUrl} — switching to ${fallbackUrl}`);
+          await resolved.page.goto(fallbackUrl, { waitUntil: "domcontentloaded", timeout: 15_000 });
+          this.sessionManager.updateStatus(input.sessionId, "active");
+          this.emitObserverEvent({ sessionId: input.sessionId, type: "status", status: "active", url: fallbackUrl, detail: `Switched to fallback site: ${fallbackUrl}` });
+        }
+      }
+
+      // 4. Auto-accept cookie banners before extraction
+      await this.acceptCookies({ sessionId: input.sessionId, pageId: resolved.pageId }).catch(() => {});
+
+      // 4. Primary: LLM-based DOM extraction
+      let rawJobs: any[] = [];
+      try {
+        const domResult = await this.captureAndExtractDom({ sessionId: input.sessionId, pageId: resolved.pageId, includeScreenshot: true });
+        if (domResult.status === "ok" && domResult.data?.extracted) {
+          const extracted = domResult.data.extracted as any;
+          rawJobs = Array.isArray(extracted.jobs) ? extracted.jobs : [];
+        }
+      } catch (err) {
+        console.warn("[BrowserService] LLM extraction failed, falling back to Scrapling:", err);
+      }
+
+      // 5. Fallback: Scrapling Python worker
+      if (rawJobs.length === 0) {
+        console.log("[BrowserService] Falling back to Scrapling for job extraction");
+        const html = await resolved.page.content();
+        const scraplingResult = await this.runScrapling(html, "job", currentUrl);
+        rawJobs = scraplingResult.status === "ok" ? scraplingResult.jobs : [];
+      }
+
       const jobs = rawJobs.map((job: any) => ({
         ...job,
         id: Buffer.from(`${job.title}-${job.company}-${job.location}`).toString("base64"),
-        link: job.url || "", 
-        source: "Agent Search", 
-        description: `${job.location}, ${job.date_posted || 'recently'}`
+        link: job.url || job.link || "",
+        source: "Agent Search",
+        description: job.description || `${job.location || ""}, ${job.datePosted || job.date_posted || "recently"}`,
       }));
 
-      this.updateSessionHistory(input.sessionId, "browser_extract_jobs", "ok", undefined, `Extracted ${jobs.length} jobs via Live DOM`);
+      this.updateSessionHistory(input.sessionId, "browser_extract_jobs", "ok", undefined, `Extracted ${jobs.length} jobs via LLM+DOM`);
       await this.captureObserverScreenshot(input.sessionId, resolved.pageId, "browser_extract_jobs");
 
       return {
@@ -628,6 +953,44 @@ export class BrowserService extends EventEmitter {
         count: jobs.length
       };
     });
+  }
+
+  private async extractJobsViaExtension(
+    searchUrl: string,
+    searchTerm?: string,
+    location?: string,
+  ): Promise<any[]> {
+    // Phase 1 — Navigate to search results, DOM scrape for job cards
+    extensionBridge.resetCancel();
+    console.log("[ExtensionExtract] Phase 1: navigating to search URL");
+    await extensionBridge.navigate(searchUrl);
+
+    // Scroll 3 times to load lazy-loaded cards
+    for (let i = 0; i < 3; i++) {
+      if (extensionBridge.isCancelled()) return [];
+      await extensionBridge.scroll(600);
+      await new Promise((r) => setTimeout(r, 800));
+    }
+
+    const cards = await extensionBridge.getJobCards();
+    console.log(`[ExtensionExtract] Phase 1: found ${cards.length} job cards`);
+
+    if (cards.length === 0) return [];
+
+    // Phase 1 results — return immediately so Atlas can show them to the user fast
+    // Phase 2 OCR is triggered separately via browser_extension_enrich_job tool
+    const limit = Math.min(cards.length, 10);
+    return cards.slice(0, limit).map((card) => ({
+      id: Buffer.from(`${card.title}-${card.url}`).toString("base64"),
+      title: card.title,
+      company: "",
+      location: card.location,
+      link: card.url,
+      url: card.url,
+      source: "Extension+DOM",
+      description: "",
+      salary: null,
+    }));
   }
 
   private async internalEnrichJobs(
@@ -703,6 +1066,81 @@ export class BrowserService extends EventEmitter {
         status: snapshot.status
       };
     });
+  }
+
+  async extensionStatus(): Promise<BrowserActionResult<{ connected: boolean; tabOpen: boolean }>> {
+    const t0 = Date.now();
+    const connected = extensionBridge.isConnected();
+    const tabOpen = connected ? await extensionBridge.ping() : false;
+    return {
+      status: "ok",
+      tool: "browser_extension_status",
+      timestamp: new Date().toISOString(),
+      data: { connected, tabOpen },
+      metadata: { attempt: 1, retries: 0, durationMs: Date.now() - t0 },
+    };
+  }
+
+  async enrichJobViaExtension(input: { url: string }): Promise<BrowserActionResult<{ job: any }>> {
+    const t0 = Date.now();
+    if (!extensionBridge.isConnected()) {
+      return { status: "error", tool: "browser_extension_enrich_job", timestamp: new Date().toISOString(), data: { job: null }, error: { code: "EXTENSION_NOT_CONNECTED", message: "Chrome extension not connected", retriable: false }, metadata: { attempt: 1, retries: 0, durationMs: 0 } };
+    }
+    try {
+      await extensionBridge.navigate(input.url);
+      await new Promise((r) => setTimeout(r, 600));
+      const png = await extensionBridge.screenshot();
+      const details = await extractJobFromScreenshot(png, input.url);
+      const job = {
+        title: details?.title || "",
+        company: details?.company || "",
+        location: details?.location || "",
+        salary: details?.salary || null,
+        jobType: details?.jobType || null,
+        datePosted: details?.datePosted || null,
+        description: details?.description || "",
+        requirements: details?.requirements || "",
+        url: input.url,
+        link: input.url,
+        source: "Extension+OCR",
+      };
+      return { status: "ok", tool: "browser_extension_enrich_job", timestamp: new Date().toISOString(), data: { job }, metadata: { attempt: 1, retries: 0, durationMs: Date.now() - t0 } };
+    } catch (err: any) {
+      return { status: "error", tool: "browser_extension_enrich_job", timestamp: new Date().toISOString(), data: { job: null }, error: { code: "ENRICH_FAILED", message: err.message, retriable: true }, metadata: { attempt: 1, retries: 0, durationMs: Date.now() - t0 } };
+    }
+  }
+
+  async extensionExtractJobs(input: { searchUrl: string; query?: string; location?: string }): Promise<BrowserActionResult<{ jobs: any[]; count: number; source: string }>> {
+    const t0 = Date.now();
+    if (!extensionBridge.isConnected()) {
+      return {
+        status: "error",
+        tool: "browser_extension_extract_jobs",
+        timestamp: new Date().toISOString(),
+        data: { jobs: [], count: 0, source: "extension" },
+        error: { code: "EXTENSION_NOT_CONNECTED", message: "Chrome extension not connected", retriable: false },
+        metadata: { attempt: 1, retries: 0, durationMs: Date.now() - t0 },
+      };
+    }
+    try {
+      const jobs = await this.extractJobsViaExtension(input.searchUrl, input.query, input.location);
+      return {
+        status: "ok",
+        tool: "browser_extension_extract_jobs",
+        timestamp: new Date().toISOString(),
+        data: { jobs, count: jobs.length, source: "extension+ocr" },
+        metadata: { attempt: 1, retries: 0, durationMs: Date.now() - t0 },
+      };
+    } catch (err: any) {
+      return {
+        status: "error",
+        tool: "browser_extension_extract_jobs",
+        timestamp: new Date().toISOString(),
+        data: { jobs: [], count: 0, source: "extension" },
+        error: { code: "EXTENSION_EXTRACT_FAILED", message: err.message || String(err), retriable: true },
+        metadata: { attempt: 1, retries: 0, durationMs: Date.now() - t0 },
+      };
+    }
   }
 
   listSessions(): BrowserSessionSnapshot[] {

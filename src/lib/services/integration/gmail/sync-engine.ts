@@ -3,10 +3,30 @@ import { prisma } from "@/lib/db";
 import { getValidTokensHelper } from "./oauth";
 import { matchThreadToJob } from "./matching-logic";
 
-const SYNC_PAGE_LIMIT = 50; // Sync in small batches
-const QUERY = "(job OR interview OR application OR recruiter OR offer OR rejected OR hiring OR opportunity OR career OR resume OR cv OR portfolio OR onboarding OR joining OR compensation OR status OR position) newer_than:30d";
+const SYNC_PAGE_LIMIT = 100; // Increased from 50 to cover a week of emails
 
-export async function syncGmail(userId: string) {
+const JOB_KEYWORDS = [
+  "job", "interview", "application", "recruiter", "offer", "rejected",
+  "hiring", "opportunity", "career", "resume", "cv", "portfolio",
+  "onboarding", "joining", "compensation", "position", "shortlisted",
+  "assessment", "technical test", "coding challenge", "take-home",
+  "salary", "start date", "background check", "reference check",
+  "invitation to interview", "thank you for applying", "unfortunately",
+  "pleased to inform", "next steps", "talent acquisition", "hr team",
+  "screening call", "final round", "offer letter", "rejection",
+];
+
+function buildGmailQuery(keywords?: string[], days = 7): string {
+  const kws = keywords && keywords.length > 0 ? keywords : JOB_KEYWORDS;
+  const keywordClause = kws.map(k => (k.includes(" ") ? `"${k}"` : k)).join(" OR ");
+  return `(${keywordClause}) newer_than:${days}d`;
+}
+
+export async function syncGmail(
+  userId: string,
+  options?: { keywords?: string[]; days?: number }
+) {
+  const gmailQuery = buildGmailQuery(options?.keywords, options?.days ?? 7);
   let account: any = null;
   let skipPrisma = false;
   try {
@@ -58,11 +78,13 @@ export async function syncGmail(userId: string) {
     );
     const gmail = google.gmail({ version: "v1", auth: oauth2Client });
 
+    console.log(`[Gmail Sync] Query: ${gmailQuery}`);
+
     // 1. Fetch relevant threads recently modified or matching queries
     const listRes = await gmail.users.threads.list({
       userId: "me",
       maxResults: SYNC_PAGE_LIMIT,
-      q: QUERY,
+      q: gmailQuery,
     });
 
     let threadsSynced = 0;

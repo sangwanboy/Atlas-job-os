@@ -14,8 +14,8 @@ A production-minded, full-stack SaaS application for intelligent job discovery, 
 | Auth | NextAuth v5 (beta) — JWT + Credentials |
 | ORM | Prisma 6 + PostgreSQL |
 | AI Provider | Gemini via Vertex AI (service account) — `gemini-3-flash-preview` default |
-| Job Scraping | Playwright + Patchright (Python, human-like stealth scraper) |
-| Browser Automation | Playwright (Chromium) |
+| Job Scraping | Playwright + Patchright (Python, stealth) **or** Chrome Extension + LLM OCR |
+| Browser Automation | Playwright (Chromium) + Chrome Extension (real logged-in Chrome) |
 | Tables | TanStack React Table v8 |
 | Charts | Recharts |
 | Email Integration | Gmail API (googleapis) |
@@ -140,10 +140,28 @@ npm run prisma:seed
 
 ```bash
 npm run dev            # Next.js on port 3000
-npm run browser-server # Browser automation service on port 3001 (required for job scraping)
 ```
 
-> **Both servers must run simultaneously.** The browser server powers all Playwright tools (navigate, click, type, screenshot, extract_text) and the job scraper.
+In a second terminal (keep it open):
+```bash
+D:\Projects\Atlas-job-os\start-browser-server.cmd   # Windows
+# or
+npx tsx --env-file=.env --env-file=.env.local src/lib/services/browser/server.ts
+```
+
+> **Both servers must run simultaneously.** The browser server (port 3001) powers Playwright tools and the job scraper. It also runs the Chrome Extension bridge on **port 3002**.
+
+### 7. (Optional but recommended) Install the Chrome Extension
+
+Load the extension for bot-free job searching using your real logged-in Chrome session:
+
+1. Open Chrome → `chrome://extensions`
+2. Enable **Developer mode** (top-right toggle)
+3. Click **Load unpacked** → select `D:\Projects\Atlas-job-os\chrome-extension\`
+4. Start the browser server — the extension auto-connects to `ws://localhost:3002`
+5. Verify: click **service worker** on the extension card → DevTools console shows `[Atlas] Connected to bridge at ws://localhost:3002`
+
+When the extension is connected, Atlas uses it for LinkedIn and Indeed searches (your real logged-in session — no bot detection, no auth walls). Playwright remains as fallback when the extension is not connected.
 
 ---
 
@@ -171,18 +189,25 @@ Admin users can manage all users at `/admin/users`:
 ## Features
 
 ### Job Discovery (Atlas Agent)
-The Atlas AI agent uses a **stealth Playwright browser** with human-like behavior (Bezier mouse curves, randomized fingerprints, warm-up navigation) for high-fidelity structured job extraction from LinkedIn, Indeed, Reed, TotalJobs, Adzuna, CV-Library, Monster, and CWJobs.
+Atlas supports two job extraction modes depending on whether the Chrome extension is connected:
 
-**How it works:**
-1. User asks Atlas to find jobs (e.g. "Find nursing jobs in London")
-2. Atlas chooses its approach:
-   - **Bulk mode**: `browser_extract_jobs` → Python worker → Crawl4AI scrapes platforms in parallel
-   - **Step-by-step mode**: `browser_navigate` → `browser_type` → `browser_click` → `browser_extract_text` (Atlas drives the browser manually, visible in real time)
-3. Structured job data (title, company, location, salary, date) extracted
-4. Results capped to **Max Jobs Per Search** limit (admin-configurable, default 20)
-5. Atlas previews jobs in rich cards inside the chat bubble with **"View listing ↗"** links
-6. User clicks **Import All** or **Import** (per card) to save to the pipeline
-7. Pipeline (local cache, 24h TTL) → Jobs Saved (DB-imported, permanent)
+**Mode 1 — Chrome Extension (preferred)**
+Uses the user's real logged-in Chrome browser via a WebSocket bridge. No bot detection, no auth walls.
+- **Phase 1**: Navigate to job search results → DOM scrape job cards (title, location, URL)
+- **Phase 2**: Visit each job URL → full-page screenshot → Vertex AI multimodal OCR → structured data
+- Runs on LinkedIn and Indeed via the Atlas-managed dedicated tab
+- Clicking **Stop** in chat closes the Atlas tab immediately
+
+**Mode 2 — Playwright / Scrapling (fallback)**
+Used when extension is not connected. Stealth Chromium with Bezier mouse curves, randomized fingerprints, warm-up navigation. Searches 8 UK platforms in parallel (LinkedIn, Indeed, Reed, TotalJobs, Adzuna, CV-Library, Monster, CWJobs).
+
+**Common flow:**
+1. User asks Atlas to find jobs
+2. Atlas checks extension status (`browser_extension_status`)
+3. Extension path or Playwright path executes
+4. Results capped to **Max Jobs Per Search** (admin-configurable, default 20)
+5. Atlas previews jobs in rich cards with **"View listing ↗"** links
+6. User clicks **Import All** or **Import** to save to pipeline
 
 **Stealth browser:** Persistent Chromium profile (`src/agents/atlas/browser_profile/`) with Patchright + comprehensive fingerprint spoofing (canvas noise, WebGL vendor/renderer override, screen/connection spoofing, Bezier mouse movements, warm-up navigation via Google for realistic referrer chains).
 

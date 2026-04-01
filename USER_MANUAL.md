@@ -41,14 +41,23 @@ Type naturally — Atlas understands intent:
 > "Get financial analyst positions in London, posted this week"
 
 **What Atlas does with a job search:**
-1. Searches 8 UK job boards in parallel (LinkedIn, Indeed, Reed, TotalJobs, Adzuna, CV-Library, Monster, CWJobs)
-2. Uses a stealth Chromium browser with fingerprint spoofing to avoid bot detection
-3. Scores each card against your search query
-4. Visits the top matching job pages individually
-5. Extracts full details: description, salary, job type, date posted, applicant count, apply link
+
+Atlas uses whichever extraction mode is available:
+
+**With Chrome Extension (recommended):**
+1. Opens a dedicated Atlas tab in your Chrome browser
+2. Navigates to the job search results page (LinkedIn / Indeed)
+3. Scrapes job cards from the DOM (title, location, URL)
+4. Visits each job page → takes a full-page screenshot → sends to Vertex AI for OCR extraction
+5. Returns structured results: title, company, location, salary, job type, full description
 6. Presents them in the **Job Discovery Preview** box
 
-Atlas streams its response in real-time as it thinks. Simple messages like "hi" get a response in ~3 seconds. Job searches take longer (8–15s) due to browser automation. You can click the **cyan stop button** at any time to cancel a response mid-generation.
+**Without extension (Playwright fallback):**
+1. Searches 8 UK job boards in parallel (LinkedIn, Indeed, Reed, TotalJobs, Adzuna, CV-Library, Monster, CWJobs)
+2. Uses a stealth Chromium browser with fingerprint spoofing
+3. Scores each card against your search query and extracts full details
+
+Atlas streams its response in real-time. Simple messages respond in ~3 seconds. Job searches take 15–60s depending on the number of job pages visited. Click the **cyan stop button** at any time to cancel — this also closes the Atlas tab immediately.
 
 ---
 
@@ -252,10 +261,35 @@ Import a broad set first, then tell Atlas:
 
 ---
 
+## Chrome Extension Setup
+
+The Chrome extension gives Atlas full control over your real logged-in Chrome browser. This bypasses LinkedIn and Indeed auth walls entirely.
+
+**Installing:**
+1. Open Chrome → `chrome://extensions`
+2. Enable **Developer mode** (top-right toggle)
+3. Click **Load unpacked** → select the `chrome-extension` folder inside the project
+4. Start the browser server: run `start-browser-server.cmd` (keep the window open)
+5. The extension auto-connects — click **service worker** on the extension card to confirm: `[Atlas] Connected to bridge at ws://localhost:3002`
+
+**How it works:**
+- Atlas opens a dedicated tab in your Chrome window for job browsing
+- All other tabs are untouched
+- The tab closes automatically when you stop Atlas or the search completes
+- The extension stays alive via a keep-alive alarm (fires every ~25 seconds)
+
+**If the extension shows ERR_CONNECTION_REFUSED:**
+The browser server isn't running. Start `start-browser-server.cmd` — the extension retries every 3 seconds.
+
+**If LinkedIn shows a sign-in wall in the Atlas tab:**
+Log into LinkedIn in a regular Chrome tab first. The Atlas tab shares your Chrome session.
+
+---
+
 ## Troubleshooting
 
 **"LinkedIn is temporarily blocking automated access"**
-LinkedIn rate-limits scrapers periodically. Wait 2–3 minutes and try again, or try Indeed directly:
+If the extension is not connected, LinkedIn rate-limits scrapers periodically. Install the Chrome extension for bot-free access using your real session. Or try Indeed directly:
 > "Search Indeed for software engineer jobs in London"
 
 **Jobs have no salary shown**

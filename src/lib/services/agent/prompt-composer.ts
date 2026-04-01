@@ -12,6 +12,7 @@ export interface HydratedLayers {
   recentContext?: string;
   cvContext?: string;
   cvSummary?: string;     // Upgrade tips and CV quality analysis
+  pipelineContext?: string; // Live snapshot of jobs discovered but not yet imported
 }
 
 export function composeAgentSystemPrompt(agent: RegisteredAgent, layers: HydratedLayers, options?: { lightweight?: boolean }): string {
@@ -150,6 +151,10 @@ Continuity Sync Protocol (CRITICAL):
 
   if (layers.preferences) {
     promptParts.push(`[PREFERENCES]\n${layers.preferences}\n`);
+  }
+
+  if (layers.pipelineContext) {
+    promptParts.push(`[PIPELINE – JOBS DISCOVERED, NOT YET IMPORTED]\n${layers.pipelineContext}\n`);
   }
 
   if (layers.cvSummary && !lightweight) {

@@ -56,7 +56,7 @@ export function getBrowserRuntimeConfig(): BrowserRuntimeConfig {
   }
 
   const allowedDomains = parseList(process.env.BROWSER_ALLOWED_DOMAINS);
-  const mode = (process.env.BROWSER_MODE as BrowserMode) || "headless";
+  const mode = (process.env.BROWSER_MODE as BrowserMode) || "headed-local";
 
   cachedConfig = {
     mode,

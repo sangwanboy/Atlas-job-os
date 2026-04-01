@@ -792,6 +792,8 @@ export function AgentChatStarter() {
 
   function stopGeneration() {
     abortControllerRef.current?.abort();
+    // Cancel any in-progress extension extraction
+    fetch("http://localhost:3001/api/browser/cancel", { method: "POST" }).catch(() => {});
   }
 
   async function handleImportAll() {

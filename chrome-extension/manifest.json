@@ -1,0 +1,21 @@
+{
+  "manifest_version": 3,
+  "name": "Atlas Job OS",
+  "version": "1.0",
+  "description": "Gives Atlas full browser control for job searching",
+  "permissions": ["tabs", "debugger", "scripting", "storage", "activeTab", "alarms", "windows"],
+  "host_permissions": ["<all_urls>"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_title": "Atlas Job OS"
+  }
+}

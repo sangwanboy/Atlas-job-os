@@ -101,6 +101,20 @@ const closeSessionSchema = z
     sessionId: z.string().min(1),
   });
 
+const acceptCookiesSchema = z
+  .object({
+    sessionId: z.string().min(1),
+    pageId: z.string().min(1).optional(),
+  });
+
+const captureDomSchema = z
+  .object({
+    sessionId: z.string().min(1),
+    pageId: z.string().min(1).optional(),
+    prompt: z.string().max(2000).optional(),
+    includeScreenshot: z.boolean().optional(),
+  });
+
 const schemaMap: { [K in BrowserToolName]: z.ZodType<BrowserToolInputMap[K]> } = {
   browser_launch_browser: launchBrowserSchema,
   browser_create_session: createSessionSchema,
@@ -114,8 +128,17 @@ const schemaMap: { [K in BrowserToolName]: z.ZodType<BrowserToolInputMap[K]> } =
   browser_extract_jobs: extractJobsSchema,
   browser_enrich_jobs: enrichJobsSchema,
   browser_screenshot: screenshotSchema,
+  browser_accept_cookies: acceptCookiesSchema,
+  browser_capture_dom: captureDomSchema,
   browser_close_session: closeSessionSchema,
   browser_resume: z.object({ sessionId: z.string().min(1) }),
+  browser_extension_status: z.object({}),
+  browser_extension_extract_jobs: z.object({
+    searchUrl: z.string().url(),
+    query: z.string().optional(),
+    location: z.string().optional(),
+  }),
+  browser_extension_enrich_job: z.object({ url: z.string().url() }),
 };
 
 export function validateBrowserToolInput<K extends BrowserToolName>(

@@ -1,6 +1,7 @@
 import { atlasState, ATLAS_FILES } from "./atlas-state-manager";
 import { prisma } from "@/lib/db";
 import { HydratedLayers } from "./prompt-composer";
+import { localJobsCache } from "@/lib/services/jobs/local-jobs-cache";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 
@@ -20,10 +21,35 @@ export type ActiveTaskState = {
   currentStepIndex: number;
 };
 
-// ─── Layer Cache ─────────────────────────────────────────────────────────────
+// ─── Task Triggers ───────────────────────────────────────────────────────────
 
-type LayerCache = { layers: HydratedLayers; expiresAt: number };
-const _layerCache = new Map<string, LayerCache>();
+export type TaskTrigger =
+  | "job_search"
+  | "cv_review"
+  | "cv_upload"
+  | "profile_update"
+  | "memory_sync"
+  | "settings_change"
+  | "session_start"
+  | "general";
+
+type LayerKey = keyof HydratedLayers;
+
+const TRIGGER_LAYER_MAP: Record<TaskTrigger, LayerKey[]> = {
+  job_search:      ["searchGuidelines", "preferences", "userProfile", "pipelineContext"],
+  cv_review:       ["cvSummary", "cvContext", "userProfile"],
+  cv_upload:       ["cvSummary", "cvContext", "userProfile"],
+  profile_update:  ["userProfile", "preferences", "mind"],
+  memory_sync:     ["mind"],
+  settings_change: ["preferences"],
+  session_start:   [], // empty = all layers forced on first turn
+  general:         ["pipelineContext"], // always keep pipeline fresh
+};
+
+// ─── Per-Layer Cache ─────────────────────────────────────────────────────────
+
+type LayerCacheEntry = { value: string; expiresAt: number };
+const _layerCache = new Map<string, LayerCacheEntry>();
 const LAYER_CACHE_TTL_MS = 30_000; // 30 seconds
 
 // ─── Selective Hydration Service ────────────────────────────────────────────
@@ -47,93 +73,20 @@ export class ContinuitySyncService {
   }
 
   /**
-   * interval 1: Selective Hydration based on hydration triggers
-   * @param msgCount - Number of messages in the current session (used for smart profile injection)
+   * Build CV context string from uploaded files for a user.
    */
-  async hydrateTurnContext(agentId: string, sessionId: string, taskType?: string, msgCount = 0, userId?: string): Promise<HydratedLayers> {
-    const now = new Date();
-    const cacheKey = `${agentId}:${sessionId}:${msgCount}`;
-
-    // Return cached layers if still fresh (skip on first turn or re-injection turns)
-    const isFirstTurn = msgCount === 0;
-    const isReinjectionTurn = msgCount > 0 && msgCount % 7 === 0;
-    const cached = _layerCache.get(cacheKey);
-    if (cached && cached.expiresAt > Date.now() && !isFirstTurn && !isReinjectionTurn) {
-      return cached.layers;
-    }
-
-    // Parallel: read sync state + all file layers simultaneously
-    // user_profile.md, mind.md, preferences.json are per-user; everything else is shared Atlas identity
-    const [
-      syncState,
-      mind,
-      soul,
-      identity,
-      operatingRules,
-      searchGuidelines,
-      fullProfile,
-      prefs,
-      cvSummary,
-      cvEntries,
-    ] = await Promise.all([
-      atlasState.readJson<SyncState>(ATLAS_FILES.syncState, { lastHydratedAt: now.toISOString(), persistenceMode: "db-active", healthMarkers: [] }),
-      userId ? atlasState.readUserText(userId, ATLAS_FILES.mind, "Mind: READY") : Promise.resolve("Mind: READY"),
-      atlasState.readText(ATLAS_FILES.soul, ""),
-      atlasState.readText(ATLAS_FILES.identity, ""),
-      atlasState.readText(ATLAS_FILES.operatingRules, ""),
-      atlasState.readText(ATLAS_FILES.search, ""),
-      userId ? atlasState.readUserText(userId, ATLAS_FILES.userProfile, "") : Promise.resolve(""),
-      userId ? atlasState.readUserJson(userId, ATLAS_FILES.preferences, {}) : Promise.resolve({}),
-      userId ? atlasState.readUserText(userId, ATLAS_FILES.cvSummary, "") : Promise.resolve(""),
-      fs.readdir(path.join(process.cwd(), "uploads", "cv", ...(userId ? [userId] : [])), { withFileTypes: true }).catch(() => [] as import("node:fs").Dirent[]),
-    ]);
-
-    const lastSync = new Date(syncState.lastHydratedAt);
-    const diffMinutes = (now.getTime() - lastSync.getTime()) / (1000 * 60);
-    const isNewSession = sessionId === "new" || sessionId === "default";
-    const isLongInactivity = diffMinutes > 45;
-
-    // Smart profile injection: full profile at turn 0 and every 7 messages
-    const shouldInjectFullProfile = isFirstTurn || isReinjectionTurn || isLongInactivity;
-
-    const layers: HydratedLayers = {};
-
-    layers.mind = mind;
-    layers.soul = soul;
-    layers.identity = identity;
-    layers.operatingRules = operatingRules;
-    layers.searchGuidelines = searchGuidelines;
-
-    // Smart profile injection
-    if (shouldInjectFullProfile) {
-      layers.userProfile = fullProfile;
-      layers.profileMini = undefined;
-    } else if (fullProfile.length > 50) {
-      const nameMatch = fullProfile.match(/(?:# User Profile:\s*|Name:\s*)([^\n]+)/i);
-      const roleMatch = fullProfile.match(/(?:Current Role|Target Role|## Overview)[\s\S]*?([^\n]{10,80})/i);
-      const name = nameMatch?.[1]?.trim() ?? "User";
-      const role = roleMatch?.[1]?.trim() ?? "Job seeker";
-      layers.profileMini = `${name} — ${role}\n[Full profile injected every 7 messages to save tokens. Turn ${msgCount}/${Math.ceil(msgCount / 7) * 7}]`;
-      layers.userProfile = undefined;
-    }
-
-    layers.preferences = JSON.stringify(prefs, null, 2);
-
-    // CV Summary (upgrade tips) — always inject when available
-    if (cvSummary.length > 20) {
-      layers.cvSummary = cvSummary;
-    }
-
-    // Load CV context — list uploaded CVs with tags so Atlas knows which to use
+  private async buildCvContext(userId: string): Promise<string> {
     try {
-      const metaPath = path.join(process.cwd(), "uploads", "cv", ...(userId ? [userId] : []), "_metadata.json");
+      const cvDir = path.join(process.cwd(), "uploads", "cv", userId);
+      const entries = await fs.readdir(cvDir, { withFileTypes: true }).catch(() => [] as import("node:fs").Dirent[]);
+      const metaPath = path.join(cvDir, "_metadata.json");
       let metadata: Record<string, { tag?: string; label?: string }> = {};
       try {
         const raw = await fs.readFile(metaPath, "utf-8");
         metadata = JSON.parse(raw) as typeof metadata;
       } catch { /* no metadata yet */ }
 
-      const cvFiles = (cvEntries as import("node:fs").Dirent[])
+      const cvFiles = (entries as import("node:fs").Dirent[])
         .filter((e) => e.isFile() && e.name !== "_metadata.json")
         .map((e) => {
           const ext = path.extname(e.name).toLowerCase();
@@ -142,20 +95,113 @@ export class ContinuitySyncService {
           const label = meta.label ? ` "${meta.label}"` : "";
           return `- ${e.name}${label} [${tag}] (${ext})`;
         });
-      if (cvFiles.length > 0) {
-        layers.cvContext = `The user has uploaded the following CV files:\n${cvFiles.join("\n")}\n\nTags: professional=main career CV, part-time=freelance/contract, role-specific=targeted for a specific role, general=default.\nUse the appropriate CV based on the job being discussed. Files are at uploads/cv/ on the server.`;
-      } else {
-        layers.cvContext = "No CV files have been uploaded yet.";
-      }
+
+      return cvFiles.length > 0
+        ? `The user has uploaded the following CV files:\n${cvFiles.join("\n")}\n\nTags: professional=main career CV, part-time=freelance/contract, role-specific=targeted for a specific role, general=default.\nUse the appropriate CV based on the job being discussed. Files are at uploads/cv/ on the server.`
+        : "No CV files have been uploaded yet.";
     } catch {
-      layers.cvContext = undefined;
+      return "No CV files have been uploaded yet.";
+    }
+  }
+
+  /**
+   * Build a compact pipeline summary for Atlas context.
+   */
+  private buildPipelineContext(): string {
+    try {
+      const jobs = localJobsCache.list();
+      if (jobs.length === 0) return "Pipeline is empty — no jobs discovered yet.";
+      const lines = jobs.slice(0, 30).map((j, i) =>
+        `${i + 1}. [${j.title}] at ${j.company} — ${j.location} — Score: ${j.score ?? "?"} — ${j.status ?? "PENDING"}`
+      );
+      const extra = jobs.length > 30 ? `\n...and ${jobs.length - 30} more.` : "";
+      return `${jobs.length} job(s) in pipeline (discovered, not yet imported):\n${lines.join("\n")}${extra}`;
+    } catch {
+      return "";
+    }
+  }
+
+  /**
+   * interval 1: Trigger-based selective hydration.
+   * Each layer is cached independently (30s TTL).
+   * A trigger bypasses the cache only for its relevant layers.
+   */
+  async hydrateTurnContext(
+    agentId: string,
+    sessionId: string,
+    taskTrigger: TaskTrigger = "general",
+    msgCount = 0,
+    userId?: string,
+  ): Promise<HydratedLayers> {
+    const now = new Date();
+    const isFirstTurn = msgCount === 0;
+    const triggeredLayers = new Set<LayerKey>(TRIGGER_LAYER_MAP[taskTrigger]);
+
+    console.log(`[Atlas Sync] Trigger: ${taskTrigger} → refreshing layers: [${triggeredLayers.size ? [...triggeredLayers].join(", ") : "cache"}]`);
+
+    const userKey = userId ?? "shared";
+
+    // Per-layer cache loader: bypasses cache on first turn or if this layer is in the trigger set
+    const loadLayer = async (key: LayerKey, loader: () => Promise<string>): Promise<string> => {
+      const cacheKey = `${agentId}:${userKey}:${key}`;
+      const cached = _layerCache.get(cacheKey);
+      const forceRefresh = isFirstTurn || triggeredLayers.has(key);
+      if (!forceRefresh && cached && cached.expiresAt > Date.now()) {
+        return cached.value;
+      }
+      const value = await loader().catch(() => "");
+      _layerCache.set(cacheKey, { value, expiresAt: Date.now() + LAYER_CACHE_TTL_MS });
+      return value;
+    };
+
+    // Load all layers in parallel with per-layer caching
+    const [soul, identity, operatingRules, searchGuidelines, mind, fullProfile, preferences, cvSummary, cvContext, pipelineContext] =
+      await Promise.all([
+        loadLayer("soul",             () => atlasState.readText(ATLAS_FILES.soul, "")),
+        loadLayer("identity",         () => atlasState.readText(ATLAS_FILES.identity, "")),
+        loadLayer("operatingRules",   () => atlasState.readText(ATLAS_FILES.operatingRules, "")),
+        loadLayer("searchGuidelines", () => atlasState.readText(ATLAS_FILES.search, "")),
+        loadLayer("mind",             () => userId ? atlasState.readUserText(userId, ATLAS_FILES.mind, "Mind: READY") : Promise.resolve("Mind: READY")),
+        loadLayer("userProfile",      () => userId ? atlasState.readUserText(userId, ATLAS_FILES.userProfile, "") : Promise.resolve("")),
+        loadLayer("preferences",      () => userId ? atlasState.readUserJson(userId, ATLAS_FILES.preferences, {}).then((p) => JSON.stringify(p, null, 2)) : Promise.resolve("{}")),
+        loadLayer("cvSummary",        () => userId ? atlasState.readUserText(userId, ATLAS_FILES.cvSummary, "") : Promise.resolve("")),
+        loadLayer("cvContext",        () => userId ? this.buildCvContext(userId) : Promise.resolve("No CV files have been uploaded yet.")),
+        loadLayer("pipelineContext",  () => Promise.resolve(this.buildPipelineContext())),
+      ]);
+
+    const layers: HydratedLayers = {};
+
+    layers.soul             = soul;
+    layers.identity         = identity;
+    layers.operatingRules   = operatingRules;
+    layers.searchGuidelines = searchGuidelines;
+    layers.mind             = mind;
+    layers.preferences      = preferences;
+    if (cvSummary.length > 20) layers.cvSummary = cvSummary;
+    layers.cvContext        = cvContext;
+    if (pipelineContext) layers.pipelineContext = pipelineContext;
+
+    // Profile injection: full when first turn or userProfile was triggered, else mini
+    const shouldInjectFullProfile = isFirstTurn || triggeredLayers.has("userProfile");
+    if (shouldInjectFullProfile) {
+      layers.userProfile = fullProfile;
+      layers.profileMini = undefined;
+    } else if (fullProfile.length > 50) {
+      const nameMatch = fullProfile.match(/(?:# User Profile:\s*|Name:\s*)([^\n]+)/i);
+      const roleMatch = fullProfile.match(/(?:Current Role|Target Role|## Overview)[\s\S]*?([^\n]{10,80})/i);
+      const name = nameMatch?.[1]?.trim() ?? "User";
+      const role = roleMatch?.[1]?.trim() ?? "Job seeker";
+      layers.profileMini = `${name} — ${role}\n[Full profile syncs on job_search / profile_update triggers. Turn ${msgCount}]`;
+      layers.userProfile = undefined;
     }
 
-    // Fire-and-forget: update sync state (don't block the return)
+    // Fire-and-forget: update sync state
+    const syncState = await atlasState.readJson<SyncState>(ATLAS_FILES.syncState, {
+      lastHydratedAt: now.toISOString(),
+      persistenceMode: "db-active",
+      healthMarkers: [],
+    });
     void atlasState.writeJson(ATLAS_FILES.syncState, { ...syncState, lastHydratedAt: now.toISOString() });
-
-    // Cache the result
-    _layerCache.set(cacheKey, { layers, expiresAt: Date.now() + LAYER_CACHE_TTL_MS });
 
     return layers;
   }

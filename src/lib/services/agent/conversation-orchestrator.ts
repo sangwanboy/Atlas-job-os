@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { MessageRole } from "@/lib/domain/enums";
 import { agentStore } from "@/lib/services/agent/agent-store";
 import { getAiProvider } from "@/lib/services/ai/provider";
-import { continuitySyncService } from "@/lib/services/agent/continuity-sync-service";
+import { continuitySyncService, type TaskTrigger } from "@/lib/services/agent/continuity-sync-service";
 import { env } from "@/lib/config/env";
 import { loopPreventionGuard } from "@/lib/services/agent/loop-prevention-guard";
 import { onboardingManager } from "@/lib/services/agent/onboarding-manager";
@@ -193,8 +193,8 @@ const toolDescriptors = [
   },
   {
     name: "gmail_sync",
-    description: "Sync the user's Gmail inbox to import recent job-related email threads. Call this if the user asks you to check their email or sync their inbox. (RETURNS A COUNT ONLY. Do NOT hallucinate jobs!). Parameters: {}",
-    parameters: {},
+    description: "Sync the user's Gmail inbox for job-related emails. Defaults to last 7 days with built-in job keywords. Pass 'keywords' to search for specific terms (e.g. company names, role titles). Pass 'days' (1–30) to control date range. (RETURNS A COUNT ONLY. Do NOT hallucinate jobs!). Parameters: { keywords?: string[], days?: number }",
+    parameters: { keywords: "string[]?", days: "number?" },
   },
   {
     name: "gmail_get_threads",
@@ -255,6 +255,16 @@ const toolDescriptors = [
     name: "update_scraper_selectors",
     description: "Self-heal the job scraper when a platform's DOM has changed. Call this when browser_extract_jobs reports a platform failed with a dom_sample. Analyse the HTML, identify the correct CSS selectors for job cards, and save them. Parameters: { site: string, cardSelectors: string[] }",
     parameters: { site: "string", cardSelectors: "string[]" },
+  },
+  {
+    name: "browser_extension_status",
+    description: "Check if the Atlas Chrome extension is connected to the bridge. Returns { connected: boolean, tabOpen: boolean }. Call this before job searches to decide whether to use the extension (real Chrome with user's logged-in session) or Playwright fallback.",
+    parameters: {},
+  },
+  {
+    name: "browser_extension_enrich_job",
+    description: "Get full details for a single job listing using the Chrome extension. Navigates to the job URL, takes a full-page screenshot, and uses Vertex AI OCR to extract: company, salary, job type, full description, requirements. Use this after browser_extract_jobs returns basic card data. Parameters: { url: string }",
+    parameters: { url: "string" },
   },
 ] as const;
 
@@ -479,6 +489,20 @@ async function postInternalJson<TResponse extends Record<string, unknown>>(
 }
 
 const BROWSER_SERVER_URL = "http://localhost:3001/api/browser";
+
+async function fetchBrowserServerRaw(action: string, sessionId: string, params: Record<string, unknown>): Promise<Record<string, unknown> | null> {
+  try {
+    const response = await fetch(BROWSER_SERVER_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action, sessionId, params }),
+    });
+    if (!response.ok) return null;
+    return await response.json() as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
 
 async function callBrowserServer(action: string, sessionId: string, params: Record<string, unknown>): Promise<string> {
   try {
@@ -714,9 +738,11 @@ async function executeToolCall(toolCall: ToolCall, sid: string, userId?: string)
   }
   if (toolCall.tool === "gmail_sync") {
     if (!userId) return "Gmail sync failed: no user session available.";
-    const result = await syncGmail(userId);
+    const keywords = Array.isArray(toolCall.parameters?.keywords) ? toolCall.parameters.keywords as string[] : undefined;
+    const days = typeof toolCall.parameters?.days === "number" ? Math.min(30, Math.max(1, toolCall.parameters.days)) : 7;
+    const result = await syncGmail(userId, { keywords, days });
     if (!result.success) return `Gmail sync failed: ${result.error}`;
-    return `Successfully synced ${result.count} new/updated job threads.`;
+    return `Successfully synced ${result.count} new/updated job threads (last ${days} days${keywords ? `, keywords: ${keywords.join(", ")}` : ""}).`;
   }
   if (toolCall.tool === "gmail_get_threads") {
     if (!userId) return "Cannot retrieve threads: no user session.";
@@ -767,6 +793,16 @@ async function executeToolCall(toolCall: ToolCall, sid: string, userId?: string)
     const params = toolCall.parameters as { direction?: string; amount?: number; sessionId?: string };
     return callBrowserServer("scroll", params.sessionId || sid, { direction: params.direction, amount: params.amount });
   }
+  if (toolCall.tool === "browser_extension_status") {
+    return callBrowserServer("extension_status", sid, {});
+  }
+  if (toolCall.tool === "browser_extension_enrich_job") {
+    const { url } = toolCall.parameters as { url: string };
+    const res = await fetchBrowserServerRaw("extension_enrich_job", sid, { url });
+    const job = (res as any)?.data?.job;
+    if (!job) return `❌ Could not enrich job at ${url}`;
+    return `✅ Job details extracted:\n**${job.title}** at **${job.company}**\nLocation: ${job.location}\nSalary: ${job.salary || "Not disclosed"}\nType: ${job.jobType || "N/A"}\n\n${job.description?.slice(0, 800) || ""}`;
+  }
   if (toolCall.tool === "update_scraper_selectors") {
     const { site, cardSelectors } = toolCall.parameters as { site: string; cardSelectors: string[] };
     const selectorsPath = path.join(process.cwd(), "agents/atlas/scraper_selectors.json");
@@ -787,6 +823,64 @@ async function executeToolCall(toolCall: ToolCall, sid: string, userId?: string)
     if (!query) return "⚠️ No search query provided. Please specify a job title to search for.";
     const searchQuery = `${query} ${location}`.trim();
 
+    // ── Extension path: use real Chrome with user's logged-in session ─────
+    const statusRes = await fetchBrowserServerRaw("extension_status", sid, {});
+    const extConnected = (statusRes as any)?.data?.connected === true;
+    if (extConnected) {
+      console.log(`[browser_extract_jobs] Chrome extension connected — using extension path for: ${searchQuery}`);
+      const extPlatforms: { name: string; url: string }[] = [
+        { name: "LinkedIn", url: `https://www.linkedin.com/jobs/search/?keywords=${encodeURIComponent(query)}&location=${encodeURIComponent(location)}` },
+        { name: "Indeed",   url: `https://uk.indeed.com/jobs?q=${encodeURIComponent(query)}&l=${encodeURIComponent(location)}` },
+      ];
+      const extResults: any[] = [];
+      for (const platform of extPlatforms) {
+        try {
+          const res = await fetchBrowserServerRaw("extension_extract_jobs", sid, { searchUrl: platform.url, query, location });
+          const jobs = (res as any)?.data?.jobs;
+          if (Array.isArray(jobs) && jobs.length > 0) {
+            extResults.push(...jobs.map((j: any) => ({ ...j, _platform: platform.name })));
+          }
+        } catch (e) {
+          console.warn(`[browser_extract_jobs] Extension failed for ${platform.name}:`, e);
+        }
+      }
+      if (extResults.length > 0) {
+        localJobsCache.upsertMany(extResults.map((j: any) => ({
+          id: j.id || Buffer.from(`${j.title}-${j.url || j.link}`).toString("base64"),
+          title: j.title || "Untitled",
+          company: j.company || "",
+          location: j.location || "",
+          url: j.link || j.url || "",
+          salary: j.salary,
+          description: j.description || "",
+          skills: j.requirements || "",
+          source: j._platform || "Extension",
+          status: "NEW" as const,
+          score: j.score,
+        })));
+        const previewRes = await executeToolCall({
+          tool: "preview_jobs",
+          parameters: {
+            jobs: extResults.slice(0, 10).map((j: any) => ({
+              title: j.title || "Untitled Role",
+              company: j.company || "Unknown Company",
+              location: j.location || location,
+              url: j.link || j.url || "#",
+              salary: j.salary,
+              source: j._platform || "Extension",
+              description: j.description || j.requirements || "",
+              skills: j.requirements || "",
+            })),
+          },
+        }, sid);
+        return `Found **${extResults.length} jobs** via your logged-in Chrome session (extension+OCR).\n\n${previewRes}`;
+      }
+      // Extension connected but returned no results — likely auth wall or no jobs found
+      // Do NOT fall through to Playwright when extension is connected
+      return `⚠️ The Chrome extension is connected but returned no jobs for "${searchQuery}". LinkedIn may be showing a sign-in wall in the Atlas tab. Please:\n1. Check the Atlas tab in Chrome and log in to LinkedIn if prompted\n2. Then ask me to search again`;
+    }
+
+    // ── Playwright / Scrapling fallback (only when extension not connected) ──
     // Build search URLs for reputable UK platforms — all run in parallel
     const allPlatforms: { name: string; url: string }[] = [
       { name: "LinkedIn",   url: `https://www.linkedin.com/jobs/search/?keywords=${encodeURIComponent(query)}&location=${encodeURIComponent(location)}` },
@@ -945,22 +1039,27 @@ export class ConversationOrchestrator {
     const sid = effectiveSessionId || "default";
     context.onUpdate?.({ type: "session_id", sessionId: sid });
 
-    // Detect task type early for status message
-    let taskType: string | undefined;
-    const msg = msgLower;
-    if (msg.includes("search") || msg.includes("find") || msg.includes("discovery")) taskType = "search";
-    else if (msg.includes("import") || msg.includes("save") || msg.includes("add")) taskType = "validate";
-    else if (msg.includes("score") || msg.includes("filter") || msg.includes("fit")) taskType = "score";
-    else if (msg.includes("draft") || msg.includes("email") || msg.includes("write")) taskType = "outreach";
+    // Detect task trigger for context-aware file syncing
+    function detectTaskTrigger(message: string): TaskTrigger {
+      const m = message.toLowerCase();
+      if (/upload.*(?:cv|resume)|(?:cv|resume).*upload/i.test(m)) return "cv_upload";
+      if (/search|find|look for|jobs?|linkedin|indeed|glassdoor|apply|discover/i.test(m)) return "job_search";
+      if (/cv|resume|experience|skills|portfolio/i.test(m)) return "cv_review";
+      if (/update.*profile|change.*profile|edit.*profile|my background/i.test(m)) return "profile_update";
+      if (/remember|forget|memory|note that|keep in mind/i.test(m)) return "memory_sync";
+      if (/setting|preference|salary|job type|work.*type|location.*prefer/i.test(m)) return "settings_change";
+      return "general";
+    }
 
-    context.onUpdate?.({ type: "status", status: taskType === "search" ? "Searching for jobs..." : "Analyzing request..." });
+    const taskTrigger = detectTaskTrigger(context.message);
+    context.onUpdate?.({ type: "status", status: taskTrigger === "job_search" ? "Searching for jobs..." : "Analyzing request..." });
 
     // Wave 3: history + continuity in parallel (both need sid)
     let historyContext = "";
     let historyMessageCount = 0;
     const [historyMessages, layers] = await Promise.all([
       sid !== "new" && sid !== "default" ? agentStore.getSessionMessages(sid).catch(() => []) : Promise.resolve([]),
-      continuitySyncService.hydrateTurnContext(agent.id, sid, taskType, 0, effectiveUserId),
+      continuitySyncService.hydrateTurnContext(agent.id, sid, taskTrigger, 0, effectiveUserId),
     ]);
     if (historyMessages.length > 0) {
       historyMessageCount = historyMessages.length;

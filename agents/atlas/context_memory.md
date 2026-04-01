@@ -474,3 +474,20 @@
 [2026-03-30T14:48:33.829Z] Updated mind.md via LLM continuity update.
 [2026-03-30T16:45:26.386Z] Updated mind.md via LLM continuity update.
 [2026-03-30T16:46:19.343Z] Updated mind.md via LLM continuity update.
+[2026-03-30T17:15:14.290Z] Updated mind.md via LLM continuity update.
+[2026-03-30T17:20:18.500Z] Updated mind.md via LLM continuity update.
+[2026-03-31T13:54:40.341Z] Updated mind.md via LLM continuity update.
+[2026-03-31T14:05:49.290Z] Updated mind.md via LLM continuity update.
+[2026-03-31T14:33:06.851Z] Updated mind.md via LLM continuity update.
+[2026-03-31T14:51:36.484Z] Updated mind.md via LLM continuity update.
+[2026-03-31T14:55:49.334Z] Updated mind.md via LLM continuity update.
+[2026-03-31T15:31:34.638Z] Updated mind.md via LLM continuity update.
+[2026-03-31T15:58:40.576Z] Updated mind.md via LLM continuity update.
+[2026-03-31T18:12:14.243Z] Updated mind.md via LLM continuity update.
+[2026-03-31T18:22:25.409Z] Updated mind.md via LLM continuity update.
+[2026-03-31T19:12:17.964Z] Updated mind.md via LLM continuity update.
+[2026-03-31T19:12:17.968Z] Updated preferences.json via LLM continuity update.
+[2026-03-31T19:33:17.934Z] Updated mind.md via LLM continuity update.
+[2026-03-31T19:39:41.793Z] Updated mind.md via LLM continuity update.
+
+[2026-03-31T20:30:00.000Z] CHROME_EXTENSION_BRIDGE: Built full Chrome extension + WebSocket bridge system. Extension (chrome-extension/) connects to ws://localhost:3002 (started by browser server). Two-phase job extraction: Phase 1 DOM scrape for job cards, Phase 2 screenshot+LLM OCR per listing. Extension opens dedicated atlasTabId tab in user's Chrome window. Stop button cancels extraction and closes tab. Keep-alive alarm every 25s prevents MV3 service worker from going idle. Start bridge: run start-browser-server.cmd. Extension auto-reconnects every 3s.

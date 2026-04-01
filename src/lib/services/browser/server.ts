@@ -1,6 +1,7 @@
 import { createServer } from "node:http";
 import { agentBrowserToolRegistry } from "./tools/agent-browser-tool-registry";
 import { browserService } from "./service/browser-service";
+import { extensionBridge } from "./extension-bridge";
 
 const PORT = 3001;
 
@@ -70,6 +71,13 @@ const server = createServer(async (req, res) => {
     return;
   }
 
+  if (req.url === "/api/browser/cancel" && req.method === "POST") {
+    await extensionBridge.cancel();
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ cancelled: true }));
+    return;
+  }
+
   if (req.url === "/health" && req.method === "GET") {
     res.writeHead(200, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ status: "ok", timestamp: new Date().toISOString() }));
@@ -120,4 +128,5 @@ server.listen(PORT, "0.0.0.0", () => {
   console.log(`🚀 Browser service running on http://localhost:${PORT}`);
   console.log(`- Health check: http://localhost:${PORT}/health`);
   console.log(`- Browser API: http://localhost:${PORT}/api/browser`);
+  extensionBridge.start(3002);
 });
