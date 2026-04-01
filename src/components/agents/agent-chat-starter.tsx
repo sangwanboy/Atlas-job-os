@@ -330,9 +330,22 @@ const JobPreviewBox = ({
                     })()
                   )}
                   {/* Salary */}
-                  <span className={`inline-flex items-center rounded-md px-2 py-0.5 text-[10px] font-bold ring-1 ${job.salary && job.salary !== "Not specified" ? "bg-emerald-50 text-emerald-700 ring-emerald-200/60" : "bg-slate-50 text-slate-500 ring-slate-200/60"}`}>
-                    💰 {job.salary || "Not disclosed"}
-                  </span>
+                  {(() => {
+                    const raw = job.salary?.trim();
+                    const noInfo = !raw || /^(not specified|not disclosed|n\/a|none|null)$/i.test(raw);
+                    const isCompetitive = /competi|negotia|market rate|attractive/i.test(raw || "");
+                    const display = noInfo ? "Not disclosed" : raw!;
+                    const cls = noInfo
+                      ? "bg-slate-50 text-slate-500 ring-slate-200/60"
+                      : isCompetitive
+                        ? "bg-blue-50 text-blue-700 ring-blue-200/60"
+                        : "bg-emerald-50 text-emerald-700 ring-emerald-200/60";
+                    return (
+                      <span className={`inline-flex items-center rounded-md px-2 py-0.5 text-[10px] font-bold ring-1 ${cls}`}>
+                        💰 {display}
+                      </span>
+                    );
+                  })()}
                   {/* Job type */}
                   {job.jobType && (
                     <span className="inline-flex items-center rounded-md px-2 py-0.5 text-[10px] font-bold bg-violet-50 text-violet-700 ring-1 ring-violet-200/60">

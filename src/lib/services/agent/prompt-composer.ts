@@ -76,18 +76,36 @@ Keep responses warm, brief, and personalized.`);
 - Only provide your final conversational summary and continuity update AFTER you have finished the necessary sequence of tool calls.
 
 TOOLS AVAILABLE:
-- preview_jobs: PREVIEW jobs to show the user BEFORE importing.
-- import_pending_jobs: IMPORT previously previewed jobs.
-- get_pipeline: READ staged/discovered jobs not yet imported. Use when user asks about pipeline jobs.
-- save_job: Directly persist a single job.
-- browser_navigate: Navigate to a URL and get page content. Params: { url, sessionId? }
-- browser_click: Click an element by CSS selector. Params: { selector, sessionId? }
-- browser_type: Type text into a field. Params: { selector, text, sessionId? }
+
+PIPELINE:
+- preview_jobs: Stage jobs in the preview box before saving. Params: { jobs: Array<{ title, company, location, url, salary?, source?, description, skills }> }
+- import_pending_jobs: Save previewed jobs to the tracker. Params: { action?: 'import_all'|'import_selected', indices?: number[] }. Note: never use browser_extract_jobs for imports — staged jobs are already server-side.
+- get_pipeline: Retrieve staged jobs and display them in the preview box. Params: { query?: string }
+- save_job: Save a single job directly. Params: { title, company, location, salary?, url?, source?, description, skills }
+- update_job: Edit a job's fields. Params: { id, title?, company?, location?, salary?, url?, status?, priority?, description?, skills? }
+- delete_job: Remove a specific job. Params: { id }
+- clear_pipeline: Wipe all staged jobs. Params: {}
+
+GMAIL:
+- gmail_sync: Sync inbox for job-related emails. Params: { keywords?: string[], days?: number }
+- gmail_get_threads: Get email threads for a job. Params: { jobId: string }
+- gmail_generate_followup: Draft a follow-up email. Params: { threadId, instructions }
+- gmail_search: Search inbox. Params: { query: string }
+
+MEMORY:
+- read_context_memory: Read persistent agent memory. Params: {}
+
+BROWSER:
+- browser_navigate: Open a URL. Params: { url, sessionId? }
+- browser_click: Click an element. Params: { selector, sessionId? }
+- browser_type: Type into a field. Params: { selector, text, sessionId? }
 - browser_scroll: Scroll the page. Params: { direction?, amount?, sessionId? }
 - browser_screenshot: Take a screenshot. Params: { sessionId?, label? }
-- browser_extract_text: Extract text from a selector. Params: { selector?, sessionId? }
-- browser_extract_jobs: High-level bulk job search via scraper. Params: { query, location, limit? }
-- gmail_sync, gmail_get_threads, gmail_generate_followup.
+- browser_extract_text: Extract page text. Params: { selector?, sessionId? }
+- browser_extract_jobs: Bulk job search across job boards. Params: { query, location, limit? }
+- browser_extension_status: Check if Chrome extension is connected. Params: {}
+- browser_extension_enrich_job: Get full job details via extension OCR. Params: { url }
+- update_scraper_selectors: Fix scraper selectors when a site's DOM changes. Params: { site, cardSelectors: string[] }
 
 BROWSER NAVIGATION STRATEGY:
 You have FULL direct browser control. For job searches, you can either:

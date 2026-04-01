@@ -60,12 +60,22 @@ function parseSalaryBounds(salary?: string): { salaryMin?: number; salaryMax?: n
 
 export async function GET(request: Request) {
   try {
+    const { searchParams } = new URL(request.url);
+    const checkUrls = searchParams.getAll("checkUrl");
+
+    // Internal dedup check — agent passes userId via header, no session cookie needed
+    const internalUserId = request.headers.get("x-internal-user-id");
+    if (checkUrls.length > 0 && internalUserId) {
+      const existing = await prisma.job.findMany({
+        where: { sourceUrl: { in: checkUrls }, userId: internalUserId },
+        select: { sourceUrl: true },
+      });
+      return NextResponse.json({ existingUrls: existing.map((j) => j.sourceUrl) });
+    }
+
     const authResult = await requireAuth();
     if (isNextResponse(authResult)) return authResult;
     const { userId } = authResult;
-
-    const { searchParams } = new URL(request.url);
-    const checkUrls = searchParams.getAll("checkUrl");
 
     if (checkUrls.length > 0) {
       const existing = await prisma.job.findMany({

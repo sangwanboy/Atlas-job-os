@@ -12,7 +12,7 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:seed": "prisma db seed",
-    "browser-server": "tsx src/lib/services/browser/server.ts"
+    "browser-server": "node --env-file=.env --env-file=.env.local --import=tsx/esm src/lib/services/browser/server.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

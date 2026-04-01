@@ -491,3 +491,27 @@
 [2026-03-31T19:39:41.793Z] Updated mind.md via LLM continuity update.
 
 [2026-03-31T20:30:00.000Z] CHROME_EXTENSION_BRIDGE: Built full Chrome extension + WebSocket bridge system. Extension (chrome-extension/) connects to ws://localhost:3002 (started by browser server). Two-phase job extraction: Phase 1 DOM scrape for job cards, Phase 2 screenshot+LLM OCR per listing. Extension opens dedicated atlasTabId tab in user's Chrome window. Stop button cancels extraction and closes tab. Keep-alive alarm every 25s prevents MV3 service worker from going idle. Start bridge: run start-browser-server.cmd. Extension auto-reconnects every 3s.
+[2026-04-01T13:29:44.343Z] Updated mind.md via LLM continuity update.
+[2026-04-01T13:48:55.619Z] Updated mind.md via LLM continuity update.
+[2026-04-01T13:59:20.138Z] Updated mind.md via LLM continuity update.
+[2026-04-01T14:12:13.139Z] Updated mind.md via LLM continuity update.
+[2026-04-01T14:22:38.880Z] Updated mind.md via LLM continuity update.
+[2026-04-01T14:22:38.883Z] Updated preferences.json via LLM continuity update.
+[2026-04-01T14:24:33.149Z] Updated mind.md via LLM continuity update.
+[2026-04-01T14:32:32.073Z] Updated mind.md via LLM continuity update.
+[2026-04-01T14:33:06.467Z] Updated mind.md via LLM continuity update.
+[2026-04-01T14:34:33.422Z] Updated mind.md via LLM continuity update.
+[2026-04-01T14:35:41.490Z] Updated mind.md via LLM continuity update.
+[2026-04-01T14:40:33.311Z] Updated mind.md via LLM continuity update.
+[2026-04-01T14:57:20.277Z] Updated mind.md via LLM continuity update.
+[2026-04-01T14:59:07.174Z] Updated mind.md via LLM continuity update.
+[2026-04-01T14:59:45.786Z] Updated mind.md via LLM continuity update.
+[2026-04-01T15:30:16.867Z] Updated mind.md via LLM continuity update.
+[2026-04-01T15:31:13.105Z] Updated mind.md via LLM continuity update.
+[2026-04-01T15:32:38.669Z] Updated mind.md via LLM continuity update.
+[2026-04-01T16:01:23.804Z] Updated mind.md via LLM continuity update.
+[2026-04-01T16:06:23.287Z] Updated mind.md via LLM continuity update.
+[2026-04-01T16:07:23.705Z] Updated mind.md via LLM continuity update.
+[2026-04-01T16:51:48.653Z] Updated mind.md via LLM continuity update.
+[2026-04-01T16:52:53.778Z] Updated mind.md via LLM continuity update.
+[2026-04-01T16:59:02.047Z] Updated mind.md via LLM continuity update.

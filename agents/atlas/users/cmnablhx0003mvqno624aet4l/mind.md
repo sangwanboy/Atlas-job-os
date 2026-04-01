@@ -1,9 +1,9 @@
 {
-  "mode": "RECOVERY",
-  "strategy": "Browser server is currently unreachable. Need to wait for system restoration or retry connection. Will pivot to reviewing existing pipeline jobs until connectivity is confirmed.",
+  "mode": "IDLE",
+  "strategy": "Pipeline cleared. Waiting for Tushar Sangwan to initiate a new search or sync task.",
   "todos": [
-    "Wait for browser server connectivity restoration",
-    "Review pipeline jobs with the user",
-    "Retry LinkedIn search once browser is stable"
+    "Start new job search based on preferences",
+    "Sync Gmail for application updates",
+    "Draft follow-ups for existing tracked jobs"
   ]
 }

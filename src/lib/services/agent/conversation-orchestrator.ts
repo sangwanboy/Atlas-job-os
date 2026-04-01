@@ -146,7 +146,7 @@ const toolDescriptors = [
   },
   {
     name: "get_pipeline",
-    description: "Get jobs currently staged in the discovery pipeline (discovered but not yet imported/saved). Use this to answer user questions like 'what jobs are in my pipeline?', 'show me staged jobs', 'any hospitality jobs found?'. Parameters: { query?: string }",
+    description: "Get jobs currently staged in the discovery pipeline AND display them in the preview box. ALWAYS call this when the user says 'show me in preview box', 'show listings', 'give me in preview', or asks to see pipeline jobs visually. This tool renders the preview box automatically. Parameters: { query?: string }",
     parameters: {
       query: "string?",
     },
@@ -313,7 +313,7 @@ const previewJobSchema = z.object({
   location: z.string().min(1),
   url: z.string().optional(),
   link: z.string().optional(),
-  salary: z.string().optional(),
+  salary: z.string().nullable().optional().transform(v => v ?? undefined),
   source: z.string().default("Agent Search"),
   description: z.string().optional(),
   skills: z.union([z.string(), z.array(z.string())]).optional(),
@@ -424,6 +424,7 @@ function getInternalApiBases(): string[] {
 async function getInternalJson<TResponse extends Record<string, unknown>>(
   path: string,
   params: Record<string, string | string[]>,
+  internalUserId?: string,
 ): Promise<TResponse> {
   const urlParams = new URLSearchParams();
   for (const [key, value] of Object.entries(params)) {
@@ -442,7 +443,10 @@ async function getInternalJson<TResponse extends Record<string, unknown>>(
       const url = new URL(fullPath, base).toString();
       const response = await fetch(url, {
         method: "GET",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(internalUserId ? { "x-internal-user-id": internalUserId } : {}),
+        },
       });
       const payload = (await response.json()) as TResponse | { error?: string };
       if (!response.ok) {
@@ -615,16 +619,22 @@ function inferToolCallFromUserMessage(_input: string): ToolCall | null {
 
 async function executeToolCall(toolCall: ToolCall, sid: string, userId?: string): Promise<string> {
   if (toolCall.tool === "preview_jobs") {
+    const jobs = (toolCall.parameters as any)?.jobs;
+    if (!Array.isArray(jobs) || jobs.length === 0) {
+      return "No jobs to preview — the list is empty.";
+    }
     const params = previewJobsToolSchema.parse(toolCall.parameters);
     const existing = pendingJobsStore.get(sid) || [];
     const newJobs = params.jobs;
     const combined = [...existing, ...newJobs];
     const uniqueJobsMap = new Map();
+    const norm = (s: string) => (s || "").toLowerCase().replace(/[^a-z0-9]/g, "").trim();
     for (const j of combined) {
-        const key = j.url && j.url !== "#" ? j.url : `${j.title}-${j.company}-${j.location}`;
-        if (!uniqueJobsMap.has(key)) {
-            uniqueJobsMap.set(key, j);
-        }
+      // Primary key: normalised title+company — immune to tracking URL differences
+      const titleCompanyKey = `${norm(j.title)}::${norm(j.company)}`;
+      if (!uniqueJobsMap.has(titleCompanyKey)) {
+        uniqueJobsMap.set(titleCompanyKey, j);
+      }
     }
     const finalJobs = Array.from(uniqueJobsMap.values());
     
@@ -632,7 +642,7 @@ async function executeToolCall(toolCall: ToolCall, sid: string, userId?: string)
     const urls = finalJobs.map(j => j.url).filter(u => u && u !== "#") as string[];
     if (urls.length > 0) {
       try {
-        const { existingUrls } = await getInternalJson<{ existingUrls: string[] }>("/api/jobs", { checkUrl: urls });
+        const { existingUrls } = await getInternalJson<{ existingUrls: string[] }>("/api/jobs", { checkUrl: urls }, userId);
         for (const job of finalJobs) {
           if (job.url && existingUrls.includes(job.url)) {
             job.isAlreadyImported = true;
@@ -712,10 +722,21 @@ async function executeToolCall(toolCall: ToolCall, sid: string, userId?: string)
       ? jobs.filter(j => `${j.title} ${j.company} ${j.location}`.toLowerCase().includes(query.toLowerCase()))
       : jobs;
     if (filtered.length === 0) return `No pipeline jobs match "${query}".`;
-    const list = filtered.slice(0, 50).map((j, i) =>
+    const capped = filtered.slice(0, 50);
+    const previewJobs = capped.map(j => ({
+      title: j.title,
+      company: j.company,
+      location: j.location,
+      url: j.url,
+      salary: j.salaryRange,
+      source: j.source,
+      score: j.score,
+      isAlreadyImported: j.isAlreadyImported,
+    }));
+    const list = capped.map((j, i) =>
       `${i + 1}. **${j.title}** at ${j.company} (${j.location}) — Score: ${j.score ?? "N/A"}, Salary: ${j.salaryRange || "Not disclosed"}, Source: ${j.source}`
     ).join("\n");
-    return `### 📋 Pipeline (${filtered.length} staged job${filtered.length !== 1 ? "s" : ""})\n${list}\n\nThese jobs have not been imported yet. Tell the user to say "import all" to save them.`;
+    return `__PREVIEW_JOBS__${JSON.stringify(previewJobs)}__END_PREVIEW__\n\n### 📋 Pipeline (${filtered.length} staged job${filtered.length !== 1 ? "s" : ""})\n${list}\n\nThese jobs have not been imported yet. Tell the user to say "import all" to save them.`;
   }
   if (toolCall.tool === "save_job") {
     const params = saveJobToolSchema.parse(toolCall.parameters);
@@ -730,6 +751,25 @@ async function executeToolCall(toolCall: ToolCall, sid: string, userId?: string)
     }
 
     return `Job "${saved.title}" at ${saved.company} saved successfully.`;
+  }
+  if (toolCall.tool === "delete_job") {
+    const { id } = (toolCall.parameters ?? {}) as { id: string };
+    if (!id) return "delete_job failed: no job ID provided.";
+    // Remove from localJobsCache
+    const cached = localJobsCache.list();
+    const filtered = cached.filter(j => j.id !== id);
+    if (filtered.length === cached.length) return `No job found with ID "${id}".`;
+    localJobsCache.clear();
+    if (filtered.length > 0) localJobsCache.upsertMany(filtered as any);
+    // Remove from pendingJobsStore
+    const pending = pendingJobsStore.get(sid) || [];
+    pendingJobsStore.set(sid, pending.filter(j => (j as any).id !== id));
+    return `Job "${id}" removed from the pipeline.`;
+  }
+  if (toolCall.tool === "clear_pipeline") {
+    localJobsCache.clear();
+    pendingJobsStore.set(sid, []);
+    return "Pipeline cleared. All staged jobs have been removed.";
   }
   if (toolCall.tool === "read_context_memory") {
     const context = await continuitySyncService.hydrateTurnContext(sid, sid);
@@ -845,7 +885,17 @@ async function executeToolCall(toolCall: ToolCall, sid: string, userId?: string)
         }
       }
       if (extResults.length > 0) {
-        localJobsCache.upsertMany(extResults.map((j: any) => ({
+        // Deduplicate by normalised title+company before storing or previewing
+        const normExt = (s: string) => (s || "").toLowerCase().replace(/[^a-z0-9]/g, "").trim();
+        const extSeenKeys = new Set<string>();
+        const uniqueExtResults = extResults.filter((j: any) => {
+          const k = `${normExt(j.title)}::${normExt(j.company)}`;
+          if (extSeenKeys.has(k)) return false;
+          extSeenKeys.add(k);
+          return true;
+        });
+
+        localJobsCache.upsertMany(uniqueExtResults.map((j: any) => ({
           id: j.id || Buffer.from(`${j.title}-${j.url || j.link}`).toString("base64"),
           title: j.title || "Untitled",
           company: j.company || "",
@@ -861,7 +911,7 @@ async function executeToolCall(toolCall: ToolCall, sid: string, userId?: string)
         const previewRes = await executeToolCall({
           tool: "preview_jobs",
           parameters: {
-            jobs: extResults.slice(0, 10).map((j: any) => ({
+            jobs: uniqueExtResults.map((j: any) => ({
               title: j.title || "Untitled Role",
               company: j.company || "Unknown Company",
               location: j.location || location,
@@ -873,7 +923,7 @@ async function executeToolCall(toolCall: ToolCall, sid: string, userId?: string)
             })),
           },
         }, sid);
-        return `Found **${extResults.length} jobs** via your logged-in Chrome session (extension+OCR).\n\n${previewRes}`;
+        return `Found **${uniqueExtResults.length} unique jobs** (${extResults.length} raw, ${extResults.length - uniqueExtResults.length} duplicates removed) via your logged-in Chrome session.\n\n${previewRes}`;
       }
       // Extension connected but returned no results — likely auth wall or no jobs found
       // Do NOT fall through to Playwright when extension is connected
@@ -1021,7 +1071,7 @@ export class ConversationOrchestrator {
 
     // Fast-path: detect simple conversational messages that don't need tools
     const msgLower = context.message.toLowerCase().trim();
-    const isSimpleChat = msgLower.length < 120 && !/(search|find|discover|import|save|extract|scrape|browse|navigate|screenshot|gmail|sync|email|cv|resume|upload|score|filter|draft|write|apply|follow.?up)/.test(msgLower);
+    const isSimpleChat = msgLower.length < 120 && !/(search|find|discover|import|save|extract|scrape|browse|navigate|screenshot|gmail|sync|email|cv|resume|upload|score|filter|draft|write|apply|follow.?up|preview|pipeline|listing|show me|give me|clear|clr|delete|remove|reset|update|dismiss)/.test(msgLower);
     const dynamicMaxRounds = isSimpleChat ? 1 : (isDeveloper ? 15 : maxToolRounds);
 
     // Wave 2: session creation (needs agent.id)
@@ -1215,13 +1265,25 @@ export class ConversationOrchestrator {
           const hasFailed = res.startsWith("SCRAPER_ERROR") || res.startsWith("Error") || res.includes("Failed platforms") || res.includes("No job cards found");
           turnRes += `\nTool: ${call.tool}\n${hasFailed ? "⚠️ [TOOL_FAILED] You MUST explicitly tell the user which site(s) failed and what the error was.\n" : ""}Result: ${res}\n`;
         } catch (e) {
-          const errorMsg = e instanceof Error ? e.message : "Unknown error";
+          const rawMsg = e instanceof Error ? e.message : String(e);
+          // Only sanitize true Zod validation arrays e.g. '[{"code":"invalid_type"...'
+          const isZodError = rawMsg.trimStart().startsWith('[{"code"') || rawMsg.trimStart().startsWith('[{"message"');
+          const errorMsg = isZodError ? `Invalid tool parameters for "${call.tool}".` : rawMsg;
+          console.error(`[orchestrator] Tool "${call.tool}" threw:`, rawMsg);
           context.onUpdate?.({ type: "tool_end", tool: call.tool, parameters: call.parameters, result: `Error: ${errorMsg}` });
           toolLogs.push({ tool: call.tool, parameters: call.parameters, result: `Error: ${errorMsg}` });
           turnRes += `\nTool: ${call.tool}\nResult: Error — ${errorMsg}.\n`;
         }
       }
       toolContext = (toolContext + "\n" + turnRes).trim();
+
+      // Break immediately after destructive/terminal actions — no follow-up loop needed
+      const terminalTools = ["clear_pipeline", "delete_job", "import_pending_jobs"];
+      const ranTerminal = toolCalls.some(t => terminalTools.includes(t.tool));
+      if (ranTerminal) {
+        aiResponseText = aiResponse.text || turnRes.trim();
+        break;
+      }
     }
 
     if (!aiResponseText && toolLogs.length > 0) {
