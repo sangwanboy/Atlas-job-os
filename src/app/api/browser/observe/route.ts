@@ -32,13 +32,13 @@ export async function GET(req: NextRequest) {
             },
           }));
         } else {
-          resolve(null);
+          resolve(new Response("upstream error", { status: 502 }));
         }
       });
 
-      proxyReq.on("error", () => resolve(null));
+      proxyReq.on("error", () => resolve(new Response("proxy unavailable", { status: 503 })));
       req.signal.addEventListener("abort", () => proxyReq.destroy());
-    }).then(res => res || null);
+    }) as Promise<Response>;
   } catch (e) {
     console.log(`[ObserveAPI] Proxy attempt failed, using local service: ${sessionId}`);
   }
