@@ -130,38 +130,47 @@ class ExtensionBridgeService {
     await this.send("closeTab", {});
   }
 
-  async navigate(url: string): Promise<void> {
-    await this.send("navigate", { url }, 30_000);
+  async navigate(url: string, tabKey = "default"): Promise<void> {
+    await this.send("navigate", { url, tabKey }, 30_000);
   }
 
-  async screenshot(): Promise<string> {
-    const result = await this.send<{ png: string }>("screenshot", {}, 30_000);
+  async screenshot(tabKey = "default"): Promise<string> {
+    const result = await this.send<{ png: string }>("screenshot", { tabKey }, 30_000);
     return result.png;
   }
 
-  async click(selector: string): Promise<void> {
-    await this.send("click", { selector });
+  async click(selector: string, tabKey = "default"): Promise<void> {
+    await this.send("click", { selector, tabKey });
   }
 
-  async scroll(y = 500): Promise<void> {
-    await this.send("scroll", { y });
+  async scroll(y = 500, tabKey = "default"): Promise<void> {
+    await this.send("scroll", { y, tabKey });
   }
 
-  async type(selector: string, text: string): Promise<void> {
-    await this.send("type", { selector, text });
+  async type(selector: string, text: string, tabKey = "default"): Promise<void> {
+    await this.send("type", { selector, text, tabKey });
   }
 
-  async getLinks(pattern = ""): Promise<string[]> {
-    const result = await this.send<{ links: string[] }>("getLinks", { pattern });
+  async getLinks(pattern = "", tabKey = "default"): Promise<string[]> {
+    const result = await this.send<{ links: string[] }>("getLinks", { pattern, tabKey });
     return result.links ?? [];
   }
 
-  async getJobCards(): Promise<Array<{ title: string; location: string; url: string }>> {
-    const result = await this.send<{ cards: Array<{ title: string; location: string; url: string }> }>(
+  async getJobCards(tabKey = "default"): Promise<Array<{ title: string; company: string; location: string; url: string }>> {
+    const result = await this.send<{ cards: Array<{ title: string; company: string; location: string; url: string }> }>(
       "getJobCards",
-      {},
+      { tabKey },
     );
     return result.cards ?? [];
+  }
+
+  async getJobDetail(tabKey = "default"): Promise<{ company: string; salary: string; jobType: string; description: string; url: string }> {
+    const result = await this.send<{ detail: { company: string; salary: string; jobType: string; description: string; url: string } }>(
+      "getJobDetail",
+      { tabKey },
+      15_000,
+    );
+    return result.detail ?? { company: "", salary: "", jobType: "", description: "", url: "" };
   }
 
   async ping(): Promise<boolean> {

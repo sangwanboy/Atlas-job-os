@@ -25,7 +25,7 @@ function ScraperTimer({ startedAt }: { startedAt: number }) {
   const remaining = estimated - elapsed;
 
   return (
-    <div className="mt-2 rounded-lg border border-cyan-200 bg-cyan-50/80 px-3 py-2 text-xs text-cyan-800 space-y-1.5">
+    <div className="mt-2 rounded-lg border border-cyan-200 dark:border-cyan-500/30 bg-cyan-50/80 dark:bg-cyan-500/10 px-3 py-2 text-xs text-cyan-800 dark:text-cyan-300 space-y-1.5">
       <div className="flex items-center gap-1 font-semibold">
         <Clock className="h-3 w-3" />
         Searching job boards…
@@ -99,24 +99,32 @@ const ChatMessageItem = React.memo(({
         className={`max-w-[85%] w-fit rounded-xl px-4 py-2 text-sm shadow-sm leading-snug break-words overflow-hidden ${
           message.role === "USER"
             ? "ml-auto bg-gradient-to-br from-cyan-600 to-cyan-700 text-white whitespace-pre-wrap"
-            : "border border-white/60 bg-white/90"
+            : "border border-white/60 dark:border-slate-600/60 bg-white/90 dark:bg-slate-800 text-slate-900 dark:text-slate-100"
         }`}
       >
         {message.role === "ASSISTANT" ? (
           <div className="space-y-3">
             {/* Operator logs — inside the bubble */}
             {showToolUse && toolLogs.length > 0 && (
-              <div className="rounded-lg border border-dashed border-cyan-500/30 bg-cyan-500/5 p-2 text-[10px] font-mono text-cyan-700/70 max-h-[200px] overflow-y-auto break-all custom-scrollbar">
-                <p className="mb-1 uppercase tracking-wider font-bold sticky top-0 bg-white/80 backdrop-blur-sm p-1 z-10">Internal Operator Logs:</p>
-                {toolLogs.map((log: any, idx: number) => (
-                  <div key={idx} className="mb-2 last:mb-0 border-l-2 border-cyan-500/20 pl-2">
-                    <p className="font-bold">→ Executed: {log.tool}</p>
-                    <p className="mt-0.5 opacity-80 italic">Params: {JSON.stringify(log.parameters)}</p>
-                    <div className="mt-1 bg-white/30 p-1 rounded overflow-x-auto max-h-24">
-                      {log.result}
+              <div className="rounded-lg border border-dashed border-cyan-500/30 bg-cyan-500/5 p-2 text-[10px] font-mono text-cyan-700/70 dark:text-cyan-400/70 max-h-[220px] overflow-y-auto break-words custom-scrollbar">
+                <p className="mb-1 uppercase tracking-wider font-bold sticky top-0 bg-cyan-50/90 dark:bg-slate-800/90 backdrop-blur-sm px-1 py-0.5 z-10 text-cyan-800 dark:text-cyan-300">Tool Calls</p>
+                {toolLogs.map((log: any, idx: number) => {
+                  const resultStr = typeof log.result === "string" ? log.result : JSON.stringify(log.result ?? "");
+                  const preview = resultStr.length > 220 ? resultStr.slice(0, 220) + "…" : resultStr;
+                  const paramStr = JSON.stringify(log.parameters ?? {});
+                  const paramPreview = paramStr.length > 120 ? paramStr.slice(0, 120) + "…" : paramStr;
+                  const isDone = log.result !== "Executing...";
+                  return (
+                    <div key={idx} className="mb-1.5 last:mb-0 border-l-2 border-cyan-500/30 pl-2">
+                      <p className="font-bold flex items-center gap-1">
+                        <span>{isDone ? "✓" : "⟳"}</span>
+                        <span>{log.tool?.replace(/_/g, " ")}</span>
+                      </p>
+                      <p className="mt-0.5 opacity-60 italic truncate">{paramPreview}</p>
+                      {isDone && <p className="mt-0.5 opacity-70 whitespace-pre-wrap">{preview}</p>}
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
             {/* Thinking state: show live tool activity inside the bubble */}
@@ -128,7 +136,7 @@ const ChatMessageItem = React.memo(({
                     <span className="h-1.5 w-1.5 rounded-full bg-cyan-500 animate-bounce [animation-delay:150ms]" />
                     <span className="h-1.5 w-1.5 rounded-full bg-cyan-500 animate-bounce [animation-delay:300ms]" />
                   </div>
-                  <span className="text-xs font-semibold text-slate-700">
+                  <span className="text-xs font-semibold text-slate-700 dark:text-slate-200">
                     {activeToolLog ? `Running: ${activeToolLog.tool.replace(/_/g, " ")}` : "Atlas is thinking..."}
                   </span>
                 </div>
@@ -161,7 +169,7 @@ const ChatMessageItem = React.memo(({
             )}
             {/* Final response */}
             {content && (
-              <div className="prose prose-sm max-w-none prose-headings:font-bold prose-headings:mt-3 prose-headings:mb-1 prose-strong:font-bold prose-p:my-0 prose-p:leading-snug prose-ul:my-0 prose-ol:my-0 prose-li:my-0 prose-li:leading-snug">
+              <div className="prose prose-sm dark:prose-invert max-w-none prose-headings:font-bold prose-headings:mt-3 prose-headings:mb-1 prose-strong:font-bold prose-p:my-0 prose-p:leading-snug prose-ul:my-0 prose-ol:my-0 prose-li:my-0 prose-li:leading-snug">
                 <ReactMarkdown
                   components={{
                     a: ({ node, ...props }) => <a {...props} target="_blank" rel="noopener noreferrer" className="text-cyan-600 hover:underline" />
@@ -274,11 +282,11 @@ const JobPreviewBox = ({
 }) => {
   return (
     <div className="mt-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
-      <div className="rounded-xl border border-slate-200/60 bg-slate-50/50 p-3 shadow-inner">
+      <div className="rounded-xl border border-slate-200/60 dark:border-white/10 bg-slate-50/50 dark:bg-white/5 p-3 shadow-inner">
         <div className="flex items-center justify-between mb-3 px-1">
           <div className="flex items-center gap-2">
             <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-cyan-600 text-[10px] font-bold text-white shadow-sm ring-2 ring-white">{jobs.filter(j => !j.isAlreadyImported).length}</span>
-            <p className="text-xs font-bold text-slate-700 uppercase tracking-tight">
+            <p className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-tight">
               {jobs.every(j => j.isAlreadyImported) ? "Discovery Complete" : "Staged Roles"}
             </p>
           </div>
@@ -295,7 +303,7 @@ const JobPreviewBox = ({
             <button
               onClick={onDismiss}
               disabled={importing}
-              className="rounded-lg border border-slate-200 bg-white/80 px-3 py-1.5 text-xs font-bold text-slate-600 shadow-sm transition-all hover:bg-slate-50 hover:border-slate-300 disabled:opacity-50 active:scale-95"
+              className="rounded-lg border border-slate-200 dark:border-white/10 bg-white/80 dark:bg-white/5 px-3 py-1.5 text-xs font-bold text-slate-600 dark:text-slate-300 shadow-sm transition-all hover:bg-slate-50 dark:hover:bg-white/10 hover:border-slate-300 dark:hover:border-white/20 disabled:opacity-50 active:scale-95"
             >
               ❌ {jobs.every(j => j.isAlreadyImported) ? "Close" : "Dismiss"}
             </button>
@@ -308,20 +316,20 @@ const JobPreviewBox = ({
         )}
         <div className="space-y-2 max-h-[400px] overflow-y-auto custom-scrollbar pr-1">
           {jobs.map((job, idx) => (
-            <div key={idx} className="group flex items-start justify-between rounded-lg border border-white/60 bg-white/70 p-3 transition-all hover:border-cyan-200 hover:bg-white hover:shadow-sm">
+            <div key={idx} className="group flex items-start justify-between rounded-lg border border-white/60 dark:border-white/10 bg-white/70 dark:bg-white/5 p-3 transition-all hover:border-cyan-200 dark:hover:border-cyan-500/40 hover:bg-white dark:hover:bg-white/10 hover:shadow-sm">
               <div className="flex-1 min-w-0">
-                <p className="font-semibold text-sm text-slate-800 truncate">{job.title}</p>
-                <p className="text-xs text-slate-600 mt-0.5">{job.company} • {job.location}</p>
+                <p className="font-semibold text-sm text-slate-800 dark:text-slate-100 truncate">{job.title}</p>
+                <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">{job.company} • {job.location}</p>
                 <div className="flex items-center gap-2 mt-1.5 flex-wrap">
                   {/* Profile match score */}
                   {job.score != null && (
                     (() => {
                       const pct = job.score > 1 ? Math.round(job.score) : Math.round(job.score * 100);
                       const color = pct >= 70
-                        ? "bg-emerald-50 text-emerald-700 ring-emerald-200/60"
+                        ? "bg-emerald-50 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 ring-emerald-200/60 dark:ring-emerald-500/30"
                         : pct >= 40
-                          ? "bg-amber-50 text-amber-700 ring-amber-200/60"
-                          : "bg-slate-50 text-slate-500 ring-slate-200/60";
+                          ? "bg-amber-50 dark:bg-amber-500/15 text-amber-700 dark:text-amber-400 ring-amber-200/60 dark:ring-amber-500/30"
+                          : "bg-slate-50 dark:bg-white/5 text-slate-500 dark:text-slate-400 ring-slate-200/60 dark:ring-white/10";
                       return (
                         <span className={`inline-flex items-center rounded-md px-2 py-0.5 text-[10px] font-bold ring-1 ${color}`}>
                           ⚡ {pct}% match
@@ -336,10 +344,10 @@ const JobPreviewBox = ({
                     const isCompetitive = /competi|negotia|market rate|attractive/i.test(raw || "");
                     const display = noInfo ? "Not disclosed" : raw!;
                     const cls = noInfo
-                      ? "bg-slate-50 text-slate-500 ring-slate-200/60"
+                      ? "bg-slate-50 dark:bg-white/5 text-slate-500 dark:text-slate-400 ring-slate-200/60 dark:ring-white/10"
                       : isCompetitive
-                        ? "bg-blue-50 text-blue-700 ring-blue-200/60"
-                        : "bg-emerald-50 text-emerald-700 ring-emerald-200/60";
+                        ? "bg-blue-50 dark:bg-blue-500/15 text-blue-700 dark:text-blue-400 ring-blue-200/60 dark:ring-blue-500/30"
+                        : "bg-emerald-50 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 ring-emerald-200/60 dark:ring-emerald-500/30";
                     return (
                       <span className={`inline-flex items-center rounded-md px-2 py-0.5 text-[10px] font-bold ring-1 ${cls}`}>
                         💰 {display}
@@ -347,20 +355,20 @@ const JobPreviewBox = ({
                     );
                   })()}
                   {/* Job type */}
-                  {job.jobType && (
-                    <span className="inline-flex items-center rounded-md px-2 py-0.5 text-[10px] font-bold bg-violet-50 text-violet-700 ring-1 ring-violet-200/60">
-                      {job.jobType}
+                  {job.jobType?.trim() && (
+                    <span className="inline-flex items-center rounded-md px-2 py-0.5 text-[10px] font-bold bg-violet-50 dark:bg-violet-500/15 text-violet-700 dark:text-violet-300 ring-1 ring-violet-200/60 dark:ring-violet-500/30">
+                      {job.jobType.trim()}
                     </span>
                   )}
                   {/* Date posted */}
-                  {job.datePosted && (
-                    <span className="inline-flex items-center rounded-md px-2 py-0.5 text-[10px] font-bold bg-cyan-50 text-cyan-700 border border-cyan-100">
-                      🕒 {job.datePosted}
+                  {job.datePosted?.trim() && (
+                    <span className="inline-flex items-center rounded-md px-2 py-0.5 text-[10px] font-bold bg-cyan-50 dark:bg-cyan-500/15 text-cyan-700 dark:text-cyan-300 border border-cyan-100 dark:border-cyan-500/30">
+                      🕒 {job.datePosted.trim()}
                     </span>
                   )}
                   {/* Source */}
-                  {job.source && (
-                    <span className="text-[10px] text-slate-400 font-medium bg-slate-50/50 px-1.5 py-0.5 rounded border border-slate-100/50">{job.source}</span>
+                  {job.source?.trim() && (
+                    <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium bg-slate-100/60 dark:bg-white/5 px-1.5 py-0.5 rounded border border-slate-200/60 dark:border-white/10">{job.source.trim()}</span>
                   )}
                   {/* View link */}
                   <a
@@ -552,7 +560,7 @@ export function AgentChatStarter() {
   // Effect 2: Loading Sync Status (reaction to active session, debounced)
   useEffect(() => {
     let ignore = false;
-    let interval: ReturnType<typeof setInterval>;
+    let interval: number;
 
     const debounce = setTimeout(() => {
       async function loadSyncStatus() {
@@ -870,95 +878,140 @@ export function AgentChatStarter() {
     <div className="flex h-full min-h-0 w-full gap-3 overflow-hidden xl:flex-row flex-col sm:gap-5 lg:gap-6">
       <aside className="panel flex-none xl:flex xl:flex-col xl:w-[320px] p-4 sm:p-5 custom-scrollbar scroll-well overflow-y-auto max-h-[150px] sm:max-h-[200px] xl:max-h-full xl:overflow-y-auto">
         {/* Compact mobile header, full profile on xl */}
-        <div className="flex items-center gap-3 xl:block xl:pb-2 xl:border-b xl:border-white/20">
-          <p className="hidden text-xs font-semibold uppercase tracking-widest text-muted xl:block">Agent Profile</p>
-          <h3 className="text-lg font-extrabold xl:mt-2 xl:text-2xl">{profile.name}</h3>
-          <span className="text-xs text-muted xl:mt-1 xl:block">·</span>
-          <p className="text-xs text-muted xl:mt-1">{profile.roleTitle}</p>
-          <span className="ml-auto text-[10px] text-muted xl:hidden">{profile.mindModel}</span>
+        <div className="flex items-center gap-3 xl:block xl:pb-4 xl:border-b xl:border-white/10 dark:xl:border-white/10">
+          {/* Desktop: full stacked profile */}
+          <div className="hidden xl:flex xl:items-center xl:gap-3 xl:mb-3">
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-cyan-500 to-cyan-700 text-white shadow-lg shadow-cyan-500/20 flex-shrink-0">
+              <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
+              </svg>
+            </div>
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-cyan-500 dark:text-cyan-400">Agent Profile</p>
+              <h3 className="text-xl font-extrabold leading-tight">{profile.name}</h3>
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                <p className="text-xs text-muted">{profile.roleTitle}</p>
+              </div>
+            </div>
+          </div>
+          {/* Mobile: compact inline */}
+          <div className="flex xl:hidden items-center gap-2 w-full">
+            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-500 to-cyan-700 text-white flex-shrink-0">
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
+              </svg>
+            </div>
+            <h3 className="text-base font-extrabold">{profile.name}</h3>
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            <p className="text-xs text-muted">{profile.roleTitle}</p>
+            <span className="ml-auto text-[10px] text-muted">{profile.mindModel}</span>
+          </div>
         </div>
 
-        <div className="hidden xl:block flex-none space-y-4 py-4 text-sm">
-          <div>
-            <span className="font-semibold block mb-1">Soul Mission:</span>
-            <p className="text-muted leading-tight">{profile.soulMission}</p>
-          </div>
-          <div>
-            <span className="font-semibold block mb-1">Style:</span>
-            <p className="text-muted leading-tight">{profile.communicationStyle}</p>
-          </div>
-          <div>
-            <span className="font-semibold block mb-1">Agent Model:</span>
-            <p className="text-muted leading-tight">{profile.mindModel}</p>
-          </div>
-          <div>
-            <span className="font-semibold block mb-1">Memory Anchor:</span>
-            <p className="text-muted leading-tight">{profile.memoryAnchors}</p>
-          </div>
+        <div className="hidden xl:block flex-none space-y-2 py-4 text-sm">
+          {[
+            { label: "Soul Mission", value: profile.soulMission },
+            { label: "Style", value: profile.communicationStyle },
+            { label: "Agent Model", value: profile.mindModel },
+            { label: "Memory Anchor", value: profile.memoryAnchors },
+          ].map(({ label, value }) => (
+            <div key={label} className="rounded-lg px-3 py-2.5 bg-white/40 dark:bg-white/5 border border-white/40 dark:border-white/10">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-cyan-600 dark:text-cyan-400 block mb-0.5">{label}</span>
+              <p className="text-xs text-slate-600 dark:text-slate-300 leading-snug">{value}</p>
+            </div>
+          ))}
         </div>
 
         <div className="hidden xl:block flex-none pt-4 border-t border-white/20 space-y-3">
-            <div className={`rounded-xl border border-white/60 bg-white/75 p-3 text-xs`}>
-              <div className="flex items-center justify-between">
-                <p className="font-semibold">Tool Use</p>
+            <div className="rounded-xl border border-white/60 dark:border-white/10 bg-white/75 dark:bg-white/5 p-3 text-xs">
+              <div className="flex items-center justify-between mb-1">
+                <p className="font-semibold text-slate-700 dark:text-slate-200">Tool Use</p>
+                {/* Toggle switch */}
                 <button
                   onClick={() => setShowToolUse(!showToolUse)}
-                  className={`px-2 py-1 rounded-md transition-all font-bold ${
-                    showToolUse ? "bg-cyan-600 text-white" : "bg-white/50 text-muted border border-white/60 hover:bg-white"
+                  className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none ${
+                    showToolUse ? "bg-cyan-500" : "bg-slate-300 dark:bg-slate-600"
                   }`}
+                  title={showToolUse ? "Hide logs" : "Show logs"}
                 >
-                  {showToolUse ? "Hide Active Logs" : "Show Active Logs"}
+                  <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform ${
+                    showToolUse ? "translate-x-4" : "translate-x-0.5"
+                  }`} />
                 </button>
               </div>
-              <p className="mt-1 text-[10px] text-muted leading-tight italic">Expose technical tool results and orchestrator calls.</p>
+              <p className="text-[10px] text-muted leading-tight">Expose orchestrator calls &amp; tool results.</p>
               {showToolUse && (() => {
                 const allLogs = messages.flatMap((m: any) => m.toolLogs || []);
-                if (allLogs.length === 0) return <p className="mt-2 text-[10px] text-muted">No tool calls yet this session.</p>;
+                if (allLogs.length === 0) return <p className="mt-2 text-[10px] text-muted italic">No tool calls yet this session.</p>;
                 return (
                   <div className="mt-2 space-y-1.5 max-h-[200px] overflow-y-auto custom-scrollbar">
-                    {allLogs.map((log: any, i: number) => (
-                      <div key={i} className={`rounded p-1.5 border ${
-                        (typeof log.result === 'string' && (log.result.includes('Error') || log.result.includes('error') || log.result.includes('failed') || log.result.includes('"status":"error"')))
-                          ? 'bg-red-50/50 border-red-200/40' : 'bg-green-50/50 border-green-200/40'
-                      }`}>
-                        <p className="font-bold text-[10px]">
-                          <span className={
-                            (typeof log.result === 'string' && (log.result.includes('Error') || log.result.includes('error') || log.result.includes('failed') || log.result.includes('"status":"error"')))
-                              ? 'text-red-600' : 'text-green-600'
-                          }>●</span>{' '}
-                          {log.tool}
-                        </p>
-                        <p className="text-[9px] text-muted truncate">{JSON.stringify(log.parameters).slice(0, 80)}</p>
-                      </div>
-                    ))}
+                    {allLogs.map((log: any, i: number) => {
+                      const isErr = typeof log.result === 'string' && (log.result.includes('Error') || log.result.includes('error') || log.result.includes('failed') || log.result.includes('"status":"error"'));
+                      return (
+                        <div key={i} className={`rounded p-1.5 border ${isErr
+                          ? 'bg-red-50/50 dark:bg-red-900/20 border-red-200/40 dark:border-red-500/20'
+                          : 'bg-emerald-50/50 dark:bg-emerald-900/20 border-emerald-200/40 dark:border-emerald-500/20'}`}>
+                          <p className="font-bold text-[10px] flex items-center gap-1">
+                            <span className={isErr ? 'text-red-500' : 'text-emerald-500'}>●</span>
+                            <span className="dark:text-slate-200">{log.tool}</span>
+                          </p>
+                          <p className="text-[9px] text-muted truncate">{JSON.stringify(log.parameters).slice(0, 80)}</p>
+                        </div>
+                      );
+                    })}
                   </div>
                 );
               })()}
             </div>
 
-          <div className="rounded-xl border border-white/60 bg-white/75 p-3 text-xs">
-            <p className="font-semibold">Token Usage</p>
-            <p className="mt-1 text-muted">Total tokens used: {syncStatus?.usage.totalTokens.toLocaleString() ?? 0}</p>
+          <div className="rounded-xl border border-white/60 dark:border-white/10 bg-white/75 dark:bg-white/5 p-3 text-xs">
+            <div className="flex items-center justify-between mb-1.5">
+              <p className="font-semibold text-slate-700 dark:text-slate-200">Token Usage</p>
+              <span className="text-[10px] text-muted">{syncStatus?.usage.totalTokens.toLocaleString() ?? 0} / 1M</span>
+            </div>
+            <div className="h-1.5 w-full rounded-full bg-slate-200 dark:bg-white/10 overflow-hidden">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-cyan-500 to-cyan-400 transition-all"
+                style={{ width: `${Math.min(((syncStatus?.usage.totalTokens ?? 0) / 1_000_000) * 100, 100)}%` }}
+              />
+            </div>
+            <p className="mt-1 text-[10px] text-muted">{((syncStatus?.usage.totalTokens ?? 0) / 10_000).toFixed(1)}% of monthly cap</p>
           </div>
 
-          <div className="rounded-xl border border-white/60 bg-white/75 p-3 text-xs">
-            <p className="font-semibold mb-2">Memory Health</p>
+          <div className="rounded-xl border border-white/60 dark:border-white/10 bg-white/75 dark:bg-white/5 p-3 text-xs">
+            <div className="flex items-center justify-between mb-2">
+              <p className="font-semibold text-slate-700 dark:text-slate-200">Memory Health</p>
+              {syncStatus && (
+                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
+                  layerStatuses.every(l => l.healthy)
+                    ? "bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400"
+                    : "bg-rose-100 dark:bg-rose-500/20 text-rose-700 dark:text-rose-400"
+                }`}>
+                  {layerStatuses.filter(l => l.healthy).length}/{layerStatuses.length}
+                </span>
+              )}
+            </div>
             {!syncStatus ? (
               <div className="space-y-2 animate-pulse">
-                <div className="h-3 w-3/4 bg-slate-200 rounded" />
-                <div className="h-3 w-1/2 bg-slate-200 rounded" />
+                <div className="h-3 w-3/4 bg-slate-200 dark:bg-white/10 rounded" />
+                <div className="h-3 w-1/2 bg-slate-200 dark:bg-white/10 rounded" />
               </div>
             ) : (
               <>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-2 gap-1.5">
                   {layerStatuses.map((layer) => (
-                    <p key={layer.label} className="flex items-center gap-2 text-muted">
-                      <span className={layer.healthy ? "text-emerald-600" : "text-rose-600 font-bold"}>{layer.healthy ? "✓" : "✗"}</span>
-                      <span>{layer.label}</span>
-                    </p>
+                    <div key={layer.label} className={`flex items-center gap-1.5 rounded-lg px-2 py-1 ${
+                      layer.healthy
+                        ? "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
+                        : "bg-rose-50 dark:bg-rose-500/10 text-rose-600 dark:text-rose-400"
+                    }`}>
+                      <span className="text-[10px]">{layer.healthy ? "✓" : "✗"}</span>
+                      <span className="text-[10px] font-medium">{layer.label}</span>
+                    </div>
                   ))}
                 </div>
-                <p className="mt-2 text-[10px] text-muted border-t border-white/40 pt-2 italic">Last synced: {lastSyncedLabel}</p>
+                <p className="mt-2 text-[10px] text-muted border-t border-white/30 dark:border-white/10 pt-2 italic">Last synced: {lastSyncedLabel}</p>
               </>
             )}
           </div>
@@ -973,7 +1026,7 @@ export function AgentChatStarter() {
             <select
               value={sessionId || "new"}
               onChange={(e) => void switchSession(e.target.value)}
-              className="field text-xs font-medium bg-white/50 py-1.5 focus:bg-white min-w-0"
+              className="field text-xs font-medium bg-white/50 dark:bg-slate-800 dark:text-slate-200 py-1.5 focus:bg-white dark:focus:bg-slate-700 min-w-0"
             >
               <option value="new">Current Conversation</option>
               {sessions?.map((s) => (
@@ -997,9 +1050,9 @@ export function AgentChatStarter() {
           <div className="flex flex-col gap-4 pb-4">
             {initialLoading ? (
               <div className="flex flex-col gap-4 animate-pulse">
-                <div className="max-w-[85%] rounded-xl px-4 py-3 bg-white/60 border border-white/20 w-3/4 h-24 self-start shadow-sm" />
+                <div className="max-w-[85%] rounded-xl px-4 py-3 bg-white/60 dark:bg-white/5 border border-white/20 dark:border-white/10 w-3/4 h-24 self-start shadow-sm" />
                 <div className="max-w-[85%] rounded-xl px-4 py-3 bg-cyan-600/30 w-1/2 h-16 self-end shadow-sm" />
-                <div className="max-w-[85%] rounded-xl px-4 py-3 bg-white/60 border border-white/20 w-2/3 h-32 self-start shadow-sm" />
+                <div className="max-w-[85%] rounded-xl px-4 py-3 bg-white/60 dark:bg-white/5 border border-white/20 dark:border-white/10 w-2/3 h-32 self-start shadow-sm" />
               </div>
             ) : (
               messages.map((message) => {
@@ -1037,37 +1090,45 @@ export function AgentChatStarter() {
           <div id="chat-bottom" className="h-px w-full opacity-0" ref={chatBottomRef} />
         </div>
 
-        <div className="mt-2 flex-none flex items-center gap-2 rounded-xl border border-white/60 bg-white/80 p-2 shadow-sm transition-all duration-300 focus-within:ring-1 focus-within:ring-cyan-500/30 sm:rounded-2xl sm:p-3">
-          <input
-            autoFocus
-            value={input}
-            onChange={(event) => setInput(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter" && !event.shiftKey && !loading && input.trim()) {
-                event.preventDefault();
-                void sendMessage();
-              }
-            }}
-            placeholder="Type a message..."
-            className="field flex-1 bg-transparent border-none shadow-none focus:ring-0"
-          />
-          {loading ? (
-            <button
-              onClick={stopGeneration}
-              className="flex h-9 w-9 items-center justify-center rounded-full border-2 border-cyan-600 bg-white text-cyan-600 transition-colors hover:bg-cyan-50"
-              title="Stop generation"
-            >
-              <span className="h-3.5 w-3.5 rounded-sm bg-cyan-600 block" />
-            </button>
-          ) : (
-            <button
-              onClick={() => void sendMessage()}
-              disabled={!input.trim()}
-              className="btn-primary disabled:opacity-50"
-            >
-              Send
-            </button>
-          )}
+        <div className="mt-2 flex-none rounded-2xl border border-white/60 dark:border-white/10 bg-white/80 dark:bg-white/5 shadow-sm transition-all duration-300 focus-within:ring-2 focus-within:ring-cyan-500/30 focus-within:border-cyan-400/40">
+          <div className="flex items-end gap-2 p-2 sm:p-3">
+            <input
+              autoFocus
+              value={input}
+              onChange={(event) => setInput(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && !event.shiftKey && !loading && input.trim()) {
+                  event.preventDefault();
+                  void sendMessage();
+                }
+              }}
+              placeholder="Message Atlas…"
+              className="field flex-1 bg-transparent border-none shadow-none focus:ring-0 min-h-[36px] resize-none placeholder:text-slate-400 dark:placeholder:text-slate-500"
+            />
+            {loading ? (
+              <button
+                onClick={stopGeneration}
+                className="flex h-9 w-9 flex-none items-center justify-center rounded-full border-2 border-cyan-600 bg-white dark:bg-slate-800 text-cyan-600 transition-colors hover:bg-cyan-50 dark:hover:bg-slate-700"
+                title="Stop generation"
+              >
+                <span className="h-3.5 w-3.5 rounded-sm bg-cyan-600 block" />
+              </button>
+            ) : (
+              <button
+                onClick={() => void sendMessage()}
+                disabled={!input.trim()}
+                className="btn-primary flex-none disabled:opacity-40 transition-all"
+              >
+                Send
+              </button>
+            )}
+          </div>
+          <div className="flex items-center gap-2 px-3 pb-2 text-[10px] text-slate-400 dark:text-slate-600">
+            <span>Enter to send</span>
+            <span>·</span>
+            <span>Shift+Enter for newline</span>
+            {input.length > 0 && <span className="ml-auto">{input.length}</span>}
+          </div>
         </div>
       </section>
 

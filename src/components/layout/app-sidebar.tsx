@@ -80,20 +80,20 @@ export function AppSidebar({ mobileOpen, onClose, collapsed, onToggleCollapse }:
     <>
       {/* Desktop sidebar */}
       <aside
-        className={`hidden lg:flex flex-col border-r border-white/60 bg-white/50 backdrop-blur lg:sticky lg:top-0 lg:h-screen overflow-hidden transition-all duration-300 ${
+        className={`hidden lg:flex flex-col border-r border-white/60 dark:border-white/10 bg-white/50 dark:bg-slate-900/60 backdrop-blur lg:sticky lg:top-0 lg:h-screen overflow-hidden transition-all duration-300 ${
           collapsed ? "w-[64px] py-5 px-2" : "w-[260px] p-5"
         }`}
       >
         {collapsed ? (
           <div className="flex flex-col items-center gap-3 h-full">
             <div className="w-full flex flex-col items-center gap-2">
-              <div className="rounded-xl border border-white/65 bg-white/70 py-2 px-1 shadow-sm flex items-center justify-center w-full">
+              <div className="rounded-xl border border-white/65 dark:border-white/10 bg-white/70 dark:bg-white/5 py-2 px-1 shadow-sm flex items-center justify-center w-full">
                 <span className="text-sm font-black text-cyan-600">JO</span>
               </div>
               <button
                 onClick={onToggleCollapse}
                 title="Expand sidebar"
-                className="rounded-lg border border-white/60 bg-white/75 p-1.5 text-muted hover:bg-white hover:text-text transition-colors"
+                className="rounded-lg border border-white/60 dark:border-white/10 bg-white/75 dark:bg-white/5 p-1.5 text-muted hover:bg-white dark:hover:bg-white/10 hover:text-text transition-colors"
               >
                 <PanelLeftOpen className="h-4 w-4" />
               </button>
@@ -109,8 +109,8 @@ export function AppSidebar({ mobileOpen, onClose, collapsed, onToggleCollapse }:
                     title={item.label}
                     className={`flex items-center justify-center rounded-xl border p-2 w-full transition ${
                       active
-                        ? "border-cyan-200/80 bg-cyan-50/80 text-slate-900"
-                        : "border-transparent text-muted hover:border-white/70 hover:bg-white/75 hover:text-text"
+                        ? "border-cyan-200/80 dark:border-cyan-500/40 bg-cyan-50/80 dark:bg-cyan-500/15 text-slate-900 dark:text-cyan-300"
+                        : "border-transparent text-muted hover:border-white/70 dark:hover:border-white/10 hover:bg-white/75 dark:hover:bg-white/10 hover:text-text"
                     }`}
                   >
                     <Icon className="h-4 w-4" />
@@ -138,7 +138,7 @@ export function AppSidebar({ mobileOpen, onClose, collapsed, onToggleCollapse }:
         ) : (
           <>
             <div className="flex items-start justify-between">
-              <div className="rounded-2xl border border-white/65 bg-white/70 p-4 shadow-sm flex-1 mr-2">
+              <div className="rounded-2xl border border-white/65 dark:border-white/10 bg-white/70 dark:bg-white/5 p-4 shadow-sm flex-1 mr-2">
                 <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-muted">AIG</p>
                 <h1 className="mt-2 text-lg font-black leading-tight text-cyan-600">JOB OS</h1>
                 <p className="mt-2 text-xs text-muted">Agent-led job discovery, ranking, and outreach operations.</p>
@@ -146,7 +146,7 @@ export function AppSidebar({ mobileOpen, onClose, collapsed, onToggleCollapse }:
               <button
                 onClick={onToggleCollapse}
                 title="Collapse sidebar"
-                className="mt-1 rounded-lg border border-white/60 bg-white/75 p-1.5 text-muted hover:bg-white hover:text-text transition-colors flex-none"
+                className="mt-1 rounded-lg border border-white/60 dark:border-white/10 bg-white/75 dark:bg-white/5 p-1.5 text-muted hover:bg-white dark:hover:bg-white/10 hover:text-text transition-colors flex-none"
               >
                 <PanelLeftClose className="h-4 w-4" />
               </button>
@@ -162,8 +162,8 @@ export function AppSidebar({ mobileOpen, onClose, collapsed, onToggleCollapse }:
                     href={item.href}
                     className={`group flex items-center gap-3 rounded-xl border px-3 py-2 text-sm font-semibold transition ${
                       active
-                        ? "border-cyan-200/80 bg-cyan-50/80 text-slate-900"
-                        : "border-transparent text-muted hover:border-white/70 hover:bg-white/75 hover:text-text"
+                        ? "border-cyan-200/80 dark:border-cyan-500/40 bg-cyan-50/80 dark:bg-cyan-500/15 text-slate-900 dark:text-cyan-300"
+                        : "border-transparent text-muted hover:border-white/70 dark:hover:border-white/10 hover:bg-white/75 dark:hover:bg-white/10 hover:text-text"
                     }`}
                   >
                     <Icon className="h-4 w-4" />
@@ -190,15 +190,15 @@ export function AppSidebar({ mobileOpen, onClose, collapsed, onToggleCollapse }:
             </nav>
 
             <div className="mt-8 space-y-4">
-              <div className="rounded-2xl border border-white/60 bg-white/70 p-3 text-xs">
+              <div className="rounded-2xl border border-white/60 dark:border-white/10 bg-white/70 dark:bg-white/5 p-3 text-xs">
                 {isLoading && !runtime ? (
                   <div className="space-y-2 animate-pulse">
                     <div className="flex items-center justify-between mb-2">
-                      <div suppressHydrationWarning className="h-3 w-20 bg-slate-200 rounded" />
-                      <div suppressHydrationWarning className="h-3 w-24 bg-slate-200 rounded" />
+                      <div suppressHydrationWarning className="h-3 w-20 bg-slate-200 dark:bg-white/10 rounded" />
+                      <div suppressHydrationWarning className="h-3 w-24 bg-slate-200 dark:bg-white/10 rounded" />
                     </div>
-                    <div suppressHydrationWarning className="h-1.5 w-full rounded-full bg-slate-200" />
-                    <div suppressHydrationWarning className="h-3 w-28 bg-slate-200 rounded mt-2" />
+                    <div suppressHydrationWarning className="h-1.5 w-full rounded-full bg-slate-200 dark:bg-white/10" />
+                    <div suppressHydrationWarning className="h-3 w-28 bg-slate-200 dark:bg-white/10 rounded mt-2" />
                   </div>
                 ) : (
                   <>
@@ -206,7 +206,7 @@ export function AppSidebar({ mobileOpen, onClose, collapsed, onToggleCollapse }:
                       <p className="font-bold text-text">Token Usage</p>
                       <span className="text-[10px] font-medium text-muted">{percentage}% of monthly cap</span>
                     </div>
-                    <div className="h-1.5 w-full rounded-full bg-slate-200 overflow-hidden">
+                    <div className="h-1.5 w-full rounded-full bg-slate-200 dark:bg-white/10 overflow-hidden">
                       <div className="h-full bg-cyan-500 rounded-full transition-all duration-500" style={{ width: `${percentage}%` }} />
                     </div>
                     <p className="mt-2 text-[10px] text-muted">
@@ -216,7 +216,7 @@ export function AppSidebar({ mobileOpen, onClose, collapsed, onToggleCollapse }:
                 )}
               </div>
 
-              <div className="rounded-2xl border border-white/60 bg-white/70 p-3 text-xs text-muted">
+              <div className="rounded-2xl border border-white/60 dark:border-white/10 bg-white/70 dark:bg-white/5 p-3 text-xs text-muted">
                 <p className="font-semibold text-text">Execution Mode</p>
                 <p className="mt-1">Draft-first outreach, user-approved actions, token-aware agents.</p>
               </div>
@@ -227,7 +227,7 @@ export function AppSidebar({ mobileOpen, onClose, collapsed, onToggleCollapse }:
 
       {/* Mobile slide-over sidebar */}
       <aside
-        className={`fixed inset-y-0 left-0 z-40 flex flex-col w-[260px] border-r border-white/60 bg-white/95 backdrop-blur p-5 shadow-2xl transition-transform duration-300 lg:hidden ${
+        className={`fixed inset-y-0 left-0 z-40 flex flex-col w-[260px] border-r border-white/60 dark:border-white/10 bg-white/95 dark:bg-slate-900/98 backdrop-blur p-5 shadow-2xl transition-transform duration-300 lg:hidden ${
           mobileOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >

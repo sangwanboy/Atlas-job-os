@@ -45,9 +45,21 @@ body {
   font-family: Manrope, ui-sans-serif, system-ui, sans-serif;
 }
 
+.dark body {
+  background:
+    radial-gradient(circle at 5% 0%, rgba(6, 182, 212, 0.10), transparent 38%),
+    radial-gradient(circle at 100% 0%, rgba(6, 182, 212, 0.06), transparent 40%),
+    linear-gradient(155deg, hsl(218 32% 9%) 0%, hsl(220 28% 11%) 60%, hsl(222 26% 10%) 100%),
+    hsl(var(--bg));
+}
+
 .panel {
   @apply rounded-2xl border border-white/60 bg-white/65 shadow-panel;
   backdrop-filter: blur(12px);
+}
+
+.dark .panel {
+  @apply border-white/10 bg-white/5;
 }
 
 .kpi-card {
@@ -56,6 +68,10 @@ body {
 
 .badge {
   @apply inline-flex items-center rounded-full border border-white/60 bg-white/70 px-2 py-0.5 text-xs font-semibold;
+}
+
+.dark .badge {
+  @apply border-white/10 bg-white/10;
 }
 
 .app-shell {
@@ -99,6 +115,11 @@ body {
 
 .field {
   @apply w-full rounded-xl border border-white/60 bg-white/75 px-3 py-2 text-sm outline-none transition;
+  color: hsl(var(--text));
+}
+
+.dark .field {
+  @apply border-white/10 bg-white/5;
 }
 
 .field:focus {
@@ -119,8 +140,16 @@ body {
   @apply rounded-xl border border-white/60 bg-white/70 px-4 py-2 text-sm font-semibold text-text transition;
 }
 
+.dark .btn-secondary {
+  @apply border-white/10 bg-white/5 hover:bg-white/10;
+}
+
 .btn-secondary:hover {
   @apply bg-white;
+}
+
+.dark .btn-secondary:hover {
+  background: rgba(255,255,255,0.1);
 }
 
 /* Custom Scrollbar and Scroll Wells */
@@ -139,6 +168,10 @@ body {
 
 .scroll-well {
   @apply rounded-xl border border-white/60 bg-slate-50/40 shadow-inner backdrop-blur-sm;
+}
+
+.dark .scroll-well {
+  @apply border-white/10 bg-white/5;
 }
 
 .shadow-well {

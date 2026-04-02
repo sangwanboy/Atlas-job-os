@@ -25,19 +25,19 @@ export default function DashboardPage() {
           <div className="panel p-5">
             <h3 className="text-lg font-bold">Today&apos;s Action Queue</h3>
             <ul className="mt-4 space-y-3 text-sm">
-              <li className="rounded-xl border border-white/60 bg-white/75 p-3">
+              <li className="rounded-xl border border-white/60 dark:border-white/10 bg-white/75 dark:bg-white/5 p-3">
                 <p>Follow up with 3 recruiters from last week.</p>
                 <Link href="/outreach" className="btn-secondary mt-2 inline-block">
                   Open Follow-ups
                 </Link>
               </li>
-              <li className="rounded-xl border border-white/60 bg-white/75 p-3">
+              <li className="rounded-xl border border-white/60 dark:border-white/10 bg-white/75 dark:bg-white/5 p-3">
                 <p>Review 5 high-priority roles scored over 75.</p>
                 <Link href="/jobs" className="btn-secondary mt-2 inline-block">
                   Review Jobs
                 </Link>
               </li>
-              <li className="rounded-xl border border-white/60 bg-white/75 p-3">
+              <li className="rounded-xl border border-white/60 dark:border-white/10 bg-white/75 dark:bg-white/5 p-3">
                 <p>Ask Atlas to draft two personalized outreach messages.</p>
                 <Link href="/agents/workspace" className="btn-secondary mt-2 inline-block">
                   Open Agent Workspace
