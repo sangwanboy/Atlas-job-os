@@ -3,7 +3,7 @@ import { prisma } from '../src/lib/db';
 async function run() {
   try {
     const agents = await prisma.agent.findMany({
-      select: { id: true, key: true, name: true, userId: true }
+      select: { id: true, key: true, userId: true }
     });
     console.log('Agents in DB:', JSON.stringify(agents, null, 2));
 

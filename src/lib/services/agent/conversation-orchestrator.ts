@@ -192,6 +192,11 @@ const toolDescriptors = [
     parameters: {},
   },
   {
+    name: "delete_all_saved_jobs",
+    description: "Permanently delete ALL saved/imported jobs from the database. Use ONLY when the user explicitly says 'delete all saved jobs', 'clear all jobs', 'wipe everything', or similar. This is irreversible. Parameters: {}",
+    parameters: {},
+  },
+  {
     name: "gmail_sync",
     description: "Sync the user's Gmail inbox for job-related emails. Defaults to last 7 days with built-in job keywords. Pass 'keywords' to search for specific terms (e.g. company names, role titles). Pass 'days' (1–30) to control date range. (RETURNS A COUNT ONLY. Do NOT hallucinate jobs!). Parameters: { keywords?: string[], days?: number }",
     parameters: { keywords: "string[]?", days: "number?" },
@@ -265,6 +270,11 @@ const toolDescriptors = [
     name: "browser_extension_enrich_job",
     description: "Get full details for a single job listing using the Chrome extension. Navigates to the job URL, takes a full-page screenshot, and uses Vertex AI OCR to extract: company, salary, job type, full description, requirements. Use this after browser_extract_jobs returns basic card data. Parameters: { url: string }",
     parameters: { url: "string" },
+  },
+  {
+    name: "enrich_pipeline_jobs",
+    description: "Scrape full descriptions, salary, and company for jobs already in the pipeline that are missing this data. AUTOMATICALLY call this when the user asks about job descriptions, says 'what info do you have', or asks to score/fit-check jobs. Parameters: { limit?: number (default 10, max 20) }",
+    parameters: { limit: "number?" },
   },
 ] as const;
 
@@ -727,11 +737,11 @@ async function executeToolCall(toolCall: ToolCall, sid: string, userId?: string)
       title: j.title,
       company: j.company,
       location: j.location,
-      url: j.url,
+      url: j.sourceUrl,
       salary: j.salaryRange,
       source: j.source,
       score: j.score,
-      isAlreadyImported: j.isAlreadyImported,
+      isAlreadyImported: false,
     }));
     const list = capped.map((j, i) =>
       `${i + 1}. **${j.title}** at ${j.company} (${j.location}) — Score: ${j.score ?? "N/A"}, Salary: ${j.salaryRange || "Not disclosed"}, Source: ${j.source}`
@@ -770,6 +780,13 @@ async function executeToolCall(toolCall: ToolCall, sid: string, userId?: string)
     localJobsCache.clear();
     pendingJobsStore.set(sid, []);
     return "Pipeline cleared. All staged jobs have been removed.";
+  }
+  if (toolCall.tool === "delete_all_saved_jobs") {
+    if (!userId) return "delete_all_saved_jobs failed: no user session available.";
+    const { count } = await prisma.job.deleteMany({ where: { userId } });
+    localJobsCache.clear();
+    pendingJobsStore.set(sid, []);
+    return `All ${count} saved job${count !== 1 ? "s" : ""} have been permanently deleted from the database.`;
   }
   if (toolCall.tool === "read_context_memory") {
     const context = await continuitySyncService.hydrateTurnContext(sid, sid);
@@ -855,6 +872,49 @@ async function executeToolCall(toolCall: ToolCall, sid: string, userId?: string)
     await fs.writeFile(selectorsPath, JSON.stringify(data, null, 2), "utf-8");
     return `✅ Scraper selectors updated for **${site}**: \`${cardSelectors.join(", ")}\`. These will be used on the next search.`;
   }
+  if (toolCall.tool === "enrich_pipeline_jobs") {
+    const limit = Math.min(Number((toolCall.parameters as any)?.limit) || 10, 20);
+    // Get jobs from DB that are missing descriptions (descriptionRaw is the Prisma field)
+    const prismaJobs = await prisma.job.findMany({
+      where: { userId, OR: [{ descriptionRaw: null }, { descriptionRaw: "" }] },
+      orderBy: { createdAt: "desc" },
+      take: limit,
+      select: { id: true, title: true, sourceUrl: true },
+    });
+    if (prismaJobs.length === 0) {
+      return "✅ All pipeline jobs already have descriptions — nothing to enrich.";
+    }
+    console.log(`[enrich_pipeline_jobs] Enriching ${prismaJobs.length} jobs via scraper`);
+    let enriched = 0;
+    let failed = 0;
+    for (const job of prismaJobs) {
+      if (!job.sourceUrl) { failed++; continue; }
+      try {
+        const result = await ScraperService.scrape(job.sourceUrl, job.title);
+        const detail = result.jobs?.[0];
+        if (detail?.description) {
+          const salaryBounds = parseSalaryBounds(detail.salary);
+          await prisma.job.update({
+            where: { id: job.id },
+            data: {
+              descriptionRaw: detail.description,
+              descriptionClean: detail.description,
+              ...(salaryBounds.salaryMin ? { salaryMin: salaryBounds.salaryMin } : {}),
+              ...(salaryBounds.salaryMax ? { salaryMax: salaryBounds.salaryMax } : {}),
+            },
+          });
+          enriched++;
+        } else {
+          failed++;
+        }
+      } catch (e) {
+        console.warn(`[enrich_pipeline_jobs] Failed for ${job.sourceUrl}:`, e);
+        failed++;
+      }
+    }
+    return `✅ Enriched **${enriched}** jobs with full descriptions and salary data. ${failed > 0 ? `(${failed} failed — no URL or scraper blocked)` : ""}`;
+  }
+
   if (toolCall.tool === "browser_extract_jobs") {
     const params = toolCall.parameters as any;
     // Atlas may send singular or plural parameter names — normalise both
@@ -863,75 +923,7 @@ async function executeToolCall(toolCall: ToolCall, sid: string, userId?: string)
     if (!query) return "⚠️ No search query provided. Please specify a job title to search for.";
     const searchQuery = `${query} ${location}`.trim();
 
-    // ── Extension path: use real Chrome with user's logged-in session ─────
-    const statusRes = await fetchBrowserServerRaw("extension_status", sid, {});
-    const extConnected = (statusRes as any)?.data?.connected === true;
-    if (extConnected) {
-      console.log(`[browser_extract_jobs] Chrome extension connected — using extension path for: ${searchQuery}`);
-      const extPlatforms: { name: string; url: string }[] = [
-        { name: "LinkedIn", url: `https://www.linkedin.com/jobs/search/?keywords=${encodeURIComponent(query)}&location=${encodeURIComponent(location)}` },
-        { name: "Indeed",   url: `https://uk.indeed.com/jobs?q=${encodeURIComponent(query)}&l=${encodeURIComponent(location)}` },
-      ];
-      const extResults: any[] = [];
-      for (const platform of extPlatforms) {
-        try {
-          const res = await fetchBrowserServerRaw("extension_extract_jobs", sid, { searchUrl: platform.url, query, location });
-          const jobs = (res as any)?.data?.jobs;
-          if (Array.isArray(jobs) && jobs.length > 0) {
-            extResults.push(...jobs.map((j: any) => ({ ...j, _platform: platform.name })));
-          }
-        } catch (e) {
-          console.warn(`[browser_extract_jobs] Extension failed for ${platform.name}:`, e);
-        }
-      }
-      if (extResults.length > 0) {
-        // Deduplicate by normalised title+company before storing or previewing
-        const normExt = (s: string) => (s || "").toLowerCase().replace(/[^a-z0-9]/g, "").trim();
-        const extSeenKeys = new Set<string>();
-        const uniqueExtResults = extResults.filter((j: any) => {
-          const k = `${normExt(j.title)}::${normExt(j.company)}`;
-          if (extSeenKeys.has(k)) return false;
-          extSeenKeys.add(k);
-          return true;
-        });
-
-        localJobsCache.upsertMany(uniqueExtResults.map((j: any) => ({
-          id: j.id || Buffer.from(`${j.title}-${j.url || j.link}`).toString("base64"),
-          title: j.title || "Untitled",
-          company: j.company || "",
-          location: j.location || "",
-          url: j.link || j.url || "",
-          salary: j.salary,
-          description: j.description || "",
-          skills: j.requirements || "",
-          source: j._platform || "Extension",
-          status: "NEW" as const,
-          score: j.score,
-        })));
-        const previewRes = await executeToolCall({
-          tool: "preview_jobs",
-          parameters: {
-            jobs: uniqueExtResults.map((j: any) => ({
-              title: j.title || "Untitled Role",
-              company: j.company || "Unknown Company",
-              location: j.location || location,
-              url: j.link || j.url || "#",
-              salary: j.salary,
-              source: j._platform || "Extension",
-              description: j.description || j.requirements || "",
-              skills: j.requirements || "",
-            })),
-          },
-        }, sid);
-        return `Found **${uniqueExtResults.length} unique jobs** (${extResults.length} raw, ${extResults.length - uniqueExtResults.length} duplicates removed) via your logged-in Chrome session.\n\n${previewRes}`;
-      }
-      // Extension connected but returned no results — likely auth wall or no jobs found
-      // Do NOT fall through to Playwright when extension is connected
-      return `⚠️ The Chrome extension is connected but returned no jobs for "${searchQuery}". LinkedIn may be showing a sign-in wall in the Atlas tab. Please:\n1. Check the Atlas tab in Chrome and log in to LinkedIn if prompted\n2. Then ask me to search again`;
-    }
-
-    // ── Playwright / Scrapling fallback (only when extension not connected) ──
-    // Build search URLs for reputable UK platforms — all run in parallel
+    // ── Extension-only job search (Playwright disabled — all gathering via Chrome extension) ──
     const allPlatforms: { name: string; url: string }[] = [
       { name: "LinkedIn",   url: `https://www.linkedin.com/jobs/search/?keywords=${encodeURIComponent(query)}&location=${encodeURIComponent(location)}` },
       { name: "Indeed",     url: `https://uk.indeed.com/jobs?q=${encodeURIComponent(query)}&l=${encodeURIComponent(location)}` },
@@ -939,50 +931,57 @@ async function executeToolCall(toolCall: ToolCall, sid: string, userId?: string)
       { name: "TotalJobs",  url: `https://www.totaljobs.com/jobs/${encodeURIComponent(query.replace(/\s+/g, "-").toLowerCase())}/in-${encodeURIComponent(location.replace(/\s+/g, "-").toLowerCase())}` },
       { name: "Adzuna",     url: `https://www.adzuna.co.uk/jobs/search?q=${encodeURIComponent(query)}&loc=${encodeURIComponent(location)}` },
       { name: "CV-Library", url: `https://www.cv-library.co.uk/search-jobs?q=${encodeURIComponent(query)}&loc=${encodeURIComponent(location)}&us=1` },
-      { name: "Monster",    url: `https://www.monster.co.uk/jobs/search?q=${encodeURIComponent(query)}&where=${encodeURIComponent(location)}` },
-      { name: "CWJobs",     url: `https://www.cwjobs.co.uk/jobs/${encodeURIComponent(query.replace(/\s+/g, "-").toLowerCase())}/in-${encodeURIComponent(location.replace(/\s+/g, "-").toLowerCase())}` },
     ];
 
-    // Atlas may request specific platforms — filter if provided
     const requestedPlatforms: string[] | undefined = params.platforms || params.platform;
-    const platforms = requestedPlatforms?.length
+    const targetPlatforms = requestedPlatforms?.length
       ? allPlatforms.filter(p => requestedPlatforms.some((rp: string) => p.name.toLowerCase().includes(rp.toLowerCase())))
       : allPlatforms;
 
-    console.log(`[browser_extract_jobs] Searching ${platforms.length} UK platforms in parallel for: ${searchQuery}`);
+    // Check extension connectivity
+    const statusRes = await fetchBrowserServerRaw("extension_status", sid, {});
+    const extConnected = (statusRes as any)?.data?.connected === true;
 
-    // Search all platforms in parallel
-    const platformResults = await Promise.allSettled(
-      platforms.map(p => ScraperService.scrape(p.url, searchQuery).then(r => ({ ...r, platformName: p.name })))
-    );
+    if (!extConnected) {
+      return `⚠️ **Chrome extension not connected.** Please make sure the JOB OS extension is active in your browser and you're logged into the job sites you want to search. Once connected, try your search again.`;
+    }
 
-    // Aggregate all jobs from successful platforms
+    console.log(`[browser_extract_jobs] Extension-only search across ${targetPlatforms.length} platforms for: ${searchQuery}`);
+
+    // Run extension across all target platforms in parallel
     type RawJob = { title?: string; company?: string; location?: string; url?: string; salary?: string; description?: string; skills?: string | string[]; date_posted?: string; job_type?: string; score?: number; _platform?: string };
     const allJobs: RawJob[] = [];
     const successfulPlatforms: string[] = [];
-    const failedPlatforms: { name: string; error: string; dom_sample?: string }[] = [];
+    const failedPlatforms: { name: string; error: string }[] = [];
 
-    for (let i = 0; i < platformResults.length; i++) {
-      const pr = platformResults[i];
-      const name = platforms[i].name;
-      if (pr.status === "fulfilled" && pr.value.success && pr.value.jobs && pr.value.jobs.length > 0) {
-        successfulPlatforms.push(name);
-        for (const j of pr.value.jobs) {
-          allJobs.push({ ...j, _platform: name });
+    const extResults = await Promise.allSettled(
+      targetPlatforms.map(async (platform) => {
+        const res = await fetchBrowserServerRaw("extension_extract_jobs", sid, { searchUrl: platform.url, query, location });
+        const jobs = (res as any)?.data?.jobs;
+        if (!Array.isArray(jobs) || jobs.length === 0) throw new Error((res as any)?.data?.error || "no results");
+        return { platform: platform.name, jobs: jobs.map((j: any) => ({ ...j, _platform: platform.name })) };
+      })
+    );
+
+    for (const result of extResults) {
+      if (result.status === "fulfilled") {
+        successfulPlatforms.push(`${result.value.platform}(ext)`);
+        for (const j of result.value.jobs) {
+          allJobs.push({
+            title: j.title, company: j.company, location: j.location,
+            url: j.link || j.url, salary: j.salary || undefined,
+            description: j.description || "", skills: j.requirements || "",
+            _platform: j._platform,
+          });
         }
       } else {
-        const err = pr.status === "rejected" ? String(pr.reason) : (pr.value?.error ?? "no results");
-        const domSample = pr.status === "fulfilled" ? pr.value?.dom_sample : undefined;
-        failedPlatforms.push({ name, error: err, dom_sample: domSample });
+        const name = targetPlatforms[extResults.indexOf(result)]?.name ?? "Unknown";
+        failedPlatforms.push({ name, error: String(result.reason) });
       }
     }
 
     if (allJobs.length === 0) {
-      const domHints = failedPlatforms
-        .filter(f => f.dom_sample)
-        .map(f => `\n**${f.name}** DOM sample:\n\`\`\`html\n${f.dom_sample?.slice(0, 1500)}\n\`\`\``)
-        .join("\n");
-      return `SCRAPER_ERROR: All platforms returned no results for "${query}" in "${location}".${domHints ? `\n\nDOM samples from failed platforms (call update_scraper_selectors to fix):${domHints}` : " Try a broader search term or different location."}`;
+      return `⚠️ No jobs found via the extension for **"${query}"** in **"${location}"**.\n\nTips:\n- Make sure you're logged into LinkedIn/Indeed in the browser\n- Try a broader search term\n- Check the extension is active on job site pages`;
     }
 
     // Filter out CAPTCHA/verification pages that leaked through as job cards
@@ -994,10 +993,21 @@ async function executeToolCall(toolCall: ToolCall, sid: string, userId?: string)
       return t.length > 3 && !BLOCKED_TITLES.includes(t) && !t.includes("verification") && !t.includes("captcha");
     });
 
-    // Deduplicate by title+company key
+    // Sort by data richness BEFORE dedup — so the most complete record wins.
+    // Priority: has real company > has description > has salary > relevance score.
+    const norm = (s?: string) => (s || "").toLowerCase().trim();
+    const isUnknown = (s?: string) => !s || norm(s) === "unknown company" || norm(s).length === 0;
+    cleaned.sort((a, b) => {
+      const aScore = (!isUnknown(a.company) ? 4 : 0) + (a.description ? 2 : 0) + (a.salary ? 1 : 0);
+      const bScore = (!isUnknown(b.company) ? 4 : 0) + (b.description ? 2 : 0) + (b.salary ? 1 : 0);
+      if (bScore !== aScore) return bScore - aScore;
+      return (b.score ?? 0) - (a.score ?? 0);
+    });
+
+    // Deduplicate by title — keep most data-rich record per job title.
     const seen = new Set<string>();
     const unique = cleaned.filter(j => {
-      const key = `${(j.title || "").toLowerCase().trim()}|${(j.company || "").toLowerCase().trim()}`;
+      const key = norm(j.title);
       if (seen.has(key)) return false;
       seen.add(key);
       return true;
@@ -1037,13 +1047,10 @@ async function executeToolCall(toolCall: ToolCall, sid: string, userId?: string)
     ).join("\n");
 
     const failedNote = failedPlatforms.length > 0
-      ? `\n\n**Failed platforms** (DOM may have changed — call \`update_scraper_selectors\` to fix):\n${failedPlatforms.map(f => {
-          const hint = f.dom_sample ? `\n\`\`\`html\n${f.dom_sample.slice(0, 1000)}\n\`\`\`` : "";
-          return `- **${f.name}**: ${f.error}${hint}`;
-        }).join("\n")}`
+      ? `\n\n*Some platforms returned no results: ${failedPlatforms.map(f => f.name).join(", ")} — user may not be logged in on those sites.*`
       : "";
 
-    return `### Job Discovery: ${query} in ${location}\n\nSearched ${successfulPlatforms.join(", ")} — found ${unique.length} unique jobs total. Showing top ${topJobs.length} by relevance score (pool cap: ${maxJobs}, preview cap: ${outputPerPrompt}).\n\n**SCRAPER MATCH SCORES — EXACT VALUES, USE THESE ONLY, DO NOT INVENT OR CHANGE ANY NUMBER:**\n${scoreList}\n\nThe preview box above shows exactly these ${topJobs.length} jobs with their exact scores. Do NOT mention any other counts or scores.\n\n${previewResult}${failedNote}`;
+    return `### Job Discovery: ${query} in ${location}\n\nSearched via Chrome extension on ${successfulPlatforms.join(", ")} — found ${unique.length} unique jobs. Showing top ${topJobs.length} by relevance score.\n\n**MATCH SCORES — USE THESE EXACT VALUES ONLY:**\n${scoreList}\n\nThe preview box shows exactly these ${topJobs.length} jobs with their scores. Do NOT mention any other counts or scores.\n\n${previewResult}${failedNote}`;
   }
   throw new Error(`Unsupported tool: ${toolCall.tool}`);
 }
@@ -1278,10 +1285,26 @@ export class ConversationOrchestrator {
       toolContext = (toolContext + "\n" + turnRes).trim();
 
       // Break immediately after destructive/terminal actions — no follow-up loop needed
-      const terminalTools = ["clear_pipeline", "delete_job", "import_pending_jobs"];
+      const terminalTools = ["clear_pipeline", "delete_job", "import_pending_jobs", "get_pipeline", "delete_all_saved_jobs"];
       const ranTerminal = toolCalls.some(t => terminalTools.includes(t.tool));
       if (ranTerminal) {
-        aiResponseText = aiResponse.text || turnRes.trim();
+        // Prefer LLM text reply; fall back to a friendly summary built from tool results
+        if (aiResponse.text?.trim()) {
+          aiResponseText = aiResponse.text.trim();
+        } else {
+          // Build a clean conversational reply from the tool results
+          const friendlyMessages: Record<string, string> = {
+            clear_pipeline: "✅ Done! Your job pipeline has been completely cleared — all staged jobs have been removed.",
+            delete_job: "✅ Done! That job has been removed from your pipeline.",
+            import_pending_jobs: "✅ Done! Your jobs have been imported into the pipeline.",
+            get_pipeline: turnRes.trim(),
+            delete_all_saved_jobs: "✅ Done! All your saved jobs have been permanently deleted from the database.",
+          };
+          const terminalCall = toolCalls.find(t => terminalTools.includes(t.tool));
+          aiResponseText = terminalCall
+            ? (friendlyMessages[terminalCall.tool] ?? turnRes.trim())
+            : turnRes.trim();
+        }
         break;
       }
     }

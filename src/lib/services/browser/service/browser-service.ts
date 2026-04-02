@@ -41,6 +41,16 @@ function sanitizeFileName(fileName: string): string {
   return fileName.replace(/[^a-zA-Z0-9._-]/g, "_");
 }
 
+function deriveTabKey(url: string): string {
+  const hostname = new URL(url).hostname;
+  // Remove www. prefix
+  const noWww = hostname.replace(/^www\./, "");
+  // Remove 2-letter country code subdomains like "uk.", "us.", "de." etc
+  const noCC = noWww.replace(/^[a-z]{2}\./, "");
+  // Take the first label (before first dot)
+  return noCC.split(".")[0];
+}
+
 function isRetriable(error: BrowserServiceError): boolean {
   if (error.retriable) {
     return true;
@@ -959,38 +969,75 @@ Return ONLY a valid JSON array of job objects — no markdown, no explanation.`;
     searchUrl: string,
     searchTerm?: string,
     location?: string,
+    tabKey?: string,
   ): Promise<any[]> {
+    // Derive a stable tab key from the domain — each platform gets its own Chrome tab
+    const key = tabKey ?? deriveTabKey(searchUrl);
+    const jitter = () => 400 + Math.round(Math.random() * 600);
+
     // Phase 1 — Navigate to search results, DOM scrape for job cards
     extensionBridge.resetCancel();
-    console.log("[ExtensionExtract] Phase 1: navigating to search URL");
-    await extensionBridge.navigate(searchUrl);
+    console.log(`[ExtensionExtract:${key}] Phase 1: navigating to search URL`);
+    await extensionBridge.navigate(searchUrl, key);
 
-    // Scroll 3 times to load lazy-loaded cards
-    for (let i = 0; i < 3; i++) {
+    // Human-like: random settle after page load
+    await new Promise((r) => setTimeout(r, jitter()));
+
+    // Scroll to load lazy-loaded cards (human-like random scroll amounts + intervals)
+    for (let i = 0; i < 4; i++) {
       if (extensionBridge.isCancelled()) return [];
-      await extensionBridge.scroll(600);
-      await new Promise((r) => setTimeout(r, 800));
+      await extensionBridge.scroll(300 + Math.round(Math.random() * 500), key);
+      await new Promise((r) => setTimeout(r, jitter()));
     }
 
-    const cards = await extensionBridge.getJobCards();
-    console.log(`[ExtensionExtract] Phase 1: found ${cards.length} job cards`);
+    const cards = await extensionBridge.getJobCards(key);
+    console.log(`[ExtensionExtract:${key}] Phase 1: found ${cards.length} job cards`);
 
     if (cards.length === 0) return [];
 
-    // Phase 1 results — return immediately so Atlas can show them to the user fast
-    // Phase 2 OCR is triggered separately via browser_extension_enrich_job tool
-    const limit = Math.min(cards.length, 10);
-    return cards.slice(0, limit).map((card) => ({
-      id: Buffer.from(`${card.title}-${card.url}`).toString("base64"),
-      title: card.title,
-      company: "",
-      location: card.location,
-      link: card.url,
-      url: card.url,
-      source: "Extension+DOM",
-      description: "",
-      salary: null,
-    }));
+    // Phase 2 — Visit each job detail page and scrape description, salary, company
+    const limit = Math.min(cards.length, 15);
+    const topCards = cards.slice(0, limit);
+    const enriched: any[] = [];
+
+    for (const card of topCards) {
+      if (extensionBridge.isCancelled()) break;
+      try {
+        console.log(`[ExtensionExtract:${key}] Phase 2: fetching details for "${card.title}" — ${card.url}`);
+        await extensionBridge.navigate(card.url, key);
+        await new Promise((r) => setTimeout(r, 800 + Math.round(Math.random() * 800))); // human-like settle
+        const detail = await extensionBridge.getJobDetail(key);
+        enriched.push({
+          id: Buffer.from(`${card.title}-${card.url}`).toString("base64"),
+          title: card.title || "Untitled Role",
+          company: detail.company || card.company || "",
+          location: card.location || "",
+          link: card.url,
+          url: card.url,
+          salary: detail.salary || null,
+          jobType: detail.jobType || null,
+          description: detail.description || "",
+          source: "Extension+DOM",
+        });
+      } catch (err) {
+        console.warn(`[ExtensionExtract] Phase 2 failed for ${card.url}:`, err);
+        // Still include card with basic data if enrichment fails
+        enriched.push({
+          id: Buffer.from(`${card.title}-${card.url}`).toString("base64"),
+          title: card.title || "Untitled Role",
+          company: card.company || "",
+          location: card.location || "",
+          link: card.url,
+          url: card.url,
+          salary: null,
+          description: "",
+          source: "Extension+DOM",
+        });
+      }
+    }
+
+    console.log(`[ExtensionExtract] Phase 2 complete: enriched ${enriched.length} jobs`);
+    return enriched;
   }
 
   private async internalEnrichJobs(

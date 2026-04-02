@@ -103,9 +103,9 @@ export default function OutreachPage() {
       <div className="flex-1 overflow-y-auto min-h-0 space-y-6 pb-6 custom-scrollbar">
         {toast ? (
           <div className={`rounded-xl border px-4 py-3 text-sm flex justify-between items-center ${
-            toast.type === "error" ? "border-rose-200 bg-rose-50 text-rose-700" : 
-            toast.type === "success" ? "border-emerald-200 bg-emerald-50 text-emerald-700" :
-            "border-blue-200 bg-blue-50 text-blue-700"
+            toast.type === "error" ? "border-rose-200 bg-rose-50 dark:bg-rose-900/20 dark:border-rose-500/30 text-rose-700 dark:text-rose-300" :
+            toast.type === "success" ? "border-emerald-200 bg-emerald-50 dark:bg-emerald-900/20 dark:border-emerald-500/30 text-emerald-700 dark:text-emerald-300" :
+            "border-blue-200 bg-blue-50 dark:bg-blue-900/20 dark:border-blue-500/30 text-blue-700 dark:text-blue-300"
           }`}>
             <span>{toast.message}</span>
             <button onClick={() => setToast(null)} className="opacity-60 hover:opacity-100 font-bold">×</button>
@@ -131,12 +131,12 @@ export default function OutreachPage() {
         </section>
 
         <section className="panel overflow-hidden p-0">
-          <div className="border-b border-white/60 bg-white/70 px-4 py-3">
+          <div className="border-b border-white/60 dark:border-white/10 bg-white/70 dark:bg-white/5 px-4 py-3">
             <h3 className="font-bold">Campaign Queue</h3>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead className="bg-white/65 text-left text-muted">
+              <thead className="bg-white/65 dark:bg-white/5 text-left text-muted">
                 <tr>
                   <th className="px-4 py-2 font-semibold">Recruiter</th>
                   <th className="px-4 py-2 font-semibold">Channel</th>
@@ -149,7 +149,7 @@ export default function OutreachPage() {
                 {campaignRows.map((row) => (
                   <tr
                     key={`${row.recruiter}-${row.channel}`}
-                    className="border-t border-white/60 cursor-pointer hover:bg-cyan-50/40 transition-colors"
+                    className="border-t border-white/60 dark:border-white/10 cursor-pointer hover:bg-cyan-50/40 dark:hover:bg-cyan-500/10 transition-colors"
                     onClick={() => setSelectedRecruiter(row)}
                   >
                     <td className="px-4 py-3 font-semibold">{row.recruiter}</td>
@@ -173,7 +173,7 @@ export default function OutreachPage() {
       {selectedRecruiter && (
         <div className="fixed inset-0 z-50 flex justify-end bg-slate-950/40 backdrop-blur-sm" onClick={() => setSelectedRecruiter(null)}>
           <div
-            className="h-full w-full overflow-y-auto bg-white/95 p-4 shadow-2xl backdrop-blur-xl border-l border-white/60 sm:max-w-md sm:p-6"
+            className="h-full w-full overflow-y-auto bg-white/95 dark:bg-slate-900/98 p-4 shadow-2xl backdrop-blur-xl border-l border-white/60 dark:border-white/10 sm:max-w-md sm:p-6"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-start justify-between gap-4 mb-6">
@@ -185,19 +185,19 @@ export default function OutreachPage() {
             </div>
 
             <div className="space-y-4 text-sm">
-              <div className="rounded-xl border border-white/60 bg-white/80 p-4">
+              <div className="rounded-xl border border-white/60 dark:border-white/10 bg-white/80 dark:bg-white/5 p-4">
                 <p className="font-semibold mb-1">Status</p>
                 <span className="badge">{selectedRecruiter.status}</span>
               </div>
-              <div className="rounded-xl border border-white/60 bg-white/80 p-4">
+              <div className="rounded-xl border border-white/60 dark:border-white/10 bg-white/80 dark:bg-white/5 p-4">
                 <p className="font-semibold mb-1">ETA</p>
                 <p className="text-muted">{selectedRecruiter.eta}</p>
               </div>
-              <div className="rounded-xl border border-white/60 bg-white/80 p-4">
+              <div className="rounded-xl border border-white/60 dark:border-white/10 bg-white/80 dark:bg-white/5 p-4">
                 <p className="font-semibold mb-1">Message History</p>
                 <p className="text-muted italic">No messages sent yet.</p>
               </div>
-              <div className="rounded-xl border border-white/60 bg-white/80 p-4">
+              <div className="rounded-xl border border-white/60 dark:border-white/10 bg-white/80 dark:bg-white/5 p-4">
                 <p className="font-semibold mb-1">Notes</p>
                 <textarea
                   placeholder="Add notes about this recruiter..."
@@ -212,8 +212,8 @@ export default function OutreachPage() {
 
       {showDrafts ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-3 backdrop-blur-sm sm:p-6">
-          <div className="max-h-[90vh] w-full max-w-5xl overflow-y-auto rounded-2xl border border-white/60 bg-white/95 p-4 shadow-2xl sm:rounded-3xl sm:p-6">
-            <div className="flex items-start justify-between gap-4 sticky top-0 bg-white/95 pb-4 backdrop-blur-sm z-10">
+          <div className="max-h-[90vh] w-full max-w-5xl overflow-y-auto rounded-2xl border border-white/60 dark:border-white/10 bg-white/95 dark:bg-slate-900/98 p-4 shadow-2xl sm:rounded-3xl sm:p-6">
+            <div className="flex items-start justify-between gap-4 sticky top-0 bg-white/95 dark:bg-slate-900/98 pb-4 backdrop-blur-sm z-10">
               <div>
                 <h3 className="text-xl font-extrabold">Generated Draft Batch</h3>
                 <p className="mt-1 text-sm text-muted">Review, edit, and approve drafts before queueing.</p>
@@ -225,7 +225,7 @@ export default function OutreachPage() {
 
             <div className="mt-5 space-y-4">
               {drafts.map((draft, index) => (
-                <article key={draft.recruiterId} className="rounded-2xl border border-white/60 bg-white/80 p-4 transition-all hover:border-cyan-300 hover:shadow-lg">
+                <article key={draft.recruiterId} className="rounded-2xl border border-white/60 dark:border-white/10 bg-white/80 dark:bg-white/5 p-4 transition-all hover:border-cyan-300 dark:hover:border-cyan-500/50 hover:shadow-lg">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
                       <h4 className="font-bold">{draft.recruiterName}</h4>

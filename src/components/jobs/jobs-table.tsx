@@ -34,6 +34,7 @@ export function JobsTable() {
   const [globalFilter, setGlobalFilter] = React.useState(qParam);
   const [sorting, setSorting] = React.useState<SortingState>([{ id: "score", desc: true }]);
   const [selectedJob, setSelectedJob] = React.useState<JobRow | null>(null);
+  const [isDeduplicating, setIsDeduplicating] = React.useState(false);
 
   /* Hide the hidden company column (Bug 13) */
   const [columnVisibility] = React.useState<VisibilityState>({ company: false });
@@ -90,12 +91,12 @@ export function JobsTable() {
         header: "Role",
         cell: (info) => (
           <div>
-            <p className="font-semibold text-slate-800">{info.getValue()}</p>
+            <p className="font-semibold text-slate-800 dark:text-slate-100">{info.getValue()}</p>
             <p className="text-xs text-muted mb-2 font-medium">{info.row.original.company}</p>
             {info.row.original.skills && info.row.original.skills.length > 0 && (
               <div className="flex flex-wrap gap-1 mt-1">
                 {info.row.original.skills.slice(0, 3).map((skill, idx) => (
-                  <span key={idx} className="bg-slate-100/50 text-[10px] px-1.5 py-0.5 rounded border border-slate-200 text-slate-600 font-medium">
+                  <span key={idx} className="bg-slate-100/50 dark:bg-white/10 text-[10px] px-1.5 py-0.5 rounded border border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-300 font-medium">
                     {skill}
                   </span>
                 ))}
@@ -187,6 +188,26 @@ export function JobsTable() {
   const start = totalRows === 0 ? 0 : pagination.pageIndex * pagination.pageSize + 1;
   const end = totalRows === 0 ? 0 : Math.min(totalRows, start + table.getRowModel().rows.length - 1);
 
+  async function cleanDuplicates() {
+    setIsDeduplicating(true);
+    setSyncMessage("");
+    try {
+      const res = await fetch("/api/jobs/deduplicate", { method: "POST" });
+      const data = (await res.json()) as { removed?: number; message?: string; error?: string };
+      if (!res.ok) {
+        setSyncMessage(data.error ?? "Deduplication failed.");
+        return;
+      }
+      setSyncMessage(data.message ?? `Removed ${data.removed ?? 0} duplicates.`);
+      cachedJobs = null; // bust cache
+      await refreshJobs();
+    } catch {
+      setSyncMessage("Unable to run deduplication right now.");
+    } finally {
+      setIsDeduplicating(false);
+    }
+  }
+
   async function runLiveSearch() {
     setIsSearching(true);
     setSyncMessage("");
@@ -226,6 +247,29 @@ export function JobsTable() {
           <button type="button" className="btn-primary w-full sm:w-auto" onClick={() => void runLiveSearch()} disabled={isSearching}>
             {isSearching ? "Searching..." : "Search & Compile"}
           </button>
+          <button
+            type="button"
+            className="btn-secondary w-full sm:w-auto flex items-center gap-1.5 disabled:opacity-50"
+            onClick={() => void cleanDuplicates()}
+            disabled={isDeduplicating}
+            title="Remove duplicate jobs (keeps oldest entry)"
+          >
+            {isDeduplicating ? (
+              <>
+                <svg className="h-3.5 w-3.5 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+                </svg>
+                Cleaning…
+              </>
+            ) : (
+              <>
+                <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" />
+                </svg>
+                Clean Dupes
+              </>
+            )}
+          </button>
           <input
             value={globalFilter}
             onChange={(event) => setGlobalFilter(event.target.value)}
@@ -238,9 +282,9 @@ export function JobsTable() {
       {syncMessage ? <p className="mb-3 text-sm text-muted">{syncMessage}</p> : null}
       {isLoading ? <p className="mb-3 text-sm text-muted">Loading jobs...</p> : null}
 
-      <div className="overflow-x-auto rounded-xl border border-white/60 bg-white/70 -mx-1 sm:mx-0">
+      <div className="overflow-x-auto rounded-xl border border-white/60 dark:border-white/10 bg-white/70 dark:bg-white/5 -mx-1 sm:mx-0">
         <table className="w-full min-w-[800px] text-sm">
-          <thead className="bg-white/80 text-left">
+          <thead className="bg-white/80 dark:bg-white/5 text-left">
             {table.getHeaderGroups().map((headerGroup) => (
               <tr key={headerGroup.id}>
                 {headerGroup.headers.map((header) => (
@@ -254,9 +298,9 @@ export function JobsTable() {
                       >
                         {flexRender(header.column.columnDef.header, header.getContext())}
                         {header.column.getIsSorted() === "asc" ? (
-                          <span className="font-extrabold text-slate-700">↑</span>
+                          <span className="font-extrabold text-slate-700 dark:text-slate-300">↑</span>
                         ) : header.column.getIsSorted() === "desc" ? (
-                          <span className="font-extrabold text-slate-700">↓</span>
+                          <span className="font-extrabold text-slate-700 dark:text-slate-300">↓</span>
                         ) : null}
                       </button>
                     )}

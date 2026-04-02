@@ -61,6 +61,42 @@ Atlas streams its response in real-time. Simple messages respond in ~3 seconds. 
 
 ---
 
+## Parallel Job Search (Chrome Extension)
+
+When the Chrome extension is connected, Atlas searches **all 6 platforms simultaneously**:
+
+| Platform | Notes |
+|----------|-------|
+| LinkedIn | Requires being logged in to LinkedIn in Chrome |
+| Indeed | Includes country-code variants (e.g., uk.indeed.com) |
+| Reed | UK-focused, strong for permanent roles |
+| TotalJobs | UK-focused, broad coverage |
+| Adzuna | Aggregator — pulls from many sources |
+| CV-Library | UK specialist boards |
+
+All 6 are opened in parallel named tabs managed by the extension, then results are merged and scored together.
+
+### Cookie Banners Are Auto-Accepted
+
+The extension automatically dismisses cookie consent overlays on all supported platforms. You do not need to interact with them manually.
+
+### If Source Labels Show the Wrong Platform
+
+If all jobs in the preview box show "LinkedIn" as the source regardless of which site they came from, the extension is running an older version of `background.js`. Fix:
+
+1. Open `edge://extensions/` (or `chrome://extensions/`)
+2. Find the **Atlas** extension card
+3. Click the **circular refresh icon** to reload it
+4. Reconnect: the extension auto-reconnects to `ws://localhost:3002` within a few seconds (check the service worker DevTools console for `[Atlas] Connected`)
+
+### If a Platform Returns No Results
+
+- Ensure you are logged in to that platform in Chrome before starting the search
+- Some platforms (e.g., LinkedIn) rate-limit searches — wait 30–60 seconds and retry
+- The extension uses human-like typing delays and cookie-banner dismissal to avoid blocks, but heavy usage may still trigger temporary rate limits
+
+---
+
 ## The Job Discovery Preview Box
 
 When Atlas finds jobs, a preview panel appears in the chat:

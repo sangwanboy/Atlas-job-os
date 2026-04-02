@@ -29,8 +29,11 @@ export function composeAgentSystemPrompt(agent: RegisteredAgent, layers: Hydrate
     if (nameMatch) userName = nameMatch[1].trim();
   }
 
+  const todayStr = new Date().toLocaleDateString("en-GB", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
+
   const promptParts: string[] = [
     `CRITICAL IDENTITY: You are ${agent.identityName}, talking to ${userName}.`,
+    `CURRENT DATE: Today is ${todayStr}. Always use this exact date when the user asks what day or date it is. Do NOT infer the date from memory logs or context timestamps.`,
     `Personalization Mandate: Use the user's name (${userName}) naturally in your greetings and conversation. Avoid redundant or repetitive usage of their name in a single turn. If the user asks for their name specifically, answer simply without forcing an additional greeting with their name if it creates staleness.`,
     "",
     "This system instruction defines your configuration across three layers: SOUL, IDENTITY, and AGENTS (Operating Rules).",
@@ -85,6 +88,7 @@ PIPELINE:
 - update_job: Edit a job's fields. Params: { id, title?, company?, location?, salary?, url?, status?, priority?, description?, skills? }
 - delete_job: Remove a specific job. Params: { id }
 - clear_pipeline: Wipe all staged jobs. Params: {}
+- delete_all_saved_jobs: Permanently delete ALL saved/imported jobs from the database. Use ONLY when the user explicitly asks to delete/wipe all saved jobs. Params: {}
 
 GMAIL:
 - gmail_sync: Sync inbox for job-related emails. Params: { keywords?: string[], days?: number }
@@ -102,20 +106,16 @@ BROWSER:
 - browser_scroll: Scroll the page. Params: { direction?, amount?, sessionId? }
 - browser_screenshot: Take a screenshot. Params: { sessionId?, label? }
 - browser_extract_text: Extract page text. Params: { selector?, sessionId? }
-- browser_extract_jobs: Bulk job search across job boards. Params: { query, location, limit? }
+- browser_extract_jobs: Search jobs via Chrome extension across job boards. Params: { query, location, limit? }
 - browser_extension_status: Check if Chrome extension is connected. Params: {}
-- browser_extension_enrich_job: Get full job details via extension OCR. Params: { url }
-- update_scraper_selectors: Fix scraper selectors when a site's DOM changes. Params: { site, cardSelectors: string[] }
+- browser_extension_enrich_job: Get full job details via extension. Params: { url }
 
-BROWSER NAVIGATION STRATEGY:
-You have FULL direct browser control. For job searches, you can either:
-A) Use browser_extract_jobs for fast bulk extraction (best for LinkedIn structured search)
-B) Use browser_navigate + browser_click + browser_type + browser_extract_text for step-by-step manual navigation (use this when sites require interaction, login, or custom navigation)
-The browser window is visible — the user watches every step you take.
+JOB SEARCH STRATEGY:
+All job gathering happens exclusively through the Chrome extension — NO Playwright, NO direct scraping.
+Use browser_extract_jobs to search. If the extension is not connected, tell the user to activate the JOB OS extension in their browser.
 
-STEALTH & FILTER PROTOCOLS (MANDATORY):
-1. CAPTCHA/CONSENT: If a page title contains "robot", "CAPTCHA", "Consent", or looks like a block, RE-NAVIGATE using 'browser_navigate' with { "useScrapling": true }.
-2. LINKEDIN FILTERS: When searching for jobs, ALWAYS map user preferences (salary, job type, remote, experience) to the 'linkedinFilters' parameter in 'browser_extract_jobs'.
+SEARCH FILTER PROTOCOLS:
+1. LINKEDIN FILTERS: When searching for jobs, map user preferences (salary, job type, remote, experience) to the 'linkedinFilters' parameter in 'browser_extract_jobs'.
    - 'timePosted': Use 'past-24h' or 'past-week'.
    - 'jobType': List matching ['full-time', 'part-time', 'contract', 'internship', 'temporary'].
    - 'remote': List of ['on-site', 'remote', 'hybrid'].

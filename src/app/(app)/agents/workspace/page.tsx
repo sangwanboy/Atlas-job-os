@@ -4,7 +4,7 @@ export default function AgentWorkspacePage() {
   return (
     <div className="flex h-full max-h-full min-h-0 flex-col overflow-hidden p-2 md:p-3 lg:p-4">
       <section className="flex-none pb-3">
-        <h2 className="text-2xl font-extrabold tracking-tight text-slate-800">Agent Workspace</h2>
+        <h2 className="text-2xl font-extrabold tracking-tight text-slate-800 dark:text-slate-100">Agent Workspace</h2>
         <p className="mt-1 text-xs text-muted">
           Stateful intelligence OS with core identity persistence.
         </p>

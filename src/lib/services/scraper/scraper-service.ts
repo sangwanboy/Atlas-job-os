@@ -1,5 +1,6 @@
 import { spawn } from "child_process";
 import path from "path";
+import fs from "fs";
 
 export type ScrapeResult = {
   success: boolean;
@@ -31,11 +32,47 @@ export type JobResult = {
 const SCRAPE_TIMEOUT_MS = 360_000;
 
 export class ScraperService {
-  private static venvPath = path.join(process.cwd(), ".venv-scraper");
-  private static pythonExe = process.platform === "win32"
-    ? path.join(this.venvPath, "Scripts", "python.exe")
-    : path.join(this.venvPath, "bin", "python");
-  private static workerPath = path.join(process.cwd(), "src/lib/services/scraper/worker.py");
+  /** Resolve Python executable — checks cwd, then walks up to find .venv-scraper in a parent directory */
+  private static resolvePythonExe(): string {
+    const isWin = process.platform === "win32";
+    const exeRelative = isWin ? path.join("Scripts", "python.exe") : path.join("bin", "python");
+
+    // Candidate roots: cwd, then each parent up to filesystem root
+    const candidates: string[] = [];
+    let dir = process.cwd();
+    for (let i = 0; i < 6; i++) {
+      candidates.push(path.join(dir, ".venv-scraper"));
+      const parent = path.dirname(dir);
+      if (parent === dir) break;
+      dir = parent;
+    }
+
+    for (const venv of candidates) {
+      const exe = path.join(venv, exeRelative);
+      if (fs.existsSync(exe)) {
+        console.log(`[ScraperService] Using Python at: ${exe}`);
+        return exe;
+      }
+    }
+
+    // Final fallback: system python
+    console.warn("[ScraperService] .venv-scraper not found in any parent directory — falling back to system python");
+    return isWin ? "python" : "python3";
+  }
+
+  private static get pythonExe(): string { return this.resolvePythonExe(); }
+  private static get workerPath(): string {
+    const rel = path.join("src", "lib", "services", "scraper", "worker.py");
+    let dir = process.cwd();
+    for (let i = 0; i < 6; i++) {
+      const p = path.join(dir, rel);
+      if (fs.existsSync(p)) return p;
+      const parent = path.dirname(dir);
+      if (parent === dir) break;
+      dir = parent;
+    }
+    return path.join(process.cwd(), rel); // fallback
+  }
 
   /** Scrape multiple URLs with optional query for relevance filtering. */
   static async scrapeMultiple(urls: string[], query = ""): Promise<ScrapeResult> {

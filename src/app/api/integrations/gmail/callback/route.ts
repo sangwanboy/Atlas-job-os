@@ -35,10 +35,8 @@ export async function GET(req: Request) {
 
     // Attempt to persist the tokens in the database
     try {
-      // @ts-expect-error
       await prisma.integrationAccount.upsert({
         where: {
-          // @ts-expect-error
           userId_provider: {
             userId,
             provider: "google",
@@ -47,22 +45,18 @@ export async function GET(req: Request) {
         create: {
           userId,
           provider: "google",
-          // @ts-expect-error
           email: emailAddress,
           accessToken: tokens.access_token,
           refreshToken: tokens.refresh_token || null,
-          // @ts-expect-error
           expiresAt: tokens.expiry_date ? new Date(tokens.expiry_date) : null,
           scopes: tokens.scope,
           status: "CONNECTED",
           syncStatus: "IDLE",
         },
         update: {
-          // @ts-expect-error
           email: emailAddress,
           accessToken: tokens.access_token,
           ...(tokens.refresh_token ? { refreshToken: tokens.refresh_token } : {}),
-          // @ts-expect-error
           expiresAt: tokens.expiry_date ? new Date(tokens.expiry_date) : null,
           scopes: tokens.scope,
           status: "CONNECTED",

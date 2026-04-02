@@ -156,13 +156,24 @@ npm run browser-server
 
 Load the extension for bot-free job searching using your real logged-in Chrome session:
 
-1. Open Chrome → `chrome://extensions`
+1. Open Chrome → `chrome://extensions` (or `edge://extensions/` for Edge)
 2. Enable **Developer mode** (top-right toggle)
 3. Click **Load unpacked** → select `D:\Projects\Atlas-job-os\chrome-extension\`
 4. Start the browser server — the extension auto-connects to `ws://localhost:3002`
 5. Verify: click **service worker** on the extension card → DevTools console shows `[Atlas] Connected to bridge at ws://localhost:3002`
 
-When the extension is connected, Atlas uses it for LinkedIn and Indeed searches (your real logged-in session — no bot detection, no auth walls). Playwright remains as fallback when the extension is not connected.
+> **After any changes to `background.js`**, you must reload the extension at `chrome://extensions` (or `edge://extensions/`) — click the circular refresh icon on the Atlas extension card. The service worker does not hot-reload.
+
+When the extension is connected, Atlas searches all 6 platforms **simultaneously** (LinkedIn, Indeed, Reed, TotalJobs, Adzuna, CV-Library) using your real logged-in Chrome session — no bot detection, no auth walls. Playwright remains as fallback when the extension is not connected.
+
+#### Browser Server Ports
+
+| Port | Protocol | Purpose |
+|------|----------|---------|
+| 3001 | HTTP | Browser server REST API (Playwright tools, scraper) |
+| 3002 | WebSocket | Chrome Extension bridge (real-browser job scraping) |
+
+Both ports are started by a single `npm run browser-server` command.
 
 ---
 

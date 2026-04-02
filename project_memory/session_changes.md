@@ -4,6 +4,56 @@
 
 ---
 
+## Session: April 2, 2026
+
+### 1. Fixed Dashboard 500 Error — Stale .next Cache
+- Deleted stale `.next` cache directory (webpack module registry was missing `next-themes`).
+- **Why:** Next.js failed to start with a 500 error because the webpack build cache referenced a module that no longer existed after package changes.
+
+---
+
+### 2. `deriveTabKey()` — Country-Code Subdomain Handling
+**File:** `src/lib/services/browser/extension-bridge.ts`
+- `deriveTabKey()` now strips country-code subdomains before deriving the platform key.
+- Example: `uk.indeed.com` → `"indeed"` (previously would have returned `"uk.indeed"` or failed to match).
+- **Why:** Platform tab keying broke for country-code variants of job sites, causing the extension to open duplicate tabs instead of reusing the named Atlas tab.
+
+---
+
+### 3. Multi-Platform Parallel Job Search via Chrome Extension
+**Files:** `chrome-extension/background.js`, `src/lib/services/browser/extension-bridge.ts`
+- All 6 platforms (LinkedIn, Indeed, Reed, TotalJobs, Adzuna, CV-Library) now searched simultaneously via the Chrome extension.
+- Previously only LinkedIn and Indeed used the extension path; all others fell back to Playwright.
+- **Why:** Maximises speed (parallel vs. serial) and avoids bot detection on all platforms using the user's real logged-in Chrome session.
+
+---
+
+### 4. Improved Job Card Selectors — Href-Pattern Fallbacks
+**File:** `chrome-extension/background.js`
+- Added href-pattern fallback selectors for TotalJobs, Adzuna, CV-Library, and Reed.
+- Fallbacks match job card links by URL pattern (e.g., `/job/`, `/jobs/`, `/apply/`) rather than relying on hashed React class names.
+- **Why:** These platforms use dynamically generated CSS class names that change on each build. Selector-based scraping broke silently after platform deploys.
+
+---
+
+### 5. Source Labels — Correct Per-Platform Names
+**File:** `chrome-extension/background.js`
+- Job cards now carry the correct `source` field per platform (e.g., `"Reed"`, `"TotalJobs"`, `"Adzuna"`, `"CV-Library"`).
+- Previously all multi-tab results were labelled `"LinkedIn"` regardless of actual origin.
+- **Why:** Users saw all jobs listed as "LinkedIn" in the preview box, making source tracking useless.
+
+---
+
+### 6. Chrome Extension Multi-Tab Support
+**File:** `chrome-extension/background.js`
+- Added `atlasTabs` Map to track per-platform named tabs by platform key.
+- Added `ensureNamedTab(platformKey, url)` helper — reuses existing Atlas tab for that platform or opens a new one.
+- Added `acceptCookieBanners()` — auto-dismisses cookie consent overlays on all supported platforms.
+- Added human-like typing delays to search input simulation (random 80–160 ms per character).
+- **Why:** Extension previously only managed a single `atlasTabId`, so parallel multi-platform search opened uncontrolled tab floods and lost track of which tab belonged to which platform.
+
+---
+
 ## Session: April 1, 2026
 
 ### 1. Browser Server — Fixed `npm run browser-server` env loading

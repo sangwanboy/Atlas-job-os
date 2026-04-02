@@ -32,10 +32,10 @@ type CvFile = {
 };
 
 const CV_TAGS: { value: CvTag; label: string; color: string }[] = [
-  { value: "professional", label: "Professional", color: "bg-violet-100 text-violet-700 border-violet-200" },
-  { value: "part-time", label: "Part-time", color: "bg-amber-100 text-amber-700 border-amber-200" },
-  { value: "role-specific", label: "Role-specific", color: "bg-blue-100 text-blue-700 border-blue-200" },
-  { value: "general", label: "General", color: "bg-slate-100 text-slate-600 border-slate-200" },
+  { value: "professional", label: "Professional", color: "bg-violet-100 dark:bg-violet-500/20 text-violet-700 dark:text-violet-300 border-violet-200 dark:border-violet-500/30" },
+  { value: "part-time", label: "Part-time", color: "bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-500/30" },
+  { value: "role-specific", label: "Role-specific", color: "bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-500/30" },
+  { value: "general", label: "General", color: "bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-600" },
 ];
 
 type ProfileStatus = {
@@ -260,8 +260,8 @@ export default function CvPage() {
         <div
           className={`fixed top-6 right-6 z-50 flex items-center gap-3 rounded-2xl border px-5 py-3 text-sm font-medium shadow-xl backdrop-blur transition-all ${
             toast.type === "success"
-              ? "border-emerald-100 bg-emerald-50 text-emerald-800"
-              : "border-red-100 bg-red-50 text-red-700"
+              ? "border-emerald-100 dark:border-emerald-500/30 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-300"
+              : "border-red-100 dark:border-red-500/30 bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-300"
           }`}
         >
           {toast.type === "success" ? (
@@ -278,7 +278,7 @@ export default function CvPage() {
 
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-black text-slate-900">My CV</h1>
+        <h1 className="text-2xl font-black text-slate-900 dark:text-slate-100">My CV</h1>
         <p className="mt-1 text-sm text-muted">
           Upload your CVs in any format. Atlas reads them, builds your profile, scores jobs against it, and gives upgrade tips.
         </p>
@@ -286,7 +286,7 @@ export default function CvPage() {
 
       {/* Profile Status */}
       {(profileStatus?.hasProfile || isProcessing) && (
-        <div className={`rounded-2xl border p-4 ${isProcessing ? "border-cyan-100 bg-cyan-50/60" : "border-emerald-100 bg-emerald-50/60"}`}>
+        <div className={`rounded-2xl border p-4 ${isProcessing ? "border-cyan-100 dark:border-cyan-500/30 bg-cyan-50/60 dark:bg-cyan-500/10" : "border-emerald-100 dark:border-emerald-500/30 bg-emerald-50/60 dark:bg-emerald-500/10"}`}>
           <button
             onClick={() => setProfileExpanded((v) => !v)}
             className="flex w-full items-center justify-between"
@@ -298,11 +298,11 @@ export default function CvPage() {
                 <Brain className="h-5 w-5 text-emerald-500" />
               )}
               <div className="text-left">
-                <p className={`text-sm font-bold ${isProcessing ? "text-cyan-800" : "text-emerald-800"}`}>
+                <p className={`text-sm font-bold ${isProcessing ? "text-cyan-800 dark:text-cyan-300" : "text-emerald-800 dark:text-emerald-300"}`}>
                   {isProcessing ? "Atlas is reading your CV…" : "✅ Profile Active"}
                 </p>
                 {profileStatus?.lastUpdated && !isProcessing && (
-                  <p className="text-xs text-emerald-600">
+                  <p className="text-xs text-emerald-600 dark:text-emerald-400">
                     Last updated {formatDate(profileStatus.lastUpdated)}
                   </p>
                 )}
@@ -313,8 +313,8 @@ export default function CvPage() {
             )}
           </button>
           {profileExpanded && profileStatus?.profilePreview && (
-            <div className="mt-3 rounded-xl bg-white/70 border border-emerald-100 px-4 py-3 max-h-96 overflow-y-auto">
-              <p className="text-xs text-slate-600 font-mono leading-relaxed whitespace-pre-wrap">
+            <div className="mt-3 rounded-xl bg-white/70 dark:bg-white/5 border border-emerald-100 dark:border-emerald-500/20 px-4 py-3 max-h-96 overflow-y-auto">
+              <p className="text-xs text-slate-600 dark:text-slate-300 font-mono leading-relaxed whitespace-pre-wrap">
                 {profileStatus.profilePreview}
               </p>
             </div>
@@ -330,15 +330,15 @@ export default function CvPage() {
         onClick={() => fileInputRef.current?.click()}
         className={`flex cursor-pointer flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed px-8 py-12 transition-all duration-200 ${
           isDragging
-            ? "border-cyan-400 bg-cyan-50/80 scale-[1.01]"
-            : "border-slate-200 bg-white/60 hover:border-cyan-300 hover:bg-cyan-50/30"
+            ? "border-cyan-400 bg-cyan-50/80 dark:bg-cyan-500/10 scale-[1.01]"
+            : "border-slate-200 dark:border-white/10 bg-white/60 dark:bg-white/5 hover:border-cyan-300 dark:hover:border-cyan-500/50 hover:bg-cyan-50/30 dark:hover:bg-cyan-500/5"
         }`}
       >
-        <div className={`rounded-2xl p-4 ${isDragging ? "bg-cyan-100" : "bg-slate-100"}`}>
+        <div className={`rounded-2xl p-4 ${isDragging ? "bg-cyan-100 dark:bg-cyan-500/20" : "bg-slate-100 dark:bg-white/10"}`}>
           <Upload className={`h-8 w-8 ${isDragging ? "text-cyan-500" : "text-slate-400"}`} />
         </div>
         <div className="text-center">
-          <p className={`text-base font-semibold ${isDragging ? "text-cyan-700" : "text-slate-700"}`}>
+          <p className={`text-base font-semibold ${isDragging ? "text-cyan-700 dark:text-cyan-300" : "text-slate-700 dark:text-slate-200"}`}>
             {isUploading ? (
               <span className="text-cyan-600">Uploading… please wait</span>
             ) : (
@@ -362,7 +362,7 @@ export default function CvPage() {
 
       {/* Error banner */}
       {error && (
-        <div className="flex items-start gap-3 rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-600">
+        <div className="flex items-start gap-3 rounded-2xl border border-red-100 dark:border-red-500/30 bg-red-50 dark:bg-red-900/20 px-4 py-3 text-sm text-red-600 dark:text-red-300">
           <X className="h-4 w-4 mt-0.5 flex-none" />
           <span className="flex-1">{error}</span>
           <button onClick={() => setError(null)} className="flex-none text-red-400 hover:text-red-600">
@@ -375,10 +375,10 @@ export default function CvPage() {
       {isUploading && (
         <div className="space-y-1.5">
           {[...uploadingNames].map((name) => (
-            <div key={name} className="flex items-center gap-3 rounded-xl border border-cyan-100 bg-cyan-50/60 px-4 py-3 text-sm">
+            <div key={name} className="flex items-center gap-3 rounded-xl border border-cyan-100 dark:border-cyan-500/30 bg-cyan-50/60 dark:bg-cyan-500/10 px-4 py-3 text-sm">
               <Loader2 className="h-4 w-4 text-cyan-500 animate-spin" />
-              <span className="font-medium text-cyan-700 truncate">{name}</span>
-              <span className="text-xs text-cyan-500 ml-auto">Uploading…</span>
+              <span className="font-medium text-cyan-700 dark:text-cyan-300 truncate">{name}</span>
+              <span className="text-xs text-cyan-500 dark:text-cyan-400 ml-auto">Uploading…</span>
             </div>
           ))}
         </div>
@@ -387,10 +387,10 @@ export default function CvPage() {
       {/* File list */}
       <div className="space-y-3">
         <div className="flex items-center justify-between">
-          <h2 className="text-sm font-bold text-slate-700">
+          <h2 className="text-sm font-bold text-slate-700 dark:text-slate-200">
             Uploaded Files
             {files.length > 0 && (
-              <span className="ml-2 rounded-full bg-cyan-100 px-2 py-0.5 text-xs font-semibold text-cyan-700">
+              <span className="ml-2 rounded-full bg-cyan-100 dark:bg-cyan-500/20 px-2 py-0.5 text-xs font-semibold text-cyan-700 dark:text-cyan-300">
                 {files.length}
               </span>
             )}
@@ -400,14 +400,14 @@ export default function CvPage() {
         {loading ? (
           <div className="space-y-3">
             {[1, 2].map((i) => (
-              <div key={i} className="h-20 rounded-2xl bg-slate-100 animate-pulse" />
+              <div key={i} className="h-20 rounded-2xl bg-slate-100 dark:bg-white/5 animate-pulse" />
             ))}
           </div>
         ) : files.length === 0 ? (
-          <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-slate-200 bg-white/50 py-12 text-center">
-            <FileText className="h-10 w-10 text-slate-300" />
+          <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-slate-200 dark:border-white/10 bg-white/50 dark:bg-white/5 py-12 text-center">
+            <FileText className="h-10 w-10 text-slate-300 dark:text-slate-600" />
             <div>
-              <p className="font-semibold text-slate-500">No CVs uploaded yet</p>
+              <p className="font-semibold text-slate-500 dark:text-slate-400">No CVs uploaded yet</p>
               <p className="mt-1 text-xs text-muted">Upload your first CV above to get started</p>
             </div>
           </div>
@@ -418,25 +418,25 @@ export default function CvPage() {
               return (
                 <div
                   key={f.name}
-                  className="group flex items-center gap-4 rounded-2xl border border-white/60 bg-white/70 px-5 py-4 shadow-sm backdrop-blur transition hover:shadow-md"
+                  className="group flex items-center gap-4 rounded-2xl border border-white/60 dark:border-white/10 bg-white/70 dark:bg-white/5 px-5 py-4 shadow-sm backdrop-blur transition hover:shadow-md"
                 >
                   <div className="flex-none">
                     <CvFileIcon ext={f.ext} size="lg" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <p className="font-semibold text-slate-900 truncate">
+                      <p className="font-semibold text-slate-900 dark:text-slate-100 truncate">
                         {f.originalName ?? f.name}
                       </p>
                       {isFileProcessing && (
-                        <span className="flex items-center gap-1 rounded-full bg-cyan-100 px-2 py-0.5 text-[10px] font-semibold text-cyan-700">
+                        <span className="flex items-center gap-1 rounded-full bg-cyan-100 dark:bg-cyan-500/20 px-2 py-0.5 text-[10px] font-semibold text-cyan-700 dark:text-cyan-300">
                           <Loader2 className="h-3 w-3 animate-spin" />
                           Reading…
                         </span>
                       )}
                     </div>
                     <div className="mt-1.5 flex items-center gap-2 text-xs text-muted flex-wrap">
-                      <span className="rounded-md bg-slate-100 px-2 py-0.5 font-medium text-slate-600">
+                      <span className="rounded-md bg-slate-100 dark:bg-white/10 px-2 py-0.5 font-medium text-slate-600 dark:text-slate-300">
                         {typeLabel(f.ext)}
                       </span>
                       <span>·</span>
@@ -455,7 +455,7 @@ export default function CvPage() {
                           className={`rounded-full border px-2.5 py-0.5 text-[11px] font-semibold transition-all ${
                             f.tag === t.value
                               ? t.color + " shadow-sm scale-105"
-                              : "bg-white border-slate-200 text-slate-400 hover:border-slate-300 hover:text-slate-600"
+                              : "bg-white dark:bg-white/5 border-slate-200 dark:border-white/10 text-slate-400 dark:text-slate-500 hover:border-slate-300 dark:hover:border-white/20 hover:text-slate-600 dark:hover:text-slate-300"
                           }`}
                         >
                           {t.label}
@@ -497,9 +497,9 @@ export default function CvPage() {
       </div>
 
       {/* Atlas hint */}
-      <div className="rounded-2xl border border-cyan-100 bg-cyan-50/60 px-5 py-4 text-sm text-cyan-800 space-y-2">
+      <div className="rounded-2xl border border-cyan-100 dark:border-cyan-500/30 bg-cyan-50/60 dark:bg-cyan-500/10 px-5 py-4 text-sm text-cyan-800 dark:text-cyan-200 space-y-2">
         <p className="font-semibold">🤖 How Atlas uses your CV</p>
-        <ul className="text-xs text-cyan-700 leading-relaxed space-y-1 ml-2">
+        <ul className="text-xs text-cyan-700 dark:text-cyan-300 leading-relaxed space-y-1 ml-2">
           <li>• <strong>Auto-Profile:</strong> Extracts your skills, experience & goals into a structured profile</li>
           <li>• <strong>Job Scoring:</strong> Scores every discovered job 1-100 against your background</li>
           <li>• <strong>Upgrade Tips:</strong> After every search, highlights skills that appear in jobs but are missing from your CV</li>

@@ -49,7 +49,10 @@
       "Bash(mkdir -p \"C:/Users/Tushar/.claude/plugins/marketplaces/thedotmack\")",
       "Bash(cp -r /tmp/claude-mem/* \"C:/Users/Tushar/.claude/plugins/marketplaces/thedotmack/\")",
       "Bash(mkdir -p \"C:/Users/Tushar/.claude/plugins/cache/claude-mem/claude-mem/10.4.1\")",
-      "Bash(cp -r \"C:/Users/Tushar/.claude/plugins/marketplaces/thedotmack/openclaw/\"* \"C:/Users/Tushar/.claude/plugins/cache/claude-mem/claude-mem/10.4.1/\")"
+      "Bash(cp -r \"C:/Users/Tushar/.claude/plugins/marketplaces/thedotmack/openclaw/\"* \"C:/Users/Tushar/.claude/plugins/cache/claude-mem/claude-mem/10.4.1/\")",
+      "Bash(start cmd:*)",
+      "Bash(cmd /c \"start \"\"Next.js\"\" cmd /k \"\"cd /d D:\\\\Projects\\\\Atlas-job-os && npm run dev\"\"\")",
+      "Bash(cmd /c \"start \"\"Browser Server\"\" cmd /k \"\"cd /d D:\\\\Projects\\\\Atlas-job-os && npm run browser-server\"\"\")"
     ]
   }
 }

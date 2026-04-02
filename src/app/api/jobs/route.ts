@@ -144,6 +144,21 @@ export async function POST(request: Request) {
     }
 
     try {
+      // ── Duplicate guard: skip if same title + location + source already exists for this user ──
+      const normalise = (s: string) => s.toLowerCase().trim().replace(/\s+/g, " ");
+      const existingDupe = await prisma.job.findFirst({
+        where: {
+          userId,
+          source: payload.source,
+          title: { equals: normalise(payload.title), mode: "insensitive" },
+          location: { equals: normalise(payload.location), mode: "insensitive" },
+        },
+        select: { id: true },
+      });
+      if (existingDupe) {
+        return NextResponse.json({ skipped: true, reason: "duplicate", id: existingDupe.id }, { status: 200 });
+      }
+
       const company = await ensureCompany(payload.company);
       const salaryBounds = parseSalaryBounds(payload.salary);
 

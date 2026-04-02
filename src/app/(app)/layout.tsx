@@ -44,7 +44,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             sidebarCollapsed={sidebarCollapsed}
             onToggleDesktopSidebar={toggleDesktopSidebar}
           />
-          <main id="main-content" className="relative flex-1 min-h-0 overflow-hidden bg-slate-50/50">
+          <main id="main-content" className="relative flex-1 min-h-0 overflow-hidden bg-slate-50/50 dark:bg-transparent">
             {children}
           </main>
         </div>
