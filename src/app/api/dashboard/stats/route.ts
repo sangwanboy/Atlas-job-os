@@ -21,9 +21,13 @@ export async function GET() {
     }
 
     // 3. Resolve Metrics
-    // Total Pipeline = staged/discovered jobs not yet imported (local cache)
-    // Jobs Saved = jobs imported into the jobs table (DB)
-    const finalTotal = cachedJobs.length;
+    // Pipeline  = pending/staged jobs not yet imported (temp, from pendingJobsStore across all sessions)
+    // Jobs Saved = jobs actually imported to DB by Atlas
+    const pendingStore: Map<string, { isAlreadyImported?: boolean }[]> =
+      (globalThis as any).__pendingJobsStore ?? new Map();
+    const pipelineCount = Array.from(pendingStore.values())
+      .reduce((sum, jobs) => sum + jobs.filter(j => !j.isAlreadyImported).length, 0);
+    const finalTotal = pipelineCount;
     const finalNew = dbJobsCount;
     let applied = 0;
     let interviewing = 0;
@@ -40,14 +44,14 @@ export async function GET() {
       {
         label: "Pipeline",
         value: finalTotal.toString(),
-        delta: "Discovered",
-        trend: "up" as const,
+        delta: finalTotal > 0 ? "Pending import" : "Empty",
+        trend: finalTotal > 0 ? ("up" as const) : ("flat" as const),
       },
       {
         label: "Jobs Saved",
         value: finalNew.toString(),
-        delta: "Shortlisted",
-        trend: finalNew > 0 ? "up" : "flat",
+        delta: "Imported",
+        trend: finalNew > 0 ? ("up" as const) : ("flat" as const),
       },
       {
         label: "Applied",
@@ -63,7 +67,7 @@ export async function GET() {
       },
     ];
 
-    // 4. Generate Weekly Trend (Last 7 Days from Discovery)
+    // 4. Generate Weekly Trend (Last 7 Days)
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const last7Days = Array.from({ length: 7 }, (_, i) => {
@@ -72,11 +76,24 @@ export async function GET() {
       return d;
     });
 
+    // Fetch all jobs created in the last 7 days in one query, then bin by day in memory
+    let recentJobs: { createdAt: Date; applicationStatus: string | null }[] = [];
+    try {
+      recentJobs = await prisma.job.findMany({
+        where: { userId, createdAt: { gte: last7Days[0] } },
+        select: { createdAt: true, applicationStatus: true },
+      });
+    } catch { /* fall through with empty */ }
+
     const weeklyTrend = last7Days.map((date) => {
+      const nextDay = new Date(date);
+      nextDay.setDate(date.getDate() + 1);
+      const dayJobs = recentJobs.filter(j => j.createdAt >= date && j.createdAt < nextDay);
       return {
         date: date.toLocaleDateString("en-US", { weekday: "short" }),
-        applied,
-        interviews: interviewing,
+        saved: dayJobs.length,
+        applied: dayJobs.filter(j => j.applicationStatus === "APPLIED").length,
+        interviews: dayJobs.filter(j => j.applicationStatus === "INTERVIEW").length,
         replies: 0,
       };
     });

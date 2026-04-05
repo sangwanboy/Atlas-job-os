@@ -7,6 +7,7 @@ export type KpiMetric = {
 
 export type DashboardTrendPoint = {
   date: string;
+  saved: number;
   applied: number;
   interviews: number;
   replies: number;

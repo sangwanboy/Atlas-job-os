@@ -137,7 +137,7 @@ const toolDescriptors = [
   },
   {
     name: "import_pending_jobs",
-    description: "ALWAYS use this when the user says 'import', 'save', 'add to pipeline', or 'import all' — even if you also see browser_extract_jobs in the tool list. NEVER call browser_extract_jobs to handle an import request. Jobs already previewed this session are stored server-side; just call this tool with action='import_all' to save them all. Parameters: { action?: 'import_all' | 'import_selected', indices?: number[], jobs?: Job[] }",
+    description: "ALWAYS use this when the user says 'import', 'save', 'add to pipeline', 'import all', 'import all the jobs', 'save all jobs', 'add all to tracker', 'import all jobs in pipeline', or any variation of saving previewed jobs. NEVER call browser_extract_jobs or get_pipeline to handle an import request. Jobs already previewed this session are stored server-side; just call this tool with action='import_all' to save them all. Parameters: { action?: 'import_all' | 'import_selected', indices?: number[], jobs?: Job[] }",
     parameters: {
       action: "string?",
       indices: "number[]?",
@@ -253,8 +253,8 @@ const toolDescriptors = [
   },
   {
     name: "browser_extract_jobs",
-    description: "High-level bulk job search via scraper — searches LinkedIn and job boards in parallel and returns structured job data. Best for fast searches. Parameters: { query: string, location: string, limit?: number }",
-    parameters: { query: "string", location: "string", limit: "number?" },
+    description: "High-level bulk job search via scraper — searches LinkedIn and job boards in parallel and returns structured job data. Best for fast searches. If the user specifies a platform (e.g. 'search on Reed', 'only LinkedIn'), pass it in the platforms array to restrict the search. Parameters: { query: string, location: string, limit?: number, platforms?: string[] (e.g. ['Reed'], ['LinkedIn', 'Indeed']) }",
+    parameters: { query: "string", location: "string", limit: "number?", platforms: "string[]?" },
   },
   {
     name: "update_scraper_selectors",
@@ -425,7 +425,7 @@ function normalizeToolCallCandidate(candidate: Record<string, unknown>): ToolCal
 function getInternalApiBases(): string[] {
   return Array.from(
     new Set(
-      [env.NEXT_PUBLIC_APP_URL, env.NEXTAUTH_URL, "http://127.0.0.1:3000"]
+      [env.NEXT_PUBLIC_APP_URL, env.NEXTAUTH_URL]
         .filter((u): u is string => Boolean(u)),
     ),
   );
@@ -665,11 +665,24 @@ async function executeToolCall(toolCall: ToolCall, sid: string, userId?: string)
 
     pendingJobsStore.set(sid, finalJobs);
     
-    const jobList = finalJobs.map((j, i) => `${i + 1}. **${j.title}** at ${j.company} (${j.location})${j.isAlreadyImported ? " [ALREADY IN PIPELINE]" : ""}`).join("\n");
-    // Strip description/skills from preview JSON — they contain ] chars that break parsing
-    // Full data is kept in pendingJobsStore server-side for import
-    const previewJobs = finalJobs.map(({ description: _d, skills: _s, ...rest }) => rest);
-    return `__PREVIEW_JOBS__${JSON.stringify(previewJobs)}__END_PREVIEW__\n\n### 🔍 Job Discovery Preview\nPreviewed ${finalJobs.length} accumulated job(s) for your review:\n${jobList}\n\nReview the list below. Jobs already in your pipeline are marked. Click 'Import All' to save the rest.`;
+    const jobList = finalJobs.map((j, i) => {
+      const richness = [];
+      if (j.description && j.description.length > 50) richness.push("📄 desc");
+      if (j.skills && j.skills.length > 0) richness.push("🔧 skills");
+      const richnessStr = richness.length > 0 ? ` [${richness.join(", ")}]` : "";
+      return `${i + 1}. **${j.title}** at ${j.company} (${j.location})${richnessStr}${j.isAlreadyImported ? " [ALREADY IN PIPELINE]" : ""}`;
+    }).join("\n");
+    // Strip full description/skills from preview JSON to avoid payload bloat,
+    // but expose richness metadata so the UI and model know what data is available.
+    // Full data is kept in pendingJobsStore server-side for import.
+    const previewJobs = finalJobs.map(({ description, skills, ...rest }) => ({
+      ...rest,
+      hasDescription: Boolean(description && description.length > 50),
+      hasSkills: Boolean(skills && (Array.isArray(skills) ? skills.length > 0 : skills.length > 0)),
+      descriptionPreview: description && description.length > 50 ? description.slice(0, 120).trim() + "…" : "",
+    }));
+    const withDesc = finalJobs.filter(j => j.description && j.description.length > 50).length;
+    return `__PREVIEW_JOBS__${JSON.stringify(previewJobs)}__END_PREVIEW__\n\n### 🔍 Job Discovery Preview\nPreviewed ${finalJobs.length} accumulated job(s) for your review (${withDesc} with full descriptions):\n${jobList}\n\nReview the list below. Jobs already in your pipeline are marked. Click 'Import All' to save the rest.`;
   }
   if (toolCall.tool === "import_pending_jobs") {
     const params = importPendingJobsSchema.parse(toolCall.parameters);
@@ -716,8 +729,13 @@ async function executeToolCall(toolCall: ToolCall, sid: string, userId?: string)
       }
     }
     
-    pendingJobsStore.set(sid, pending); // Persist updated statuses
     const allImported = pending.every(j => j.isAlreadyImported);
+    // Clear the store once all jobs are imported so get_pipeline doesn't re-surface them
+    if (allImported) {
+      pendingJobsStore.set(sid, []);
+    } else {
+      pendingJobsStore.set(sid, pending); // Persist partial import statuses
+    }
     
     const reply = `Imported ${results.filter(r => r.startsWith("✅")).length}/${jobsToImport.length} jobs:\n${results.join("\n")}`;
     return allImported 
@@ -726,7 +744,25 @@ async function executeToolCall(toolCall: ToolCall, sid: string, userId?: string)
   }
   if (toolCall.tool === "get_pipeline") {
     const { query } = (toolCall.parameters ?? {}) as { query?: string };
+    // First check pendingJobsStore (previewed but not yet imported)
+    const pending = pendingJobsStore.get(sid) || [];
+    const unimportedPending = pending.filter(j => !j.isAlreadyImported);
     const jobs = localJobsCache.list();
+    if (unimportedPending.length > 0) {
+      // There are previewed jobs — surface them and remind Atlas to use import_pending_jobs
+      const list = unimportedPending.map((j, i) => {
+        const richness = [j.description && j.description.length > 50 ? "📄 desc" : "", j.skills ? "🔧 skills" : ""].filter(Boolean).join(", ");
+        return `${i + 1}. **${j.title}** at ${j.company} (${j.location})${richness ? ` [${richness}]` : ""}`;
+      }).join("\n");
+      const previewJobs = unimportedPending.map(({ description, skills, ...rest }) => ({
+        ...rest,
+        hasDescription: Boolean(description && description.length > 50),
+        hasSkills: Boolean(skills && (Array.isArray(skills) ? skills.length > 0 : skills.length > 0)),
+        descriptionPreview: description && description.length > 50 ? description.slice(0, 120).trim() + "…" : "",
+      }));
+      const withDesc = unimportedPending.filter(j => j.description && j.description.length > 50).length;
+      return `__PREVIEW_JOBS__${JSON.stringify(previewJobs)}__END_PREVIEW__\n\n### 📋 Staged Preview (${unimportedPending.length} job${unimportedPending.length !== 1 ? "s" : ""} — ${withDesc} with descriptions — not yet imported)\n${list}\n\nThese jobs are staged in the preview but not yet saved. Use import_pending_jobs with action='import_all' to save them to the tracker.`;
+    }
     if (jobs.length === 0) return "No jobs currently in the pipeline. Run a job search to discover new roles.";
     const filtered = query
       ? jobs.filter(j => `${j.title} ${j.company} ${j.location}`.toLowerCase().includes(query.toLowerCase()))
@@ -742,11 +778,16 @@ async function executeToolCall(toolCall: ToolCall, sid: string, userId?: string)
       source: j.source,
       score: j.score,
       isAlreadyImported: false,
+      hasDescription: Boolean(j.description && j.description.length > 50),
+      hasSkills: Boolean(j.skills && j.skills.length > 0),
+      descriptionPreview: j.description && j.description.length > 50 ? j.description.slice(0, 120).trim() + "…" : "",
     }));
-    const list = capped.map((j, i) =>
-      `${i + 1}. **${j.title}** at ${j.company} (${j.location}) — Score: ${j.score ?? "N/A"}, Salary: ${j.salaryRange || "Not disclosed"}, Source: ${j.source}`
-    ).join("\n");
-    return `__PREVIEW_JOBS__${JSON.stringify(previewJobs)}__END_PREVIEW__\n\n### 📋 Pipeline (${filtered.length} staged job${filtered.length !== 1 ? "s" : ""})\n${list}\n\nThese jobs have not been imported yet. Tell the user to say "import all" to save them.`;
+    const withDesc = capped.filter(j => j.description && j.description.length > 50).length;
+    const list = capped.map((j, i) => {
+      const richness = [j.description && j.description.length > 50 ? "📄 desc" : "", j.skills ? "🔧 skills" : ""].filter(Boolean).join(", ");
+      return `${i + 1}. **${j.title}** at ${j.company} (${j.location}) — Score: ${j.score ?? "N/A"}, Salary: ${j.salaryRange || "Not disclosed"}, Source: ${j.source}${richness ? ` [${richness}]` : ""}`;
+    }).join("\n");
+    return `__PREVIEW_JOBS__${JSON.stringify(previewJobs)}__END_PREVIEW__\n\n### 📋 Pipeline (${filtered.length} staged job${filtered.length !== 1 ? "s" : ""} — ${withDesc} with full descriptions)\n${list}\n\nThese jobs have not been imported yet. Tell the user to say "import all" to save them.`;
   }
   if (toolCall.tool === "save_job") {
     const params = saveJobToolSchema.parse(toolCall.parameters);
@@ -984,40 +1025,105 @@ async function executeToolCall(toolCall: ToolCall, sid: string, userId?: string)
       return `⚠️ No jobs found via the extension for **"${query}"** in **"${location}"**.\n\nTips:\n- Make sure you're logged into LinkedIn/Indeed in the browser\n- Try a broader search term\n- Check the extension is active on job site pages`;
     }
 
-    // Filter out CAPTCHA/verification pages that leaked through as job cards
+    // Filter out CAPTCHA/verification pages and junk that leaked through as job cards
     const BLOCKED_TITLES = ["additional verification required", "security verification", "security check",
       "captcha", "sign in", "log in", "just a moment", "access denied", "authwall", "blocked",
-      "human verification", "verify you are human", "are you a robot", "unusual traffic"];
+      "human verification", "verify you are human", "are you a robot", "unusual traffic",
+      "saved jobs", "job search", "browse jobs", "all jobs", "jobs near me"];
+    const norm = (s?: string) => (s || "").toLowerCase().trim();
+    const isUnknown = (s?: string) => !s || norm(s) === "unknown company" || norm(s).length === 0;
+
     const cleaned = allJobs.filter(j => {
-      const t = (j.title || "").toLowerCase().trim();
+      const t = norm(j.title);
       return t.length > 3 && !BLOCKED_TITLES.includes(t) && !t.includes("verification") && !t.includes("captcha");
     });
 
-    // Sort by data richness BEFORE dedup — so the most complete record wins.
-    // Priority: has real company > has description > has salary > relevance score.
-    const norm = (s?: string) => (s || "").toLowerCase().trim();
-    const isUnknown = (s?: string) => !s || norm(s) === "unknown company" || norm(s).length === 0;
-    cleaned.sort((a, b) => {
-      const aScore = (!isUnknown(a.company) ? 4 : 0) + (a.description ? 2 : 0) + (a.salary ? 1 : 0);
-      const bScore = (!isUnknown(b.company) ? 4 : 0) + (b.description ? 2 : 0) + (b.salary ? 1 : 0);
-      if (bScore !== aScore) return bScore - aScore;
-      return (b.score ?? 0) - (a.score ?? 0);
+    // ── Post-extraction relevance scoring ──────────────────────────────────────
+    // Scores jobs 0–100 based on title-query match, location match, and data richness.
+    // This prevents wrong geographies (Belfast/US/Ireland when London was requested)
+    // from surfacing at the top, without hard-rejecting remote/hybrid roles.
+    const queryTerms = query.toLowerCase().split(/\s+/).filter(t => t.length > 2);
+    const requestedLocation = location.toLowerCase().trim();
+
+    // Build sets of penalised and tolerated location keywords from the requested location
+    const UK_REGIONS = ["london", "manchester", "birmingham", "leeds", "glasgow", "edinburgh",
+      "bristol", "sheffield", "liverpool", "newcastle", "nottingham", "cardiff", "oxford", "cambridge",
+      "uk", "united kingdom", "england", "scotland", "wales"];
+    const isUkSearch = UK_REGIONS.some(r => requestedLocation.includes(r));
+
+    // Locations that should be strongly penalised when a UK city was requested
+    const WRONG_COUNTRY_PATTERNS = isUkSearch
+      ? [/\busa?\b/, /\bunited states\b/, /\bireland\b/, /\bdublin\b/, /\bcanada\b/, /\baustralia\b/, /\bindia\b/]
+      : [];
+
+    function scoreRelevance(j: RawJob): number {
+      let score = j.score ?? 50; // start from scraper-provided score
+
+      // Title-query overlap: reward matching query terms in job title
+      const titleNorm = norm(j.title);
+      const matchedTerms = queryTerms.filter(t => titleNorm.includes(t)).length;
+      score += matchedTerms * 8;
+
+      // Location scoring
+      const jobLoc = norm(j.location);
+      const isRemote = /remote|hybrid|work from home|wfh/.test(jobLoc);
+      const isRemoteUK = isRemote && (jobLoc.includes("uk") || jobLoc.includes("united kingdom") || jobLoc === "remote" || jobLoc === "hybrid");
+
+      if (requestedLocation && jobLoc) {
+        // Extract city from requested location (first word before comma)
+        const requestedCity = requestedLocation.split(/[,\s]/)[0];
+        if (requestedCity && jobLoc.includes(requestedCity)) {
+          score += 20; // exact city match — strong boost
+        } else if (isRemoteUK || (isRemote && !isUkSearch)) {
+          score += 5; // remote/hybrid tolerated — mild boost
+        } else if (isRemote) {
+          score += 0; // remote without UK context — neutral
+        } else {
+          // Wrong city — penalise
+          score -= 10;
+          // Wrong country — penalise heavily
+          if (WRONG_COUNTRY_PATTERNS.some(p => p.test(jobLoc))) {
+            score -= 30;
+          }
+        }
+      }
+
+      // Data richness bonus
+      if (!isUnknown(j.company)) score += 4;
+      if (j.description && j.description.length > 50) score += 6;
+      if (j.salary) score += 3;
+
+      return Math.max(0, Math.min(100, Math.round(score)));
+    }
+
+    // Apply relevance scores and filter out clearly wrong-geography results (score < 10)
+    const scored = cleaned.map(j => ({ ...j, score: scoreRelevance(j) }));
+    const relevant = scored.filter(j => (j.score ?? 0) >= 10);
+
+    // Sort by combined score BEFORE dedup — most relevant + data-rich record wins per job
+    relevant.sort((a, b) => {
+      const aRich = (!isUnknown(a.company) ? 4 : 0) + (a.description ? 2 : 0) + (a.salary ? 1 : 0);
+      const bRich = (!isUnknown(b.company) ? 4 : 0) + (b.description ? 2 : 0) + (b.salary ? 1 : 0);
+      const aTotal = (a.score ?? 0) + aRich;
+      const bTotal = (b.score ?? 0) + bRich;
+      return bTotal - aTotal;
     });
 
-    // Deduplicate by title — keep most data-rich record per job title.
+    // Deduplicate by normalised title+company — more precise than title-only.
+    // Falls back to title-only key when company is unknown to avoid false duplicates.
     const seen = new Set<string>();
-    const unique = cleaned.filter(j => {
-      const key = norm(j.title);
+    const unique = relevant.filter(j => {
+      const company = isUnknown(j.company) ? "" : norm(j.company).replace(/\s+/g, "").slice(0, 20);
+      const key = `${norm(j.title).replace(/\s+/g, "").slice(0, 40)}::${company}`;
       if (seen.has(key)) return false;
       seen.add(key);
       return true;
     });
 
-    // Sort by scraper relevance score descending, cap using admin-controlled global settings
-    // maxJobsPerSearch = total pool from scraper; outputPerPrompt = how many show in preview
+    // Sort by combined score descending, cap using admin-controlled global settings
     const globalSettings = runtimeSettingsStore.get("global").settings;
-    const maxJobs = globalSettings.maxJobsPerSearch ?? 20;
-    const outputPerPrompt = globalSettings.outputPerPrompt ?? 10;
+    const maxJobs = globalSettings.maxJobsPerSearch ?? 60;
+    const outputPerPrompt = globalSettings.outputPerPrompt ?? 30;
     const topJobs = unique
       .sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
       .slice(0, maxJobs)
@@ -1078,7 +1184,9 @@ export class ConversationOrchestrator {
 
     // Fast-path: detect simple conversational messages that don't need tools
     const msgLower = context.message.toLowerCase().trim();
-    const isSimpleChat = msgLower.length < 120 && !/(search|find|discover|import|save|extract|scrape|browse|navigate|screenshot|gmail|sync|email|cv|resume|upload|score|filter|draft|write|apply|follow.?up|preview|pipeline|listing|show me|give me|clear|clr|delete|remove|reset|update|dismiss)/.test(msgLower);
+    // Short affirmative/action messages that follow up on a previous tool action must NOT be treated as simple chat
+    const isFollowUpAction = /^(yes|yep|yeah|sure|ok|okay|do it|go|go ahead|proceed|confirm|try|try it|try now|try looking|try looking now|look now|search now|run it|run search|start|start search|get them|get those|fetch them|fetch those|do that|sounds good|let'?s go|please|alright)[\s!.]*$/.test(msgLower);
+    const isSimpleChat = !isFollowUpAction && msgLower.length < 120 && !/(search|find|discover|import|save|extract|scrape|browse|navigate|screenshot|gmail|sync|email|cv|resume|upload|score|filter|draft|write|apply|follow.?up|preview|pipeline|listing|show me|give me|get me|look.?for|show|fetch|job|jobs|role|roles|position|positions|vacancy|vacancies|work|hire|hiring|recruit|clear|clr|delete|remove|reset|update|dismiss)/.test(msgLower);
     const dynamicMaxRounds = isSimpleChat ? 1 : (isDeveloper ? 15 : maxToolRounds);
 
     // Wave 2: session creation (needs agent.id)
@@ -1288,19 +1396,31 @@ export class ConversationOrchestrator {
       const terminalTools = ["clear_pipeline", "delete_job", "import_pending_jobs", "get_pipeline", "delete_all_saved_jobs"];
       const ranTerminal = toolCalls.some(t => terminalTools.includes(t.tool));
       if (ranTerminal) {
-        // Prefer LLM text reply; fall back to a friendly summary built from tool results
-        if (aiResponse.text?.trim()) {
+        const terminalCall = toolCalls.find(t => terminalTools.includes(t.tool));
+        // For get_pipeline: ALWAYS use the real tool result — never the LLM's pre-generated text
+        // (the LLM writes its reply before seeing the tool result, so it hallucinates)
+        // Build a clean conversational reply from the tool results
+        const friendlyMessages: Record<string, string> = {
+          clear_pipeline: "✅ Done! Your job pipeline has been completely cleared — all staged jobs have been removed.",
+          delete_job: "✅ Done! That job has been removed from your pipeline.",
+          import_pending_jobs: "✅ Done! Your jobs have been imported into the pipeline.",
+          delete_all_saved_jobs: "✅ Done! All your saved jobs have been permanently deleted from the database.",
+        };
+        if (terminalCall?.tool === "get_pipeline") {
+          aiResponseText = turnRes.trim();
+        } else if (terminalCall?.tool === "import_pending_jobs") {
+          // Always build from actual tool result — aiResponse.text may be just the JSON tool call,
+          // which gets stripped in the UI leaving content empty and "Atlas is thinking..." stuck on screen.
+          const importLog = toolLogs.find(l => l.tool === "import_pending_jobs");
+          const importResult = importLog?.result || "";
+          const countMatch = importResult.match(/Imported (\d+)\/(\d+)/);
+          aiResponseText = countMatch
+            ? `✅ Done! Imported **${countMatch[1]}** of ${countMatch[2]} jobs into your pipeline. They're now saved in your Jobs tracker.`
+            : friendlyMessages["import_pending_jobs"];
+        } else if (aiResponse.text?.trim() && !/^\s*\{/.test(aiResponse.text.trim())) {
+          // Only use LLM pre-text when it's real prose, not just a bare JSON tool call
           aiResponseText = aiResponse.text.trim();
         } else {
-          // Build a clean conversational reply from the tool results
-          const friendlyMessages: Record<string, string> = {
-            clear_pipeline: "✅ Done! Your job pipeline has been completely cleared — all staged jobs have been removed.",
-            delete_job: "✅ Done! That job has been removed from your pipeline.",
-            import_pending_jobs: "✅ Done! Your jobs have been imported into the pipeline.",
-            get_pipeline: turnRes.trim(),
-            delete_all_saved_jobs: "✅ Done! All your saved jobs have been permanently deleted from the database.",
-          };
-          const terminalCall = toolCalls.find(t => terminalTools.includes(t.tool));
           aiResponseText = terminalCall
             ? (friendlyMessages[terminalCall.tool] ?? turnRes.trim())
             : turnRes.trim();
@@ -1330,8 +1450,8 @@ export class ConversationOrchestrator {
     const normalizedReply = normalizeAgentReply(finalReply);
     if (effectiveUserId) {
       void Promise.all([
-        agentStore.saveMessage({ sessionId: sid, role: "USER", content: context.message, tokenEstimate: 0, agentId: agent.id, userId: effectiveUserId }),
-        agentStore.saveMessage({ sessionId: sid, role: "ASSISTANT", content: normalizedReply, tokenEstimate: 0, agentId: agent.id, userId: effectiveUserId }),
+        agentStore.saveMessage({ sessionId: sid, role: "USER", content: context.message, tokenEstimate: Math.ceil(context.message.length / 4), agentId: agent.id, userId: effectiveUserId }),
+        agentStore.saveMessage({ sessionId: sid, role: "ASSISTANT", content: normalizedReply, tokenEstimate: Math.ceil(normalizedReply.length / 4), agentId: agent.id, userId: effectiveUserId }),
       ]).catch(() => {});
     }
 
