@@ -64,7 +64,7 @@ export async function GET(req: Request) {
         },
       });
       
-      return NextResponse.redirect(`${appUrl}/settings/success?message=GmailConnected`);
+      return NextResponse.redirect(`${appUrl}/settings?success=GmailConnected`);
     } catch (dbError) {
       console.warn("[Gmail Callback DB Error] Falling back to local cache:", dbError);
       

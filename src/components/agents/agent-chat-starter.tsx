@@ -265,6 +265,9 @@ type JobPreview = {
   jobType?: string;
   score?: number;
   isAlreadyImported?: boolean;
+  hasDescription?: boolean;
+  hasSkills?: boolean;
+  descriptionPreview?: string;
 };
 
 const JobPreviewBox = ({ 
@@ -369,6 +372,17 @@ const JobPreviewBox = ({
                   {/* Source */}
                   {job.source?.trim() && (
                     <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium bg-slate-100/60 dark:bg-white/5 px-1.5 py-0.5 rounded border border-slate-200/60 dark:border-white/10">{job.source.trim()}</span>
+                  )}
+                  {/* Richness indicators */}
+                  {job.hasDescription && (
+                    <span title={job.descriptionPreview || "Full description available"} className="inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold bg-indigo-50 dark:bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 ring-1 ring-indigo-200/60 dark:ring-indigo-500/30 cursor-help">
+                      📄 desc
+                    </span>
+                  )}
+                  {job.hasSkills && (
+                    <span className="inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold bg-teal-50 dark:bg-teal-500/15 text-teal-700 dark:text-teal-300 ring-1 ring-teal-200/60 dark:ring-teal-500/30">
+                      🔧 skills
+                    </span>
                   )}
                   {/* View link */}
                   <a

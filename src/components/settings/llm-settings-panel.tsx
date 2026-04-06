@@ -558,6 +558,49 @@ export function LlmSettingsPanel() {
               className="w-full rounded-lg border bg-panel px-3 py-2"
             />
           </label>
+
+          <label className="space-y-1 text-sm">
+            <span className="font-semibold">Rate Limit (requests / hour)</span>
+            <p className="text-xs text-slate-500">Max Atlas chat requests per user per hour via Redis sliding window. Returns 429 when exceeded.</p>
+            <input
+              type="number"
+              min={1}
+              max={10000}
+              value={(runtimeDraft as any).rateLimitPerHour ?? 100}
+              onChange={(event) =>
+                setRuntimeDraft((current) =>
+                  current
+                    ? { ...current, rateLimitPerHour: Math.min(10000, Math.max(1, Number(event.target.value || 100))) } as any
+                    : current,
+                )
+              }
+              className="w-full rounded-lg border bg-panel px-3 py-2"
+            />
+          </label>
+
+          <label className="space-y-1 text-sm">
+            <span className="font-semibold">Monthly Budget (USD)</span>
+            <p className="text-xs text-slate-500">Max LLM spend per user per month. Atlas blocks requests when exceeded. Set 0 to disable.</p>
+            <input
+              type="number"
+              min={0}
+              max={10000}
+              step={0.5}
+              value={(runtimeDraft as any).monthlyBudgetUsd ?? 10}
+              onChange={(event) =>
+                setRuntimeDraft((current) =>
+                  current
+                    ? { ...current, monthlyBudgetUsd: Math.min(10000, Math.max(0, Number(event.target.value || 10))) } as any
+                    : current,
+                )
+              }
+              className="w-full rounded-lg border bg-panel px-3 py-2"
+            />
+          </label>
+        </div>
+
+        <div className="mt-4 rounded-lg border bg-bg p-3 text-xs text-muted">
+          <span className="font-semibold text-text">Browser Pool Size:</span> {typeof window !== "undefined" ? "Configured via " : ""}<code className="rounded bg-panel px-1 py-0.5">BROWSER_POOL_SIZE</code> env var (default: 2). Restart browser-server to apply changes.
         </div>
 
         <div className="mt-5 grid gap-2 sm:grid-cols-2">

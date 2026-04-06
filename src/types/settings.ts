@@ -74,6 +74,9 @@ export type RuntimeSettings = {
   strictAgentResponseMode: boolean;
   allowProviderFallback: boolean;
   redactPiiInMemory: boolean;
+  // Beta scaling controls
+  rateLimitPerHour: number;
+  monthlyBudgetUsd: number;
 };
 
 export type RuntimeSettingsResponse = {

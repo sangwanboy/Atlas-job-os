@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { ArrowDownRight, ArrowUpRight, Minus } from "lucide-react";
 import type { KpiMetric } from "@/types/domain";
 
@@ -17,10 +18,15 @@ function TrendIcon({ trend }: { trend: "up" | "down" | "flat" }) {
 export function OverviewKpis() {
   const [metrics, setMetrics] = useState<KpiMetric[]>([]);
   const [loading, setLoading] = useState(true);
+  const router = useRouter();
 
   const fetchStats = async () => {
     try {
       const res = await fetch("/api/dashboard/stats");
+      if (!res.ok) {
+        if (res.status === 401) router.push("/login");
+        return;
+      }
       const data = await res.json();
       if (data.kpiMetrics) {
         setMetrics(data.kpiMetrics);

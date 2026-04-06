@@ -1,15 +1,6 @@
 {
-  "preferred_titles": [
-    "Software Engineer Intern",
-    "Full Stack Developer",
-    "Technical Product Manager",
-    "Business Analyst",
-    "Python Developer",
-    "Kitchen Manager",
-    "Hospitality Team Leader",
-    "SEO Specialist",
-    "Head of Marketing",
-    "Digital Marketing Manager",
-    "Product Management Intern"
-  ]
+  "cv_mapping": {
+    "hospitality_warehouse": "1774871699288_Tushar_Sangwan_CV_Kitchen.pdf",
+    "professional_tech": "1774876401776_Tushar_CV_Professional__1_.pdf"
+  }
 }

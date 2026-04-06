@@ -34,6 +34,7 @@ model User {
   resumes             Resume[]
   sessions            Session[]
   preferences         UserPreference?
+  tokenUsages         TokenUsage[]
 }
 
 model UserPreference {
@@ -77,6 +78,7 @@ model Company {
   recruiters Recruiter[]
 
   @@unique([name, website])
+  @@index([name])
 }
 
 model Recruiter {
@@ -140,6 +142,7 @@ model Job {
   duplicateGroupId  String?
   aiSummary         String?
   notes             String?
+  archivedAt        DateTime?
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
   emailThreads      EmailThread[]
@@ -677,6 +680,18 @@ model Authenticator {
   user                 User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@id([userId, credentialID])
+}
+
+model TokenUsage {
+  id           String   @id @default(cuid())
+  userId       String
+  date         DateTime @default(now())
+  inputTokens  Int      @default(0)
+  outputTokens Int      @default(0)
+  costUsd      Float    @default(0)
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, date])
 }
 
 model RuntimeSettingsRecord {

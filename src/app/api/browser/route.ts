@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { agentBrowserToolRegistry } from "@/lib/services/browser/tools/agent-browser-tool-registry";
 import type { BrowserToolName } from "@/lib/services/browser/types/browser-types";
+import { acquireBrowserSlot } from "@/lib/browser-pool";
 
 // Unified Browser API Schema based on USER request and internal registry
 const browserRequestSchema = z.object({
@@ -41,13 +42,18 @@ export async function POST(request: Request) {
     const { action, sessionId, params } = browserRequestSchema.parse(json);
 
     const toolName = actionToToolMap[action];
-    
-    // Ensure we have a valid session and browser ready
-    // Note: The registry handles session re-attachment or creation if needed
-    const result = await agentBrowserToolRegistry.execute(toolName, {
-      sessionId,
-      ...params
-    });
+
+    // Acquire a pool slot — queues if BROWSER_POOL_SIZE concurrent ops are running
+    const release = await acquireBrowserSlot();
+    let result;
+    try {
+      result = await agentBrowserToolRegistry.execute(toolName, {
+        sessionId,
+        ...params,
+      });
+    } finally {
+      release();
+    }
 
     return NextResponse.json(result);
   } catch (error) {

@@ -244,7 +244,7 @@ class GeminiApiProvider implements AiProvider {
     for (const model of modelsToTry) {
       try {
         let streamUrl: string;
-        let headers: Record<string, string> = { "Content-Type": "application/json" };
+        const headers: Record<string, string> = { "Content-Type": "application/json" };
 
         if (useVertex) {
           const token = await getVertexToken(vertexCreds!);

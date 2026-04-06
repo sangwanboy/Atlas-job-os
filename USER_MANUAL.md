@@ -1,5 +1,45 @@
 # Atlas Job OS — User Manual
 
+## Starting the App
+
+Run these commands in **4 separate PowerShell terminals** every time you start the app. Start them in order.
+
+**Terminal 1 — PostgreSQL database**
+```powershell
+docker start atlas-db
+```
+
+**Terminal 2 — Redis**
+```powershell
+docker start atlas-redis
+```
+
+**Terminal 3 — Next.js dev server** (wait for "Ready on :3000" before opening the browser)
+```powershell
+Set-Location D:\Projects\Atlas-job-os
+npm run dev
+```
+
+**Terminal 4 — Browser server** (powers job scraping and Chrome extension bridge)
+```powershell
+Set-Location D:\Projects\Atlas-job-os
+npm run browser-server
+```
+
+**Terminal 5 — Background workers** (optional in dev, required in production)
+```powershell
+Set-Location D:\Projects\Atlas-job-os
+npm run workers
+```
+
+Then open: **http://localhost:3000**
+
+**Health check:** `http://localhost:3000/api/health` should return `{"status":"ok","db":"ok","redis":"ok"}`.
+
+> **Important:** Always start `atlas-db` and `atlas-redis` Docker containers **before** running `npm run dev`. If Next.js starts before the database is up, Prisma's connection pool initialises against a dead socket and all DB queries will fail with `Can't reach database server at localhost:5432` — even after Docker starts. Fix: `docker start atlas-db` then Ctrl+C and restart `npm run dev`.
+
+---
+
 ## What is Atlas Job OS?
 
 Atlas is an AI-powered job search operating system. Instead of manually browsing job boards, you talk to Atlas in plain English. Atlas searches multiple job sites, scores each role against your CV profile, and manages your entire job pipeline — from discovery to application tracking to email follow-ups.
@@ -339,9 +379,23 @@ Many employers don't publish salaries. Atlas shows a grey "Not disclosed" badge.
 
 **Port conflict — `ClientFetchError: Unexpected token '<'`**
 A stale Node.js process is occupying port 3000, forcing Next.js onto port 3001, while `AUTH_URL` still points to :3000 — Auth.js gets HTML back instead of JSON. Fix: kill all node processes before starting dev.
-- Windows: `taskkill /F /IM node.exe`
+- Windows: `cmd /c "taskkill /F /IM node.exe"` (plain `taskkill /F` fails in some shells)
 - Linux/macOS: `pkill node`
-Then restart with `npm run dev`.
+
+Then restart in order: `npm run dev` first (wait for "Ready on :3000"), then `npm run browser-server` in a second terminal.
+
+**Windows — `npm error: Could not read package.json`**
+When opening a new PowerShell terminal from `C:\Users\...`, use `Set-Location` to switch drives:
+```powershell
+Set-Location D:\Projects\Atlas-job-os
+```
+`cd /d D:\Projects\Atlas-job-os` is cmd.exe syntax — it will throw a parameter error in PowerShell. In PowerShell, `cd` and `Set-Location` both work without any flags to switch drives.
+
+**Atlas responds conversationally instead of searching for jobs**
+If you ask "find me jobs" or "search for software roles" and Atlas just chats back without searching, the session may have been interrupted. Start a new chat and try again. (Fixed Apr 3 2026: fast-path classifier now correctly routes all job/role/search messages to tool mode.)
+
+**Atlas calls `get_pipeline` but shows no output**
+Fixed Apr 3 2026. If Atlas ran a tool silently with no response visible, upgrade to the latest version. The pipeline tool now always displays its real result rather than being overridden by pre-generated LLM text.
 
 **Atlas seems slow**
 Simple conversational messages (greetings, questions) respond in ~3 seconds using a lightweight fast-path. Job searches take 8–15 seconds due to browser automation. If Atlas feels slow on simple messages, check the model in use (shown in Agent Profile) — Gemini Flash is the fastest option.
@@ -352,39 +406,64 @@ This was a known bug (fixed). Update to the latest version — internal sync blo
 **CV profile shows wrong information**
 Delete the CV and re-upload. If the PDF is a scanned image, Atlas uses Vertex AI vision — ensure your Google credentials are configured in Settings.
 
+**`[Redis] connection error:` in server logs**
+Redis is not running. Start it with `docker start atlas-redis` (or the Docker command in the README). The app continues to work without Redis but pending jobs are lost on server restart and rate limiting is disabled. For production use, Redis must be running.
+
+**Dashboard Pipeline shows 0 even after a job search**
+If Redis is not connected, the pending jobs store (which tracks jobs previewed but not yet imported) cannot persist. Start Redis and reload — the pipeline count will update after your next search. Imported jobs always show correctly under "Jobs Saved" regardless of Redis.
+
+**Rate limit error: "Rate limit exceeded"**
+You've made more than 100 Atlas requests in the past hour. Wait for the `Retry-After` period shown in the response, or ask your admin to raise the limit (`TOKEN_BUDGET_MONTHLY_USD` in `.env`).
+
 ---
 
 ## Architecture Overview (for developers)
 
 ```
-User chat → Next.js API (immediate status flush)
-                              ↓
-                    ConversationOrchestrator
-                    [auth + getAgent in parallel]
-                    [history + continuity in parallel]
-                              ↓
-                    Gemini (Vertex AI) ← CV profile + memory layers
-                    [SSE streaming with system_instruction separation]
-                    [Fast-path: lightweight prompt for simple messages]
-                    [<continuity_update> blocks filtered in real-time]
-                              ↓
-                    Tool: browser_extract_jobs
-                              ↓
-                    ScraperService → worker.py (Playwright stealth)
-                    [8 platforms in parallel]
-                    [Persistent Chromium profile + fingerprint spoofing]
-                    [scraper_selectors.json overrides loaded at startup]
-                              ↓
-                    Listing page scan (Bezier mouse, DOM cards)
-                              ↓
-                    Detail page scrape (direct, no delays)
-                              ↓
-                    preview_jobs tool → Preview box in chat
+User chat → Next.js API (/api/agents/chat)
+            │
+            ├─ Rate limit check (Redis sliding window, 100/hr)
+            ├─ Monthly budget check (TokenUsage table)
+            │
+            ↓
+          ConversationOrchestrator
+          [auth + getAgent in parallel]
+          [history + continuity in parallel]
+            ↓
+          Gemini (Vertex AI) ← CV profile + memory layers
+          [SSE streaming with system_instruction separation]
+          [Fast-path: lightweight prompt for simple messages]
+          [<continuity_update> blocks filtered in real-time]
+            ↓
+          Tool: browser_extract_jobs
+            ↓
+          ScraperService → worker.py (Playwright stealth)
+          [6 platforms in parallel via Chrome Extension]
+          [Persistent Chromium profile + fingerprint spoofing]
+          [scraper_selectors.json overrides loaded at startup]
+            ↓
+          Listing scan + detail scrape
+            ↓
+          preview_jobs tool
+            ↓
+          Redis (pending:session:{sid}, 2h TTL) ← pending jobs stored here
+            ↓
+          Preview box in chat → user clicks Import
+            ↓
+          import_pending_jobs tool → Prisma → PostgreSQL
+
+Background (npm run workers):
+  BullMQ Worker: job-scrape   ← scrape jobs off HTTP thread
+  BullMQ Worker: gmail-sync   ← background Gmail polling
+  Both backed by Redis queues
 ```
 
 **Key files:**
+- `src/lib/redis.ts` — ioredis singleton, pending jobs helpers, rate limiting
+- `src/lib/logger.ts` — Pino structured logger
+- `src/lib/queue/` — BullMQ queue definitions and workers
 - `src/lib/services/agent/conversation-orchestrator.ts` — tool router
 - `src/lib/services/scraper/worker.py` — Playwright browser worker
 - `src/lib/services/ai/provider.ts` — Vertex AI / LLM providers
-- `src/lib/services/cv/` — CV extraction and profile generation
+- `src/lib/services/agent/token-budget-manager.ts` — DB-backed token tracking
 - `src/components/agents/agent-chat-starter.tsx` — chat UI

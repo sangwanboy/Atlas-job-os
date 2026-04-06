@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { continuitySyncService } from "@/lib/services/agent/continuity-sync-service";
 import { runtimeSettingsStore } from "@/lib/services/settings/runtime-settings-store";
 import { atlasState, ATLAS_FILES } from "@/lib/services/agent/atlas-state-manager";
+import { auth } from "@/auth";
 
 async function resolveAgentId(rawAgentId: string): Promise<string> {
   const normalized = rawAgentId.trim().toLowerCase();
@@ -43,7 +44,9 @@ export async function GET(request: Request) {
     ?? userProfileDoc.match(/^([A-Za-z][^\s;,\n]{1,30})/);
   const userName = userNameMatch?.[1]?.trim() ?? null;
   
-  const runtimeSelection = runtimeSettingsStore.get("local-dev-user");
+  const session = await auth();
+  const userId = session?.user?.id ?? "local-dev-user";
+  const runtimeSelection = runtimeSettingsStore.get(userId);
 
   return NextResponse.json({
     agentId,

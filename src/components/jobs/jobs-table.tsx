@@ -129,7 +129,29 @@ export function JobsTable() {
       }),
       columnHelper.accessor("status", {
         header: "Status",
-        cell: (info) => <span className="badge bg-bg">{info.getValue()}</span>,
+        cell: (info) => {
+          const current = info.getValue();
+          const statusColors: Record<string, string> = {
+            NEW: "text-slate-500",
+            SAVED: "text-blue-500",
+            APPLIED: "text-cyan-500",
+            INTERVIEW: "text-violet-500",
+            OFFER: "text-green-500",
+            REJECTED: "text-red-400",
+            ARCHIVED: "text-slate-400",
+          };
+          return (
+            <select
+              value={current}
+              onChange={(e) => void setStatus(info.row.original.id, e.target.value)}
+              className={`text-xs font-semibold bg-transparent border border-white/20 dark:border-white/10 rounded-lg px-2 py-1 cursor-pointer outline-none focus:ring-1 focus:ring-cyan-400/50 ${statusColors[current] ?? "text-slate-500"}`}
+            >
+              {["NEW", "SAVED", "APPLIED", "INTERVIEW", "OFFER", "REJECTED", "ARCHIVED"].map((s) => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </select>
+          );
+        },
       }),
       columnHelper.accessor("priority", {
         header: "Priority",

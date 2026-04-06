@@ -19,6 +19,9 @@ A production-minded, full-stack SaaS application for intelligent job discovery, 
 | Tables | TanStack React Table v8 |
 | Charts | Recharts |
 | Email Integration | Gmail API (googleapis) |
+| Job Queue | BullMQ (Redis-backed background workers) |
+| Cache / Session Store | Redis (ioredis) — pending jobs, rate limiting |
+| Logging | Pino (structured JSON logs, pretty-printed in dev) |
 | Export | ExcelJS (XLSX) |
 
 ---
@@ -29,6 +32,7 @@ A production-minded, full-stack SaaS application for intelligent job discovery, 
 - Node.js 20+
 - Python 3.10+
 - PostgreSQL (or Docker for DB)
+- Redis 6+ (or Docker — required for pending jobs store, rate limiting, and BullMQ)
 - Git
 
 ### Environment Variables (`.env` or `.env.local`)
@@ -63,6 +67,26 @@ GMAIL_REDIRECT_URI=http://localhost:3000/api/integrations/gmail/callback
 
 # Browser service mode — "headed" shows Playwright window, "headless" runs silently
 BROWSER_MODE=headed
+
+# Redis — required for pending jobs store, rate limiting, and BullMQ workers
+REDIS_URL=redis://localhost:6379
+
+# Token budget — monthly USD cap per user before LLM requests are blocked
+TOKEN_BUDGET_MONTHLY_USD=10.00
+
+# Database connection pool (appended to DATABASE_URL automatically)
+DATABASE_CONNECTION_LIMIT=10
+DATABASE_POOL_TIMEOUT=10
+
+# Browser concurrency pool — max simultaneous Playwright operations
+BROWSER_POOL_SIZE=2
+
+# Sentry error tracking (optional — app works without it)
+NEXT_PUBLIC_SENTRY_DSN=
+SENTRY_DSN=
+SENTRY_ORG=
+SENTRY_PROJECT=
+SENTRY_AUTH_TOKEN=
 ```
 
 ---
@@ -97,7 +121,23 @@ cp .env.example .env
 # Edit .env with your values
 ```
 
-### 4. Start the database (Docker — recommended)
+### 4. Start Redis (Docker — recommended)
+
+```bash
+docker run -d \
+  --name atlas-redis \
+  -p 6379:6379 \
+  --restart unless-stopped \
+  redis:7-alpine
+```
+
+To stop / start later:
+```bash
+docker stop atlas-redis
+docker start atlas-redis
+```
+
+### 5. Start the database (Docker — recommended)
 
 Make sure **Docker Desktop** is running, then:
 
@@ -121,7 +161,7 @@ docker stop atlas-postgres
 docker start atlas-postgres
 ```
 
-### 5. Set up the database schema
+### 6. Set up the database schema
 
 ```bash
 # Generate Prisma client
@@ -137,22 +177,48 @@ npm run prisma:migrate
 npm run prisma:seed
 ```
 
-### 6. Start the dev server
+### 7. Start the app
 
-```bash
-npm run dev            # Next.js on port 3000
+> **Start Docker containers before Next.js.** If `npm run dev` starts before `atlas-db` is up, Prisma initialises against a dead socket and all DB queries fail for the entire session. Always confirm Docker containers are running first.
+
+Open **5 terminals** (PowerShell on Windows):
+
+**Terminal 1 — PostgreSQL**
+```powershell
+docker start atlas-db
 ```
 
-In a second terminal (keep it open):
+**Terminal 2 — Redis**
+```powershell
+docker start atlas-redis
+```
+
+**Terminal 3 — Next.js** (wait for "Ready on :3000")
+```bash
+npm run dev
+```
+
+**Terminal 4 — Browser server**
 ```bash
 npm run browser-server
+```
+
+**Terminal 5 — BullMQ workers** (optional in dev)
+```bash
+npm run workers        # job-scrape + gmail-sync queues
 ```
 
 > **Note:** `npm run browser-server` uses `node --env-file=.env --env-file=.env.local --import=tsx/esm` to ensure `.env.local` is loaded. Do not use `tsx` directly — it won't load `.env.local` and Zod env validation will crash on startup.
 
 > **Both servers must run simultaneously.** The browser server (port 3001) powers Playwright tools and the job scraper. It also runs the Chrome Extension bridge on **port 3002**.
 
-### 7. (Optional but recommended) Install the Chrome Extension
+Health check once everything is running:
+```
+GET http://localhost:3000/api/health
+→ {"status":"ok","db":"ok","redis":"ok"}
+```
+
+### 8. (Optional but recommended) Install the Chrome Extension
 
 Load the extension for bot-free job searching using your real logged-in Chrome session:
 
@@ -261,6 +327,30 @@ Used when extension is not connected. Stealth Chromium with Bezier mouse curves,
 - Automatic model fallback on rate-limits — app stays responsive even if quota is exhausted
 - Parallelised orchestrator setup (auth + agent lookup, history + continuity in parallel)
 
+### Background Workers (BullMQ)
+
+Two BullMQ workers run in a separate process (`npm run workers`) backed by Redis:
+
+| Queue | Purpose |
+|-------|---------|
+| `job-scrape` | Background job scraping (decoupled from HTTP thread, 2 concurrent, 3 retry attempts) |
+| `gmail-sync` | Background Gmail polling (1 concurrent, 2 retry attempts) |
+
+Workers are defined in `src/lib/queue/workers/` and started via `src/lib/queue/start-workers.ts`. SIGTERM/SIGINT handled for graceful shutdown.
+
+### Rate Limiting & Token Budget
+
+- **Rate limiting:** 100 LLM calls per user per hour enforced at `/api/agents/chat` via Redis sliding window. Returns `429 Too Many Requests` with `Retry-After` header.
+- **Monthly token budget:** Configurable per-deployment via `TOKEN_BUDGET_MONTHLY_USD`. Token usage is recorded to the `TokenUsage` DB table after each Atlas response. Requests are blocked (429) when the monthly budget is exceeded.
+
+### Health Check
+
+`GET /api/health` returns:
+```json
+{ "status": "ok", "db": "ok", "redis": "ok", "ts": 1234567890 }
+```
+Returns `200` when all services are healthy, `503` (degraded) if DB or Redis is down. Use for load balancer health checks and uptime monitoring.
+
 ### Multi-Tenant Isolation
 Every user has completely isolated data:
 - **Jobs pipeline** — each user sees only their own imported jobs
@@ -307,8 +397,16 @@ src/
 │   ├── jobs/               # Jobs table + review drawer
 │   └── layout/             # Sidebar + top nav
 ├── lib/
+│   ├── redis.ts            # ioredis singleton + pending jobs helpers + rate limiting
+│   ├── logger.ts           # Pino structured logger (pretty in dev, JSON in prod)
 │   ├── server/
 │   │   └── auth-helpers.ts # requireAuth() + isNextResponse() shared helpers
+│   ├── queue/
+│   │   ├── index.ts        # BullMQ queue definitions (job-scrape, gmail-sync)
+│   │   ├── start-workers.ts # Worker entry point (npm run workers)
+│   │   └── workers/
+│   │       ├── job-scrape.worker.ts
+│   │       └── gmail-sync.worker.ts
 │   ├── services/
 │   │   ├── agent/          # Orchestrator, prompt composer, memory sync
 │   │   ├── scraper/        # ScraperService + worker.py (Crawl4AI)
@@ -351,6 +449,7 @@ prisma/
 | GET | `/api/agents/sessions` | Chat session list |
 | GET/PUT | `/api/settings/runtime` | Runtime settings (admin=global, user=own) |
 | GET | `/api/dashboard/stats` | Per-user dashboard stats |
+| GET | `/api/health` | Health check (DB + Redis ping) — 200 ok / 503 degraded |
 | POST | `/api/integrations/gmail/sync` | Sync Gmail inbox |
 | GET | `/api/exports/jobs` | Export jobs as XLSX |
 
@@ -363,5 +462,13 @@ prisma/
 - **AI provider:** Defaults to Gemini. Configure `GEMINI_API_KEY` or Vertex AI credentials in your `.env`. The provider abstraction in `src/lib/services/ai/provider.ts` supports swapping to OpenAI or others.
 - **Streaming:** Atlas uses Gemini SSE (`streamGenerateContent`) with proper `system_instruction` separation for fast responses. Falls back to batch response if SSE fails. Simple conversational messages use a lightweight prompt path for ~3s response times.
 - **Bundler:** Uses standard webpack (not Turbopack) — Turbopack has a known React Client Manifest corruption bug in Next.js 15.5.x.
-- **Port conflict:** If `AUTH_URL` and Next.js are on different ports (e.g. stale node process forces Next.js to :3001), Auth.js will return HTML instead of JSON causing `ClientFetchError`. Always kill stale node processes before starting dev: `taskkill /F /IM node.exe` (Windows) or `pkill node` (Linux/macOS).
+- **Port conflict:** If `AUTH_URL` and Next.js are on different ports (e.g. stale node process forces Next.js to :3001), Auth.js will return HTML instead of JSON causing `ClientFetchError`. Always kill stale node processes before starting dev. On Windows use `cmd /c "taskkill /F /IM node.exe"` (plain `taskkill /F` fails in some shells). On Linux/macOS: `pkill node`. Then start Next.js first (`npm run dev`) and wait for "Ready on :3000" before starting the browser server.
+- **Windows drive switching (PowerShell):** Use `Set-Location D:\Projects\Atlas-job-os` or `cd D:\Projects\Atlas-job-os` — both work in PowerShell without any flags. `cd /d D:\...` is cmd.exe syntax and will throw a parameter error in PowerShell. If you're using cmd.exe (not PowerShell), the `/d` flag is required.
+- **Atlas not searching jobs:** If Atlas responds conversationally instead of searching, the fast-path classifier incorrectly marked the message as simple chat. Fixed Apr 3 2026: fast-path regex now includes `job`, `jobs`, `role`, `show`, `get me`, `look for`, `fetch`, `hire` etc. so job-related messages always enter full tool mode.
+- **Atlas pipeline tool shows no output:** Fixed Apr 3 2026: `get_pipeline` now always shows the real tool result. Previously the LLM's pre-generated text (written before seeing the tool result) overwrote the actual pipeline data, causing silent tool calls with no visible output.
+- **atlas-db container:** The PostgreSQL container is named `atlas-db` (not `atlas-postgres`). It has `--restart unless-stopped` set so it auto-starts with Docker Desktop. Never create a new container if `docker ps` shows nothing — always check `docker ps -a` first.
 - **Mobile responsive:** Full mobile support with hamburger sidebar, responsive tables, and adaptive layouts.
+- **Redis required:** Redis must be running for pending jobs persistence, rate limiting, and BullMQ workers. Start with `docker start atlas-redis`. If Redis is unavailable, the app degrades gracefully — rate limits fail open, pipeline count shows 0, pending jobs are lost on restart.
+- **Workers are optional in dev:** `npm run workers` starts BullMQ background processors. In development you can skip this — scraping still works inline. Workers become important at scale to offload scraping from the HTTP thread.
+- **Token budget:** Set `TOKEN_BUDGET_MONTHLY_USD` in `.env` to cap per-user AI spend. Usage is recorded in the `TokenUsage` Prisma table. Default is $10/month. Set to a high value or omit enforcement by setting it very high.
+- **Standalone build:** `next.config.ts` uses `output: "standalone"` — the production build can be containerised with Docker without bundling `node_modules`.

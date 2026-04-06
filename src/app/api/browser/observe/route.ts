@@ -12,7 +12,7 @@ export async function GET(req: NextRequest) {
 
   // Attempt to proxy to standalone browser server (3001) if available using node http directly
   // to avoid Next.js fetch buffering/timeouts
-  const remoteUrl = `http://127.0.0.1:3001/api/browser/observe?sessionId=${sessionId}`;
+  const remoteUrl = `http://localhost:3001/api/browser/observe?sessionId=${sessionId}`;
   
   try {
     const { Readable } = await import("stream");

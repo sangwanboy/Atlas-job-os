@@ -89,7 +89,7 @@ export default function RegisterPage() {
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 autoComplete="name"
-                className="w-full rounded-xl border border-white/60 bg-white/70 px-4 py-3 text-text placeholder:text-muted/60 focus:border-cyan-400 focus:outline-none focus:ring-1 focus:ring-cyan-400/50 transition-all"
+                className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-text placeholder:text-muted/40 focus:border-cyan-400 focus:outline-none focus:ring-1 focus:ring-cyan-400/50 transition-all"
               />
             </div>
 
@@ -103,7 +103,7 @@ export default function RegisterPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 autoComplete="email"
-                className="w-full rounded-xl border border-white/60 bg-white/70 px-4 py-3 text-text placeholder:text-muted/60 focus:border-cyan-400 focus:outline-none focus:ring-1 focus:ring-cyan-400/50 transition-all"
+                className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-text placeholder:text-muted/40 focus:border-cyan-400 focus:outline-none focus:ring-1 focus:ring-cyan-400/50 transition-all"
               />
             </div>
 
@@ -118,7 +118,7 @@ export default function RegisterPage() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   autoComplete="new-password"
-                  className="w-full rounded-xl border border-white/60 bg-white/70 px-4 py-3 pr-12 text-text placeholder:text-muted/60 focus:border-cyan-400 focus:outline-none focus:ring-1 focus:ring-cyan-400/50 transition-all"
+                  className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 pr-12 text-text placeholder:text-muted/40 focus:border-cyan-400 focus:outline-none focus:ring-1 focus:ring-cyan-400/50 transition-all"
                 />
                 <button
                   type="button"
@@ -140,7 +140,7 @@ export default function RegisterPage() {
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 autoComplete="new-password"
-                className="w-full rounded-xl border border-white/60 bg-white/70 px-4 py-3 text-text placeholder:text-muted/60 focus:border-cyan-400 focus:outline-none focus:ring-1 focus:ring-cyan-400/50 transition-all"
+                className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-text placeholder:text-muted/40 focus:border-cyan-400 focus:outline-none focus:ring-1 focus:ring-cyan-400/50 transition-all"
               />
             </div>
 

@@ -1,0 +1,1 @@
+[2026-04-05T23:08:47.095Z] CV profile updated from file: 1775430487115_Yashpal_Bagde_-_CV_-_SM.pdf. Name: Yashpal Bagde. Skills: Crowd Management, Access Control, Health & Safety Compliance, Logistics Planning, Incident Response

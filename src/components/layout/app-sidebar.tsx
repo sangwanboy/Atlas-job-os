@@ -30,15 +30,23 @@ export function AppSidebar({ mobileOpen, onClose, collapsed, onToggleCollapse }:
   const { data: session } = useSession();
   const isAdmin = session?.user?.role === "ADMIN";
   const [runtime, setRuntime] = useState<RuntimeSettingsResponse | null>(null);
+  const [sidebarTokens, setSidebarTokens] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     async function load() {
       try {
-        const res = await fetch("/api/settings/runtime");
-        if (res.ok) {
-          const data = (await res.json()) as RuntimeSettingsResponse;
+        const [runtimeRes, syncRes] = await Promise.all([
+          fetch("/api/settings/runtime"),
+          fetch("/api/agents/sync-status?agentId=atlas&sessionId=sidebar"),
+        ]);
+        if (runtimeRes.ok) {
+          const data = (await runtimeRes.json()) as RuntimeSettingsResponse;
           setRuntime(data);
+        }
+        if (syncRes.ok) {
+          const syncData = (await syncRes.json()) as { usage?: { totalTokens?: number } };
+          setSidebarTokens(syncData?.usage?.totalTokens ?? 0);
         }
       } catch {
         // Ignore fetch errors in local dev/degraded mode
@@ -51,7 +59,7 @@ export function AppSidebar({ mobileOpen, onClose, collapsed, onToggleCollapse }:
     return () => clearInterval(interval);
   }, []);
 
-  const totalTokens = runtime?.usage.totalTokens ?? 0;
+  const totalTokens = sidebarTokens;
   const budget = runtime?.settings.monthlyTokenBudget ?? 1000000;
   const percentage = Math.min(100, Math.round((totalTokens / budget) * 100));
   const budgetLabel = budget >= 1000000 ? `${(budget / 1000000).toFixed(1)}M` : `${Math.round(budget / 1000)}k`;

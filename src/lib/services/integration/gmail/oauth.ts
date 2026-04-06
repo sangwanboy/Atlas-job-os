@@ -2,7 +2,7 @@ import { google } from "googleapis";
 import { prisma } from "@/lib/db";
 import { localIntegrationCache } from "./local-integration-cache";
 
-const GOOGLE_REDIRECT_URI = `${process.env.NEXT_PUBLIC_APP_URL || "http://127.0.0.1:3000"}/api/integrations/gmail/callback`;
+const GOOGLE_REDIRECT_URI = `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/api/integrations/gmail/callback`;
 const HARDCODED_USER_ID = "cm7c10bsw000008ld6v3cct9q";
 
 // Ensure environment variables are loaded (legacy/env-first)

@@ -24,6 +24,8 @@ type RuntimeState = {
   strictAgentResponseMode: boolean;
   allowProviderFallback: boolean;
   redactPiiInMemory: boolean;
+  rateLimitPerHour: number;
+  monthlyBudgetUsd: number;
   usagePeriodStart: string;
   usageByProvider: Record<LlmProvider, ProviderUsageRuntime>;
   updatedAt: string;
@@ -55,6 +57,8 @@ function createDefaultState(): RuntimeState {
     strictAgentResponseMode: true,
     allowProviderFallback: true,
     redactPiiInMemory: true,
+    rateLimitPerHour: 100,
+    monthlyBudgetUsd: 10,
     usagePeriodStart: new Date().toISOString(),
     usageByProvider,
     updatedAt: new Date().toISOString(),
@@ -65,6 +69,8 @@ function migrate(state: RuntimeState): RuntimeState {
   if (state.strictAgentResponseMode === undefined) state.strictAgentResponseMode = true;
   if ((state as any).maxJobsPerSearch === undefined) (state as any).maxJobsPerSearch = 20;
   if ((state as any).outputPerPrompt === undefined) (state as any).outputPerPrompt = 10;
+  if ((state as any).rateLimitPerHour === undefined) (state as any).rateLimitPerHour = 100;
+  if ((state as any).monthlyBudgetUsd === undefined) (state as any).monthlyBudgetUsd = 10;
   return state;
 }
 
@@ -136,6 +142,8 @@ function toResponse(state: RuntimeState): RuntimeSettingsResponse {
       strictAgentResponseMode: state.strictAgentResponseMode ?? true,
       allowProviderFallback: state.allowProviderFallback,
       redactPiiInMemory: state.redactPiiInMemory,
+      rateLimitPerHour: (state as any).rateLimitPerHour ?? 100,
+      monthlyBudgetUsd: (state as any).monthlyBudgetUsd ?? 10,
     },
     usage: toUsageSummary(state),
     updatedAt: state.updatedAt,
@@ -170,6 +178,8 @@ export class RuntimeSettingsStore {
     state.strictAgentResponseMode = payload.strictAgentResponseMode;
     state.allowProviderFallback = payload.allowProviderFallback;
     state.redactPiiInMemory = payload.redactPiiInMemory;
+    (state as any).rateLimitPerHour = payload.rateLimitPerHour ?? 100;
+    (state as any).monthlyBudgetUsd = payload.monthlyBudgetUsd ?? 10;
 
     await persistState(key, state);
     return toResponse(state);

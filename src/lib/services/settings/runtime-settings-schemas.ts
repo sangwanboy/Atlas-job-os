@@ -11,4 +11,7 @@ export const runtimeSettingsUpdateSchema = z.object({
   strictAgentResponseMode: z.boolean().optional().default(true),
   allowProviderFallback: z.boolean(),
   redactPiiInMemory: z.boolean(),
+  // Beta scaling controls
+  rateLimitPerHour: z.number().int().min(1).max(10000).optional().default(100),
+  monthlyBudgetUsd: z.number().min(0).max(10000).optional().default(10),
 });

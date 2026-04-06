@@ -15,7 +15,8 @@ import { ScraperService } from "@/lib/services/scraper/scraper-service";
 import { syncGmail } from "@/lib/services/integration/gmail/sync-engine";
 import { runtimeSettingsStore } from "@/lib/services/settings/runtime-settings-store";
 import { prisma } from "@/lib/db";
-import { localJobsCache } from "@/lib/services/jobs/local-jobs-cache";
+import { getPendingJobs, setPendingJobs, clearPendingJobs } from "@/lib/redis";
+import { logger } from "@/lib/logger";
 import fs from "node:fs/promises";
 import path from "node:path";
 
@@ -44,23 +45,22 @@ async function saveJobToDB(params: {
   title: string; company: string; location: string;
   url?: string; salary?: string; source?: string;
   description?: string; skills?: string; datePosted?: string;
-  jobType?: string; score?: number;
+  jobType?: string; score?: number; userId?: string;
 }): Promise<{ id: string; title: string; company: string }> {
-  let user: { id: string };
-  try {
-    user = await prisma.user.upsert({
+  // Resolve userId — use authenticated user, fall back to dev user for unauthenticated agent calls
+  let resolvedUserId = params.userId;
+  if (!resolvedUserId) {
+    const devUser = await prisma.user.upsert({
       where: { email: "local-dev-user@ai-job-os.local" },
       update: { name: "Local Dev User" },
       create: { email: "local-dev-user@ai-job-os.local", name: "Local Dev User" },
       select: { id: true },
     });
-  } catch {
-    // Race condition on concurrent saves — row already exists, just fetch it
-    user = (await prisma.user.findFirst({ where: { email: "local-dev-user@ai-job-os.local" }, select: { id: true } }))!;
+    resolvedUserId = devUser.id;
   }
   // Deduplicate by sourceUrl
   if (params.url) {
-    const dupe = await prisma.job.findFirst({ where: { userId: user.id, sourceUrl: params.url }, select: { id: true, title: true } });
+    const dupe = await prisma.job.findFirst({ where: { userId: resolvedUserId, sourceUrl: params.url }, select: { id: true, title: true } });
     if (dupe) return { id: dupe.id, title: params.title, company: params.company };
   }
 
@@ -69,7 +69,7 @@ async function saveJobToDB(params: {
   const salary = parseSalaryBounds(params.salary);
   const job = await prisma.job.create({
     data: {
-      userId: user.id,
+      userId: resolvedUserId,
       source: params.source ?? "Agent Search",
       sourceUrl: params.url,
       title: params.title,
@@ -93,7 +93,7 @@ async function saveJobToDB(params: {
     await prisma.jobScore.create({
       data: {
         jobId: job.id,
-        userId: user.id,
+        userId: resolvedUserId,
         totalScore: params.score,
         confidence: 0.8,
         explanation: "Scraper relevance score",
@@ -110,7 +110,7 @@ const maxToolRounds = 10;
 
 const toolIntentPattern = /(\bfind\b|\bsearch\b|\bjob\b|\bsave\b|\badd\b|\bcreate\b|\bnavigate\b|\bopen\b|\bclick\b|\bextract\b|\bbrowser\b|\bgmail\b|\bemail\b|\bsync\b)/i;
 
-// In-memory pending jobs store (session-scoped)
+// Pending jobs are stored in Redis (session-scoped, 2h TTL) via getPendingJobs/setPendingJobs/clearPendingJobs
 type PendingJob = {
   title: string;
   company: string;
@@ -124,8 +124,6 @@ type PendingJob = {
   score?: number;
   isAlreadyImported?: boolean;
 };
-const _g = globalThis as any;
-const pendingJobsStore: Map<string, PendingJob[]> = _g.__pendingJobsStore ?? (_g.__pendingJobsStore = new Map());
 
 const toolDescriptors = [
   {
@@ -634,7 +632,7 @@ async function executeToolCall(toolCall: ToolCall, sid: string, userId?: string)
       return "No jobs to preview — the list is empty.";
     }
     const params = previewJobsToolSchema.parse(toolCall.parameters);
-    const existing = pendingJobsStore.get(sid) || [];
+    const existing = await getPendingJobs(sid);
     const newJobs = params.jobs;
     const combined = [...existing, ...newJobs];
     const uniqueJobsMap = new Map();
@@ -663,8 +661,8 @@ async function executeToolCall(toolCall: ToolCall, sid: string, userId?: string)
       }
     }
 
-    pendingJobsStore.set(sid, finalJobs);
-    
+    await setPendingJobs(sid, finalJobs);
+
     const jobList = finalJobs.map((j, i) => {
       const richness = [];
       if (j.description && j.description.length > 50) richness.push("📄 desc");
@@ -686,7 +684,7 @@ async function executeToolCall(toolCall: ToolCall, sid: string, userId?: string)
   }
   if (toolCall.tool === "import_pending_jobs") {
     const params = importPendingJobsSchema.parse(toolCall.parameters);
-    let pending = pendingJobsStore.get(sid);
+    let pending = await getPendingJobs(sid);
     
     // Fallback: Use passed jobs if store is empty
     if ((!pending || pending.length === 0) && params.jobs && params.jobs.length > 0) {
@@ -711,15 +709,16 @@ async function executeToolCall(toolCall: ToolCall, sid: string, userId?: string)
         const saved = await saveJobToDB({
           title: job.title,
           company: job.company,
-          location: job.location,
+          location: job.location ?? "",
           url: job.url,
           salary: job.salary,
           source: job.source || "Agent Search",
           description: job.description,
-          skills: job.skills,
+          skills: Array.isArray(job.skills) ? job.skills.join(", ") : job.skills,
           datePosted: (job as any).datePosted,
           jobType: job.jobType,
           score: job.score,
+          userId: userId,
         });
         results.push(`✅ "${saved.title}" at ${saved.company} — saved`);
         job.isAlreadyImported = true;
@@ -732,9 +731,9 @@ async function executeToolCall(toolCall: ToolCall, sid: string, userId?: string)
     const allImported = pending.every(j => j.isAlreadyImported);
     // Clear the store once all jobs are imported so get_pipeline doesn't re-surface them
     if (allImported) {
-      pendingJobsStore.set(sid, []);
+      await clearPendingJobs(sid);
     } else {
-      pendingJobsStore.set(sid, pending); // Persist partial import statuses
+      await setPendingJobs(sid, pending); // Persist partial import statuses
     }
     
     const reply = `Imported ${results.filter(r => r.startsWith("✅")).length}/${jobsToImport.length} jobs:\n${results.join("\n")}`;
@@ -744,10 +743,9 @@ async function executeToolCall(toolCall: ToolCall, sid: string, userId?: string)
   }
   if (toolCall.tool === "get_pipeline") {
     const { query } = (toolCall.parameters ?? {}) as { query?: string };
-    // First check pendingJobsStore (previewed but not yet imported)
-    const pending = pendingJobsStore.get(sid) || [];
+    // First check Redis (previewed but not yet imported)
+    const pending = await getPendingJobs(sid);
     const unimportedPending = pending.filter(j => !j.isAlreadyImported);
-    const jobs = localJobsCache.list();
     if (unimportedPending.length > 0) {
       // There are previewed jobs — surface them and remind Atlas to use import_pending_jobs
       const list = unimportedPending.map((j, i) => {
@@ -763,42 +761,48 @@ async function executeToolCall(toolCall: ToolCall, sid: string, userId?: string)
       const withDesc = unimportedPending.filter(j => j.description && j.description.length > 50).length;
       return `__PREVIEW_JOBS__${JSON.stringify(previewJobs)}__END_PREVIEW__\n\n### 📋 Staged Preview (${unimportedPending.length} job${unimportedPending.length !== 1 ? "s" : ""} — ${withDesc} with descriptions — not yet imported)\n${list}\n\nThese jobs are staged in the preview but not yet saved. Use import_pending_jobs with action='import_all' to save them to the tracker.`;
     }
-    if (jobs.length === 0) return "No jobs currently in the pipeline. Run a job search to discover new roles.";
+    // No staged preview — fall back to recent saved jobs in DB
+    const dbJobs = userId ? await prisma.job.findMany({
+      where: { userId, applicationStatus: "SAVED" },
+      orderBy: { createdAt: "desc" },
+      take: 50,
+      select: { id: true, title: true, location: true, source: true, sourceUrl: true, salaryMin: true, salaryMax: true, descriptionRaw: true, requiredSkills: true, company: { select: { name: true } } },
+    }) : [];
+    if (dbJobs.length === 0) return "No jobs currently in the pipeline. Run a job search to discover new roles.";
     const filtered = query
-      ? jobs.filter(j => `${j.title} ${j.company} ${j.location}`.toLowerCase().includes(query.toLowerCase()))
-      : jobs;
+      ? dbJobs.filter(j => `${j.title} ${j.company?.name ?? ""} ${j.location}`.toLowerCase().includes(query.toLowerCase()))
+      : dbJobs;
     if (filtered.length === 0) return `No pipeline jobs match "${query}".`;
     const capped = filtered.slice(0, 50);
     const previewJobs = capped.map(j => ({
       title: j.title,
-      company: j.company,
-      location: j.location,
-      url: j.sourceUrl,
-      salary: j.salaryRange,
+      company: j.company?.name ?? "Unknown",
+      location: j.location ?? "",
+      url: j.sourceUrl ?? "",
+      salary: j.salaryMin ? `${j.salaryMin}${j.salaryMax ? `–${j.salaryMax}` : ""}` : undefined,
       source: j.source,
-      score: j.score,
-      isAlreadyImported: false,
-      hasDescription: Boolean(j.description && j.description.length > 50),
-      hasSkills: Boolean(j.skills && j.skills.length > 0),
-      descriptionPreview: j.description && j.description.length > 50 ? j.description.slice(0, 120).trim() + "…" : "",
+      isAlreadyImported: true,
+      hasDescription: Boolean(j.descriptionRaw && j.descriptionRaw.length > 50),
+      hasSkills: j.requiredSkills.length > 0,
+      descriptionPreview: j.descriptionRaw && j.descriptionRaw.length > 50 ? j.descriptionRaw.slice(0, 120).trim() + "…" : "",
     }));
-    const withDesc = capped.filter(j => j.description && j.description.length > 50).length;
-    const list = capped.map((j, i) => {
-      const richness = [j.description && j.description.length > 50 ? "📄 desc" : "", j.skills ? "🔧 skills" : ""].filter(Boolean).join(", ");
-      return `${i + 1}. **${j.title}** at ${j.company} (${j.location}) — Score: ${j.score ?? "N/A"}, Salary: ${j.salaryRange || "Not disclosed"}, Source: ${j.source}${richness ? ` [${richness}]` : ""}`;
+    const withDesc = capped.filter(j => j.descriptionRaw && j.descriptionRaw.length > 50).length;
+    const listStr = capped.map((j, i) => {
+      const salary = j.salaryMin ? `, Salary: ${j.salaryMin}${j.salaryMax ? `–${j.salaryMax}` : ""}` : "";
+      return `${i + 1}. **${j.title}** at ${j.company?.name ?? "Unknown"} (${j.location ?? ""}) — Source: ${j.source}${salary}`;
     }).join("\n");
-    return `__PREVIEW_JOBS__${JSON.stringify(previewJobs)}__END_PREVIEW__\n\n### 📋 Pipeline (${filtered.length} staged job${filtered.length !== 1 ? "s" : ""} — ${withDesc} with full descriptions)\n${list}\n\nThese jobs have not been imported yet. Tell the user to say "import all" to save them.`;
+    return `__PREVIEW_JOBS__${JSON.stringify(previewJobs)}__END_PREVIEW__\n\n### 📋 Saved Jobs (${filtered.length} job${filtered.length !== 1 ? "s" : ""} — ${withDesc} with descriptions)\n${listStr}\n\nThese jobs are already saved in your pipeline.`;
   }
   if (toolCall.tool === "save_job") {
     const params = saveJobToolSchema.parse(toolCall.parameters);
-    const saved = await saveJobToDB(params);
+    const saved = await saveJobToDB({ ...params, userId });
 
     // Update pending store if this URL was in there
-    const pending = pendingJobsStore.get(sid) || [];
+    const pending = await getPendingJobs(sid);
     const idx = pending.findIndex(j => j.url === params.url);
     if (idx !== -1) {
       pending[idx].isAlreadyImported = true;
-      pendingJobsStore.set(sid, pending);
+      await setPendingJobs(sid, pending);
     }
 
     return `Job "${saved.title}" at ${saved.company} saved successfully.`;
@@ -806,27 +810,25 @@ async function executeToolCall(toolCall: ToolCall, sid: string, userId?: string)
   if (toolCall.tool === "delete_job") {
     const { id } = (toolCall.parameters ?? {}) as { id: string };
     if (!id) return "delete_job failed: no job ID provided.";
-    // Remove from localJobsCache
-    const cached = localJobsCache.list();
-    const filtered = cached.filter(j => j.id !== id);
-    if (filtered.length === cached.length) return `No job found with ID "${id}".`;
-    localJobsCache.clear();
-    if (filtered.length > 0) localJobsCache.upsertMany(filtered as any);
-    // Remove from pendingJobsStore
-    const pending = pendingJobsStore.get(sid) || [];
-    pendingJobsStore.set(sid, pending.filter(j => (j as any).id !== id));
+    // Remove from Redis pending store
+    const pending = await getPendingJobs(sid);
+    await setPendingJobs(sid, pending.filter(j => (j as any).id !== id));
+    // Remove from DB if it was already saved
+    try {
+      await prisma.job.delete({ where: { id } });
+    } catch {
+      // Job may not be in DB yet (only staged in preview) — that's fine
+    }
     return `Job "${id}" removed from the pipeline.`;
   }
   if (toolCall.tool === "clear_pipeline") {
-    localJobsCache.clear();
-    pendingJobsStore.set(sid, []);
+    await clearPendingJobs(sid);
     return "Pipeline cleared. All staged jobs have been removed.";
   }
   if (toolCall.tool === "delete_all_saved_jobs") {
     if (!userId) return "delete_all_saved_jobs failed: no user session available.";
     const { count } = await prisma.job.deleteMany({ where: { userId } });
-    localJobsCache.clear();
-    pendingJobsStore.set(sid, []);
+    await clearPendingJobs(sid);
     return `All ${count} saved job${count !== 1 ? "s" : ""} have been permanently deleted from the database.`;
   }
   if (toolCall.tool === "read_context_memory") {
@@ -1470,7 +1472,7 @@ export class ConversationOrchestrator {
       continuitySynced: true, 
       rehydrated, 
       toolLogs, 
-      pendingJobs: pendingJobsStore.get(sid) || null 
+      pendingJobs: effectiveSessionId ? await getPendingJobs(effectiveSessionId).catch(() => null) : null
     };
   }
 }

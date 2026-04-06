@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { localJobsCache } from "@/lib/services/jobs/local-jobs-cache";
 import { requireAuth, isNextResponse } from "@/lib/server/auth-helpers";
+import { getRedis } from "@/lib/redis";
 
 export async function GET() {
   try {
@@ -9,10 +9,7 @@ export async function GET() {
     if (isNextResponse(authResult)) return authResult;
     const { userId } = authResult;
 
-    // 1. Fetch from Local Cache (Most resilient for Dev)
-    const cachedJobs = localJobsCache.list();
-
-    // 2. Attempt to fetch from Prisma — queries run in parallel
+    // 1. Attempt to fetch from Prisma — queries run in parallel
     let dbJobsCount = 0;
     try {
       dbJobsCount = await prisma.job.count({ where: { userId } });
@@ -21,24 +18,41 @@ export async function GET() {
     }
 
     // 3. Resolve Metrics
-    // Pipeline  = pending/staged jobs not yet imported (temp, from pendingJobsStore across all sessions)
-    // Jobs Saved = jobs actually imported to DB by Atlas
-    const pendingStore: Map<string, { isAlreadyImported?: boolean }[]> =
-      (globalThis as any).__pendingJobsStore ?? new Map();
-    const pipelineCount = Array.from(pendingStore.values())
-      .reduce((sum, jobs) => sum + jobs.filter(j => !j.isAlreadyImported).length, 0);
-    const finalTotal = pipelineCount;
-    const finalNew = dbJobsCount;
+    // Pipeline  = pending/staged jobs not yet imported (from Redis, session-scoped best-effort)
+    // Jobs Saved = jobs actually imported to DB
+    let pipelineCount = 0;
+    try {
+      const r = getRedis();
+      const keys = await r.keys("pending:session:*");
+      if (keys.length > 0) {
+        const vals = await r.mget(...keys);
+        pipelineCount = vals.reduce((sum, v) => {
+          if (!v) return sum;
+          try {
+            const jobs = JSON.parse(v) as { isAlreadyImported?: boolean }[];
+            return sum + jobs.filter(j => !j.isAlreadyImported).length;
+          } catch { return sum; }
+        }, 0);
+      }
+    } catch { /* Redis unavailable — pipeline shows 0 */ }
+
+    // Collapse applied/interviews into one query
     let applied = 0;
     let interviewing = 0;
     try {
-      [applied, interviewing] = await Promise.all([
-        prisma.job.count({ where: { userId, applicationStatus: "APPLIED" } }),
-        prisma.job.count({ where: { userId, applicationStatus: "INTERVIEW" } }),
-      ]);
-    } catch {
-      // fall through with 0s
-    }
+      const statusCounts = await prisma.job.groupBy({
+        by: ["applicationStatus"],
+        where: { userId, applicationStatus: { in: ["APPLIED", "INTERVIEW"] } },
+        _count: { id: true },
+      });
+      for (const row of statusCounts) {
+        if (row.applicationStatus === "APPLIED") applied = row._count.id;
+        if (row.applicationStatus === "INTERVIEW") interviewing = row._count.id;
+      }
+    } catch { /* fall through with 0s */ }
+
+    const finalTotal = pipelineCount;
+    const finalNew = dbJobsCount;
 
     const kpiMetrics = [
       {

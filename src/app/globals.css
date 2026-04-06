@@ -166,6 +166,14 @@ body {
   @apply rounded-full bg-slate-400/30 transition-colors hover:bg-slate-400/50;
 }
 
+.dark .custom-scrollbar::-webkit-scrollbar-track {
+  @apply bg-white/5 rounded-full;
+}
+
+.dark .custom-scrollbar::-webkit-scrollbar-thumb {
+  @apply rounded-full bg-white/20 hover:bg-white/35;
+}
+
 .scroll-well {
   @apply rounded-xl border border-white/60 bg-slate-50/40 shadow-inner backdrop-blur-sm;
 }

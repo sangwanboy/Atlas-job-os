@@ -5,15 +5,13 @@
       "name": "Next.js Dev Server",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev"],
-      "port": 3000,
-      "autoPort": true
+      "port": 3000
     },
     {
       "name": "Browser Service",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "browser-server"],
-      "port": 3002,
-      "autoPort": true
+      "port": 3001
     }
   ]
 }

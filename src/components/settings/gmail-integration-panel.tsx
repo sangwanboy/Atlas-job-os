@@ -139,6 +139,13 @@ export function GmailIntegrationPanel() {
         </div>
       </div>
 
+      {successParam && (
+        <div className="mt-4 flex items-center gap-2 rounded-lg border border-accent/50 bg-accent/10 p-3 text-sm text-accent">
+          <CheckCircle2 className="h-4 w-4" />
+          <span>Gmail connected successfully! Your inbox is now being synced.</span>
+        </div>
+      )}
+
       {errorParam && (
         <div className="mt-4 flex items-center gap-2 rounded-lg border border-danger/50 bg-danger/10 p-3 text-sm text-danger">
           <MailWarning className="h-4 w-4" />
@@ -217,9 +224,16 @@ export function GmailIntegrationPanel() {
                   </span>
                 </p>
                 {status.syncStatus === "ERROR" && status.syncError && (
-                  <p className="text-[10px] text-danger/80 font-mono bg-danger/5 p-1 px-2 rounded border border-danger/20 max-w-md truncate" title={status.syncError}>
-                    Error: {status.syncError}
-                  </p>
+                  status.syncError.includes("invalid_grant") ? (
+                    <div className="flex items-center gap-2 rounded border border-amber-400/30 bg-amber-500/10 px-2 py-1 text-xs text-amber-400">
+                      <MailWarning className="h-3.5 w-3.5 shrink-0" />
+                      <span>OAuth token expired or revoked. Re-connect Gmail to restore access.</span>
+                    </div>
+                  ) : (
+                    <p className="text-[10px] text-danger/80 font-mono bg-danger/5 p-1 px-2 rounded border border-danger/20 max-w-md truncate" title={status.syncError}>
+                      Error: {status.syncError}
+                    </p>
+                  )
                 )}
               </div>
             ) : (
@@ -231,10 +245,17 @@ export function GmailIntegrationPanel() {
         <div className="flex items-center gap-3">
           {isConnected ? (
             <>
-              <button onClick={handleSync} disabled={isSyncing || status.syncStatus === "SYNCING"} className="rounded-lg border bg-panel px-4 py-2 text-sm font-semibold flex items-center gap-2 hover:bg-bg disabled:opacity-50 transition-all">
-                <RefreshCw className={`h-4 w-4 ${isSyncing || status.syncStatus === "SYNCING" ? "animate-spin" : ""}`} />
-                {isSyncing || status.syncStatus === "SYNCING" ? "Syncing..." : "Sync Now"}
-              </button>
+              {status.syncError?.includes("invalid_grant") ? (
+                <a href="/api/integrations/gmail/connect" className="rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-white flex items-center gap-2 hover:bg-amber-600 transition-all">
+                  <Mail className="h-4 w-4" />
+                  Re-connect Gmail
+                </a>
+              ) : (
+                <button onClick={handleSync} disabled={isSyncing || status.syncStatus === "SYNCING"} className="rounded-lg border bg-panel px-4 py-2 text-sm font-semibold flex items-center gap-2 hover:bg-bg disabled:opacity-50 transition-all">
+                  <RefreshCw className={`h-4 w-4 ${isSyncing || status.syncStatus === "SYNCING" ? "animate-spin" : ""}`} />
+                  {isSyncing || status.syncStatus === "SYNCING" ? "Syncing..." : "Sync Now"}
+                </button>
+              )}
               <button onClick={handleDisconnect} disabled={isDisconnecting} className="rounded-lg border border-danger/50 text-danger px-4 py-2 text-sm font-semibold flex items-center gap-2 hover:bg-danger/10 disabled:opacity-50 transition-all">
                 {isDisconnecting ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Unplug className="h-4 w-4" />}
                 {isDisconnecting ? "Disconnecting..." : "Disconnect"}

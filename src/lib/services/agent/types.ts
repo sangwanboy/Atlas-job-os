@@ -34,7 +34,8 @@ export type AgentRuntimeResponse = {
   continuitySynced?: boolean;
   rehydrated?: boolean;
   toolLogs?: Array<{ tool: string; parameters: any; result: string }>;
-  pendingJobs?: Array<{ title: string; company: string; location: string; url: string; salary?: string; source?: string }> | null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  pendingJobs?: any[] | null;
 };
 
 export type RegisteredAgent = {

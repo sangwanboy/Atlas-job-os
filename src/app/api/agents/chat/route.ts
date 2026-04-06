@@ -5,12 +5,34 @@ import { llmSettingsStore } from "@/lib/services/settings/llm-settings-store";
 import { runtimeSettingsStore } from "@/lib/services/settings/runtime-settings-store";
 import { chatRequestSchema } from "@/lib/utils/validation";
 import { requireAuth, isNextResponse } from "@/lib/server/auth-helpers";
+import { checkRateLimit } from "@/lib/redis";
 
 export async function POST(request: Request) {
   try {
     const authResult = await requireAuth();
     if (isNextResponse(authResult)) return authResult;
     const { userId: settingsUserId } = authResult;
+
+    // Rate limit: configurable via Settings → Runtime Controls → Rate Limit (requests/hr)
+    const runtimeForRl = runtimeSettingsStore.get("global");
+    const rlLimit = (runtimeForRl.settings as any).rateLimitPerHour ?? 100;
+    const rl = await checkRateLimit("llm", settingsUserId, rlLimit);
+    if (!rl.allowed) {
+      const retryAfter = Math.ceil((rl.resetAt - Date.now()) / 1000);
+      return NextResponse.json(
+        { error: "Rate limit exceeded. Please wait before sending more messages." },
+        { status: 429, headers: { "Retry-After": String(retryAfter) } }
+      );
+    }
+
+    // Monthly token budget guard
+    const overBudget = await tokenBudgetManager.isOverBudget(settingsUserId);
+    if (overBudget) {
+      return NextResponse.json(
+        { error: "Monthly AI usage budget exceeded. Contact support to increase your limit." },
+        { status: 429 }
+      );
+    }
 
     const json = (await request.json()) as Record<string, unknown>;
 
@@ -59,12 +81,15 @@ export async function POST(request: Request) {
 
           const promptTokens = tokenBudgetManager.estimateTokens(parsed.message);
           const completionTokens = tokenBudgetManager.estimateTokens(result.reply);
-          
+
           void runtimeSettingsStore.trackUsage({
             provider: selectedProvider,
             promptTokens,
             completionTokens,
           }, settingsUserId);
+
+          // Persist token usage to DB for monthly budget enforcement
+          void tokenBudgetManager.recordUsage(settingsUserId, promptTokens, completionTokens);
 
           controller.enqueue(encoder.encode(JSON.stringify({ type: "final", result }) + "\n"));
         } catch (error) {

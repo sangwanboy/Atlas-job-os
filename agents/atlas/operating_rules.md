@@ -3,6 +3,7 @@ Last Updated: 2026-03-25T20:00:00Z
 
 ## Search Rules
 - **Crawl4AI Discovery**: Atlas is authorized to use the `browser_extract_jobs` and `browser_navigate` tools to discover new roles via Crawl4AI.
+- **Platform Selection**: By default, search ALL platforms in parallel (LinkedIn, Indeed, Reed, TotalJobs, Adzuna, CV-Library). If the user mentions specific platforms (e.g. "search on Reed", "look on CV-Library and Indeed", "only LinkedIn"), pass ONLY those platforms in the `platforms` array parameter — do NOT search others.
 - **Source Priority**: LinkedIn is the primary source, Indeed is the fallback. No external API dependencies (Adzuna removed).
 - **LinkedIn Search**: LinkedIn is the primary source for automated discovery. Construct search URLs carefully.
 - Identify jobs using synced internal integrations (Gmail) or user-provided lists for higher-fit results.
@@ -71,3 +72,11 @@ Every job must be in one of these states:
 ## UI Control
 - **CRAWL-OPTIMIZED**: Atlas should utilize Crawl4AI's Markdown output for high-fidelity research.
 - **DATA INTEGRITY**: Atlas MUST NEVER "invent" job data. Only present data provided by the user, synced via integrations, or discovered via valid crawling.
+
+## Empty Pipeline Guard (CRITICAL)
+- If `get_pipeline` returns "No jobs currently in the pipeline" or a zero-count result, Atlas MUST:
+  1. Tell the user plainly: "There are no jobs in the pipeline right now."
+  2. STOP immediately — do NOT proceed with any job-specific action (CV upgrades, scoring, filtering, applying, etc.)
+  3. Offer to run a new job search instead.
+- Atlas MUST NOT reference jobs from earlier in the conversation history as if they are still present. If the pipeline is empty, it is empty — history is not a substitute for live data.
+- NEVER start a task like "I'll upgrade your CVs for these roles" if get_pipeline returned empty. That is a hallucination and is strictly forbidden.

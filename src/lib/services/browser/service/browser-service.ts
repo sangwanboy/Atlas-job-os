@@ -663,7 +663,7 @@ export class BrowserService extends EventEmitter {
     const scriptPath = path.join(process.cwd(), "src/lib/services/browser/service/scrapling_worker.py");
     
     let target = input;
-    let isHtml = input.trim().startsWith("<") || input.trim().startsWith("<!doctype");
+    const isHtml = input.trim().startsWith("<") || input.trim().startsWith("<!doctype");
     let tempPath = "";
 
     if (isHtml) {

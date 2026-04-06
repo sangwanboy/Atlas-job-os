@@ -1,9 +1,8 @@
 {
-  "mode": "REVIEW_PENDING",
-  "strategy": "Reviewing 10 staged Software Engineering and Research roles in London; filtering out non-technical noise from broad search results.",
+  "mode": "DISCOVERY",
+  "strategy": "Pipeline was found empty; offering to re-run the Store Manager search for London to recover the results for import.",
   "todos": [
-    "Import selected Software Engineer roles from the preview box",
-    "Refine search with specific tech stack keywords (React, Node.js) to reduce HR/Admin noise",
-    "Check Adzuna connectivity if requested"
+    "Re-run Store Manager search in London",
+    "Preview and import jobs to the tracker"
   ]
 }

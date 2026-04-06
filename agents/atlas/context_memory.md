@@ -410,6 +410,9 @@
 [2026-03-28T00:00:01.000Z] TAG_FILTER: <continuity_update> blocks stripped from stream in real-time via stateful buffer — no internal JSON leaks to user during streaming.
 [2026-03-28T00:00:02.000Z] STOP_BUTTON: AbortController-based stop/kill added to chat UI. Red circular button with red square centre replaces Send while Atlas is generating. Aborted messages show _(stopped)_.
 [2026-03-28T00:00:03.000Z] STEALTH_BROWSER: Persistent Chromium profile at agents/atlas/browser_profile/. Playwright-stealth applied. Fingerprint spoofing: navigator.webdriver=undefined, canvas noise, WebGL vendor override, realistic plugins array, hardwareConcurrency=8.
+[2026-04-06T17:00:00.000Z] BETA_SCALING: Full beta-readiness upgrade applied. pendingJobsStore migrated from globalThis (dies on restart) to Redis (pending:session:{sid}, 2h TTL). Rate limiting added at /api/agents/chat (100/hr per user, Redis sliding window). Token usage now persisted to TokenUsage DB table with monthly budget enforcement (TOKEN_BUDGET_MONTHLY_USD). BullMQ workers added (job-scrape, gmail-sync queues). Health endpoint at /api/health. Dashboard stats optimised (single GROUP BY for applied/interviews). Company name index added to Prisma schema. Pino structured logging available via src/lib/logger.ts. output: standalone added to next.config.ts. Build passes clean.
+[2026-04-06T17:01:00.000Z] WORKERS_NOTE: Background workers started with `npm run workers` (from D:\Projects\Atlas-job-os). Redis must be running (docker start atlas-redis). App degrades gracefully if Redis is unavailable — rate limits fail open, pipeline count shows 0.
+[2026-04-06T17:02:00.000Z] DOCS_UPDATED: README.md and USER_MANUAL.md updated to reflect Redis requirement, workers setup, rate limiting, token budget, and new health endpoint.
 [2026-03-28T00:00:04.000Z] SELF_HEALING_SCRAPER: update_scraper_selectors tool added. On scrape failure worker.py emits dom_sample. Atlas can analyse DOM and write new CSS selector overrides to agents/atlas/scraper_selectors.json loaded at worker startup.
 [2026-03-28T00:00:05.000Z] PERF_PARALLEL_SETUP: Orchestrator setup parallelised into 3 waves — (auth+getAgent), (createOrReuseSession), (getSessionMessages+hydrateTurnContext). Estimated 700ms saved per turn. Immediate status flush added to chat route before orchestrator.run().
 [2026-03-28T00:00:06.000Z] STABILITY_FIXES: Stream controller closed-flag guard prevents enqueue-after-close errors. User upsert race condition (P2002) caught with findFirst fallback. stale pages/_document.tsx removed — was forcing mixed Pages+App Router webpack compilation causing _not-found module crash.
@@ -534,3 +537,74 @@
 [2026-04-02T01:30:41.351Z] Updated mind.md via LLM continuity update.
 [2026-04-02T01:36:38.895Z] Updated mind.md via LLM continuity update.
 [2026-04-02T08:37:26.270Z] Updated mind.md via LLM continuity update.
+[2026-04-03T11:13:20.607Z] Updated mind.md via LLM continuity update.
+[2026-04-03T11:26:19.610Z] Updated mind.md via LLM continuity update.
+[2026-04-03T12:05:49.647Z] Updated mind.md via LLM continuity update.
+[2026-04-03T12:07:14.169Z] Updated mind.md via LLM continuity update.
+[2026-04-03T12:07:14.175Z] Updated preferences.json via LLM continuity update.
+[2026-04-03T12:08:45.194Z] Updated mind.md via LLM continuity update.
+[2026-04-03T12:27:28.614Z] Updated mind.md via LLM continuity update.
+[2026-04-03T12:37:04.235Z] Updated mind.md via LLM continuity update.
+[2026-04-03T12:40:01.950Z] Updated mind.md via LLM continuity update.
+[2026-04-03T12:42:11.763Z] Updated mind.md via LLM continuity update.
+[2026-04-03T12:45:24.966Z] Updated mind.md via LLM continuity update.
+[2026-04-03T12:50:12.572Z] Updated mind.md via LLM continuity update.
+[2026-04-03T17:26:52.384Z] Updated mind.md via LLM continuity update.
+[2026-04-03T17:50:18.489Z] Updated mind.md via LLM continuity update.
+[2026-04-03T17:54:58.202Z] Updated mind.md via LLM continuity update.
+[2026-04-03T18:02:17.348Z] Updated mind.md via LLM continuity update.
+[2026-04-03T18:14:02.336Z] Updated mind.md via LLM continuity update.
+[2026-04-03T18:14:38.842Z] Updated mind.md via LLM continuity update.
+[2026-04-03T18:18:06.798Z] Updated mind.md via LLM continuity update.
+[2026-04-03T22:32:05.078Z] Updated mind.md via LLM continuity update.
+[2026-04-03T22:32:05.083Z] Updated user_profile.md via LLM continuity update.
+[2026-04-03T22:35:14.457Z] Updated mind.md via LLM continuity update.
+[2026-04-03T22:35:14.463Z] Updated user_profile.md via LLM continuity update.
+[2026-04-03T22:35:14.467Z] Updated preferences.json via LLM continuity update.
+[2026-04-03T22:41:13.484Z] Updated mind.md via LLM continuity update.
+[2026-04-03T22:47:00.199Z] Updated mind.md via LLM continuity update.
+[2026-04-03T22:49:01.381Z] Updated mind.md via LLM continuity update.
+[2026-04-03T22:51:03.880Z] Updated mind.md via LLM continuity update.
+[2026-04-03T22:54:44.552Z] Updated mind.md via LLM continuity update.
+[2026-04-03T22:54:44.558Z] Updated preferences.json via LLM continuity update.
+[2026-04-03T23:23:27.010Z] Updated mind.md via LLM continuity update.
+[2026-04-04T12:24:23.807Z] Updated mind.md via LLM continuity update.
+[2026-04-04T12:46:36.367Z] Updated mind.md via LLM continuity update.
+[2026-04-04T12:47:05.502Z] Updated mind.md via LLM continuity update.
+[2026-04-04T15:42:15.990Z] Updated mind.md via LLM continuity update.
+[2026-04-04T15:42:15.993Z] Updated preferences.json via LLM continuity update.
+[2026-04-04T15:42:32.433Z] Updated mind.md via LLM continuity update.
+[2026-04-04T15:42:32.437Z] Updated preferences.json via LLM continuity update.
+[2026-04-04T17:06:32.568Z] Updated mind.md via LLM continuity update.
+[2026-04-05T13:14:34.141Z] Updated mind.md via LLM continuity update.
+[2026-04-05T13:14:57.601Z] Updated mind.md via LLM continuity update.
+[2026-04-05T13:17:09.815Z] Updated mind.md via LLM continuity update.
+[2026-04-05T13:24:21.696Z] Updated mind.md via LLM continuity update.
+[2026-04-05T13:25:48.886Z] Updated mind.md via LLM continuity update.
+[2026-04-05T13:29:33.984Z] Updated mind.md via LLM continuity update.
+[2026-04-05T13:49:29.005Z] Updated mind.md via LLM continuity update.
+[2026-04-05T21:38:58.654Z] Updated mind.md via LLM continuity update.
+[2026-04-05T21:39:43.185Z] Updated mind.md via LLM continuity update.
+[2026-04-05T21:42:12.442Z] Updated mind.md via LLM continuity update.
+[2026-04-05T21:43:26.191Z] Updated mind.md via LLM continuity update.
+[2026-04-05T21:43:50.386Z] Updated mind.md via LLM continuity update.
+[2026-04-05T21:49:33.879Z] Updated mind.md via LLM continuity update.
+[2026-04-05T21:50:15.282Z] Updated mind.md via LLM continuity update.
+[2026-04-05T22:05:30.322Z] Updated mind.md via LLM continuity update.
+[2026-04-05T22:05:30.346Z] Updated preferences.json via LLM continuity update.
+[2026-04-05T23:14:06.775Z] Updated mind.md via LLM continuity update.
+[2026-04-05T23:17:50.131Z] Updated mind.md via LLM continuity update.
+[2026-04-05T23:18:37.948Z] Updated mind.md via LLM continuity update.
+[2026-04-06T01:19:07.348Z] Updated mind.md via LLM continuity update.
+[2026-04-06T01:22:41.226Z] Updated mind.md via LLM continuity update.
+[2026-04-06T15:41:11.612Z] Updated mind.md via LLM continuity update.
+[2026-04-06T15:41:33.966Z] Updated mind.md via LLM continuity update.
+[2026-04-06T15:45:45.520Z] Updated mind.md via LLM continuity update.
+[2026-04-06T15:45:45.526Z] Updated user_profile.md via LLM continuity update.
+[2026-04-06T15:45:45.528Z] Updated preferences.json via LLM continuity update.
+[2026-04-06T15:51:15.364Z] Updated mind.md via LLM continuity update.
+[2026-04-06T17:18:55.542Z] Updated mind.md via LLM continuity update.
+[2026-04-06T17:19:58.714Z] Updated mind.md via LLM continuity update.
+[2026-04-06T17:21:25.089Z] Updated mind.md via LLM continuity update.
+[2026-04-06T17:22:20.622Z] Updated mind.md via LLM continuity update.
+[2026-04-06T18:06:39.613Z] Updated mind.md via LLM continuity update.

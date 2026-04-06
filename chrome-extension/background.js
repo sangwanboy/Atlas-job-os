@@ -11,6 +11,34 @@ let ws = null;
 const atlasTabs = new Map(); // tabKey -> tabId  (one tab per platform for parallel search)
 let reconnectTimer = null;
 
+/**
+ * Retry wrapper for chrome.scripting.executeScript.
+ * The "Frame with ID 0 was removed" error occurs when the tab navigates
+ * (redirect, SPA route change) between our navigate call and the script injection.
+ * We wait for the tab to settle again, then retry up to maxRetries times.
+ */
+async function safeExecuteScript(tabId, scriptOptions, maxRetries = 3) {
+  let lastErr;
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      if (attempt > 0) {
+        // Tab frame was replaced — wait for it to finish loading before retrying
+        await waitForTabLoad(tabId, 15000).catch(() => {});
+        await sleep(300 + attempt * 300);
+      }
+      const results = await chrome.scripting.executeScript({ target: { tabId }, ...scriptOptions });
+      return results;
+    } catch (err) {
+      lastErr = err;
+      const msg = err?.message || String(err);
+      const isFrameError = /frame.*removed|no frame with id|target closed|detached/i.test(msg);
+      if (!isFrameError) throw err; // Non-frame error — don't retry
+      console.warn(`[Atlas] safeExecuteScript attempt ${attempt + 1} frame error, retrying:`, msg);
+    }
+  }
+  throw lastErr;
+}
+
 // ─── WebSocket Connection ────────────────────────────────────────────────────
 
 function connect() {
@@ -79,6 +107,15 @@ async function handleCommand(msg) {
         const tabId = await ensureNamedTab(key, params.url);
         await chrome.tabs.update(tabId, { url: params.url, active: false });
         await waitForTabLoad(tabId);
+        // Some sites (Reed, LinkedIn) do a client-side redirect after the initial load.
+        // Wait briefly and if the tab is still loading, wait for it again to avoid
+        // "Frame with ID 0 was removed" on the next executeScript call.
+        await sleep(400);
+        const tabState = await chrome.tabs.get(tabId).catch(() => null);
+        if (tabState && tabState.status === "loading") {
+          await waitForTabLoad(tabId, 15000).catch(() => {});
+          await sleep(300);
+        }
         // Clear any stuck viewport override left by a previous screenshot
         await chrome.debugger.attach({ tabId }, "1.3").catch(() => {});
         await chrome.debugger.sendCommand({ tabId }, "Emulation.clearDeviceMetricsOverride").catch(() => {});
@@ -164,10 +201,7 @@ async function handleCommand(msg) {
         const key = params.tabKey || "default";
         const tabId = atlasTabs.get(key);
         if (!tabId) { reply(id, "error", null, "No Atlas tab open for key: " + key); break; }
-        const [result] = await chrome.scripting.executeScript({
-          target: { tabId },
-          func: scrapeJobCards,
-        });
+        const [result] = await safeExecuteScript(tabId, { func: scrapeJobCards });
         reply(id, "ok", { cards: result.result || [] });
         break;
       }
@@ -176,10 +210,7 @@ async function handleCommand(msg) {
         const key = params.tabKey || "default";
         const tabId = atlasTabs.get(key);
         if (!tabId) { reply(id, "error", null, "No Atlas tab open for key: " + key); break; }
-        const [result] = await chrome.scripting.executeScript({
-          target: { tabId },
-          func: scrapeJobDetail,
-        });
+        const [result] = await safeExecuteScript(tabId, { func: scrapeJobDetail });
         reply(id, "ok", { detail: result.result || {} });
         break;
       }
@@ -274,6 +305,12 @@ function scrapeJobCards() {
     });
 
   } else if (url.includes("reed.co.uk")) {
+    // Reed job detail URLs have the form: /jobs/[slug]/[numeric-id]
+    // Reject saved-jobs, search results, category, and generic listing pages.
+    const isReedJobDetail = (u) => /\/jobs\/[^/?#]+\/\d+/.test(u);
+    const REED_JUNK_PATTERNS = [/\/saved-jobs/, /\/jobs\/saved/, /\/jobs\/?$/, /\/jobs\/search/, /\/jobs\?/, /\/jobs\/[^/]+\/?$/];
+    const isReedJunk = (u) => !isReedJobDetail(u) || REED_JUNK_PATTERNS.some(p => p.test(u));
+
     const seen = new Set();
     document.querySelectorAll(
       "article[data-qa='job-card'], [data-qa='jobResult'], .job-result, article[class*='job'], li[class*='job']"
@@ -285,19 +322,21 @@ function scrapeJobCards() {
       const title = titleEl?.innerText?.trim();
       let jobUrl = linkEl?.href;
       if (jobUrl && !jobUrl.startsWith("http")) jobUrl = "https://www.reed.co.uk" + jobUrl;
-      if (title && jobUrl && !seen.has(jobUrl)) {
+      if (title && jobUrl && !seen.has(jobUrl) && !isReedJunk(jobUrl)) {
         seen.add(jobUrl);
         cards.push({ title, company: companyEl?.innerText?.trim() || "", location: locationEl?.innerText?.trim() || "", url: jobUrl });
       }
     });
-    // Fallback: grab any reed /jobs/ links
+    // Fallback: only grab links that are real Reed job detail pages (slug + numeric ID)
     if (cards.length === 0) {
       const seen2 = new Set();
       document.querySelectorAll("a[href*='/jobs/']").forEach(a => {
         const txt = a.innerText?.trim();
-        if (txt && txt.length > 5 && txt.length < 120 && !seen2.has(a.href)) {
-          seen2.add(a.href);
-          cards.push({ title: txt, company: "", location: "", url: a.href });
+        let href = a.href;
+        if (href && !href.startsWith("http")) href = "https://www.reed.co.uk" + href;
+        if (txt && txt.length > 5 && txt.length < 120 && !seen2.has(href) && isReedJobDetail(href)) {
+          seen2.add(href);
+          cards.push({ title: txt, company: "", location: "", url: href });
         }
       });
     }

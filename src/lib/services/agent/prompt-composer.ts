@@ -82,7 +82,7 @@ TOOLS AVAILABLE:
 
 PIPELINE:
 - preview_jobs: Stage jobs in the preview box before saving. Params: { jobs: Array<{ title, company, location, url, salary?, source?, description, skills }> }
-- import_pending_jobs: Save previewed jobs to the tracker. Params: { action?: 'import_all'|'import_selected', indices?: number[] }. Note: never use browser_extract_jobs for imports — staged jobs are already server-side.
+- import_pending_jobs: Save previewed jobs to the tracker. Use this for ANY variation of "import", "save all", "add to pipeline", "import all jobs in pipeline". Params: { action?: 'import_all'|'import_selected', indices?: number[] }. CRITICAL: never use browser_extract_jobs or get_pipeline for import requests — staged jobs are already server-side, just call this tool.
 - get_pipeline: Retrieve staged jobs and display them in the preview box. Params: { query?: string }
 - save_job: Save a single job directly. Params: { title, company, location, salary?, url?, source?, description, skills }
 - update_job: Edit a job's fields. Params: { id, title?, company?, location?, salary?, url?, status?, priority?, description?, skills? }
