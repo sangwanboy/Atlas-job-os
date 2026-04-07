@@ -2,23 +2,26 @@ import { NextResponse } from "next/server";
 import { google } from "googleapis";
 import { prisma } from "@/lib/db";
 import { getValidTokensHelper } from "@/lib/services/integration/gmail/oauth";
-
-const HARDCODED_USER_ID = "cm7c10bsw000008ld6v3cct9q";
+import { requireAuth, isNextResponse } from "@/lib/server/auth-helpers";
 
 export async function POST(request: Request) {
   try {
+    const authResult = await requireAuth();
+    if (isNextResponse(authResult)) return authResult;
+    const { userId } = authResult;
+
     const { query } = await request.json();
     if (!query) {
       return NextResponse.json({ error: "Query is required" }, { status: 400 });
     }
 
     let account: any = null;
-    
+
     // 1. Get Integration Account (Try Prisma, fallback to local cache)
     try {
       // @ts-ignore
       account = await prisma.integrationAccount.findUnique({
-        where: { userId_provider: { userId: HARDCODED_USER_ID, provider: "google" } }
+        where: { userId_provider: { userId, provider: "google" } }
       });
     } catch (e) {
       console.warn("[Gmail Search] Prisma unreachable, falling back to local cache.");

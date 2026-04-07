@@ -1,9 +1,9 @@
 {
-  "mode": "cv-optimization",
-  "strategy": "iterative-editing",
+  "mode": "job-discovery",
+  "strategy": "platform-specific-search",
   "todos": [
-    "Quantify achievements in Nurilos and Key4You sections",
-    "Restructure Technical Skills for ATS optimization",
-    "Tailor CV for a specific Full-stack or Digital Marketing role"
+    "Import 9 Reed jobs upon confirmation",
+    "Monitor for .NET/Java skill gaps in future searches",
+    "Maintain strict single-platform search (Reed) as per user instruction"
   ]
 }
