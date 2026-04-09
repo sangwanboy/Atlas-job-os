@@ -165,7 +165,13 @@ const ChatMessageItem = React.memo(({
                   </p>
                 )}
                 {scraperStartedAt && activeToolLog?.tool === "browser_extract_jobs" && (
-                  <ScraperTimer startedAt={scraperStartedAt} />
+                  <>
+                    <ScraperTimer startedAt={scraperStartedAt} />
+                    <p className="mt-1.5 text-[10px] text-cyan-600/80 dark:text-cyan-400/70 flex items-center gap-1">
+                      <Eye className="h-3 w-3 flex-shrink-0" />
+                      Watch the live search in your browser tab above
+                    </p>
+                  </>
                 )}
               </div>
             )}
@@ -833,9 +839,21 @@ export function AgentChatStarter() {
                   .then(d => setSessions(d.sessions || []));
               }
 
+              setIsTextActive(false);
               setOnboardingComplete((prev) => payload.onboardingCompleted ?? prev);
               if (payload.profileSnapshot) {
-                setProfile(payload.profileSnapshot);
+                setProfile(prev => {
+                  const next = payload.profileSnapshot;
+                  if (
+                    prev.soulMission === next.soulMission &&
+                    prev.communicationStyle === next.communicationStyle &&
+                    prev.mindModel === next.mindModel &&
+                    prev.memoryAnchors === next.memoryAnchors &&
+                    prev.name === next.name &&
+                    prev.roleTitle === next.roleTitle
+                  ) return prev;
+                  return next;
+                });
               }
             }
           } catch (e) {

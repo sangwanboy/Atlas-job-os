@@ -1,18 +1,27 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
+import { usePathname } from "next/navigation";
 import { AppSidebar } from "@/components/layout/app-sidebar";
 import { TopNav } from "@/components/layout/top-nav";
 import { AgentProvider } from "@/components/providers/agent-provider";
-import { FeedbackWidget } from "@/components/feedback/FeedbackWidget";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const pathname = usePathname();
 
   const toggleMobileSidebar = useCallback(() => setSidebarOpen((v) => !v), []);
   const closeMobileSidebar = useCallback(() => setSidebarOpen(false), []);
   const toggleDesktopSidebar = useCallback(() => setSidebarCollapsed((v) => !v), []);
+
+  useEffect(() => {
+    if (pathname?.startsWith("/agents/workspace")) {
+      setSidebarCollapsed(true);
+    } else {
+      setSidebarCollapsed(false);
+    }
+  }, [pathname]);
 
   return (
     <AgentProvider>
@@ -50,7 +59,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           </main>
         </div>
       </div>
-      <FeedbackWidget />
     </AgentProvider>
   );
 }

@@ -5,7 +5,7 @@ import type { Route } from "next";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { Bot, BriefcaseBusiness, ChartNoAxesCombined, FileText, LayoutDashboard, Megaphone, MessageSquare, Settings, Users, PanelLeftClose, PanelLeftOpen, X } from "lucide-react";
+import { Bot, BriefcaseBusiness, ChartNoAxesCombined, FileText, LayoutDashboard, Megaphone, Settings, Users, PanelLeftClose, PanelLeftOpen, X } from "lucide-react";
 import type { RuntimeSettingsResponse } from "@/types/settings";
 
 const navItems = [
@@ -141,20 +141,18 @@ export function AppSidebar({ mobileOpen, onClose, collapsed, onToggleCollapse }:
                   >
                     <Users className="h-4 w-4" />
                   </Link>
-                  <Link
-                    href="/admin/feedback"
-                    title="Beta Feedback"
-                    className={`flex items-center justify-center rounded-xl border p-2 w-full transition ${
-                      pathname?.startsWith("/admin/feedback")
-                        ? "border-cyan-200/80 bg-cyan-50/80 text-slate-900"
-                        : "border-transparent text-muted hover:border-white/70 hover:bg-white/75 hover:text-text"
-                    }`}
-                  >
-                    <MessageSquare className="h-4 w-4" />
-                  </Link>
                 </>
               )}
             </nav>
+            {/* Beta badge — collapsed */}
+            <div className="mt-auto pt-4 flex justify-start pl-1">
+              <span
+                title="Beta v1.0"
+                className="flex h-7 w-7 items-center justify-center rounded-full border border-cyan-500/40 bg-cyan-500/20 text-cyan-400 text-[10px] font-black animate-pulse"
+              >
+                β
+              </span>
+            </div>
           </div>
         ) : (
           <>
@@ -206,17 +204,6 @@ export function AppSidebar({ mobileOpen, onClose, collapsed, onToggleCollapse }:
                     <Users className="h-4 w-4" />
                     Manage Users
                   </Link>
-                  <Link
-                    href="/admin/feedback"
-                    className={`group flex items-center gap-3 rounded-xl border px-3 py-2 text-sm font-semibold transition ${
-                      pathname?.startsWith("/admin/feedback")
-                        ? "border-cyan-200/80 dark:border-cyan-500/30 bg-cyan-50/80 dark:bg-cyan-500/10 text-slate-900 dark:text-cyan-300"
-                        : "border-transparent text-muted hover:border-white/70 hover:bg-white/75 hover:text-text"
-                    }`}
-                  >
-                    <MessageSquare className="h-4 w-4" />
-                    Beta Feedback
-                  </Link>
                 </>
               )}
             </nav>
@@ -252,6 +239,13 @@ export function AppSidebar({ mobileOpen, onClose, collapsed, onToggleCollapse }:
                 <p className="font-semibold text-text">Execution Mode</p>
                 <p className="mt-1">Draft-first outreach, user-approved actions, token-aware agents.</p>
               </div>
+            </div>
+            {/* Beta badge — expanded */}
+            <div className="mt-auto pt-4 flex justify-start">
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-cyan-500/40 bg-cyan-500/10 px-3 py-1 text-[10px] font-bold tracking-widest text-cyan-400 animate-pulse">
+                <span className="h-1.5 w-1.5 rounded-full bg-cyan-400" />
+                BETA · v1.0
+              </span>
             </div>
           </>
         )}
@@ -312,21 +306,16 @@ export function AppSidebar({ mobileOpen, onClose, collapsed, onToggleCollapse }:
                 <Users className="h-4 w-4" />
                 Manage Users
               </Link>
-              <Link
-                href="/admin/feedback"
-                onClick={onClose}
-                className={`group flex items-center gap-3 rounded-xl border px-3 py-2 text-sm font-semibold transition ${
-                  pathname?.startsWith("/admin/feedback")
-                    ? "border-cyan-200/80 bg-cyan-50/80 text-slate-900"
-                    : "border-transparent text-muted hover:border-white/70 hover:bg-white/75 hover:text-text"
-                }`}
-              >
-                <MessageSquare className="h-4 w-4" />
-                Beta Feedback
-              </Link>
             </>
           )}
         </nav>
+        {/* Beta badge — mobile */}
+        <div className="mt-auto pt-6 flex justify-start">
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-cyan-500/40 bg-cyan-500/10 px-3 py-1 text-[10px] font-bold tracking-widest text-cyan-400 animate-pulse">
+            <span className="h-1.5 w-1.5 rounded-full bg-cyan-400" />
+            BETA · v1.0
+          </span>
+        </div>
       </aside>
     </>
   );

@@ -981,7 +981,7 @@ async function executeToolCall(toolCall: ToolCall, sid: string, userId?: string)
       { name: "Indeed",     url: `https://uk.indeed.com/jobs?q=${encodeURIComponent(query)}&l=${encodeURIComponent(location)}` },
       { name: "Reed",       url: `https://www.reed.co.uk/jobs?keywords=${encodeURIComponent(query)}&location=${encodeURIComponent(location)}` },
       { name: "TotalJobs",  url: `https://www.totaljobs.com/jobs/${encodeURIComponent(query.replace(/\s+/g, "-").toLowerCase())}/in-${encodeURIComponent(location.replace(/\s+/g, "-").toLowerCase())}` },
-      { name: "Adzuna",     url: `https://www.adzuna.co.uk/jobs/in-${location.toLowerCase().replace(/\s+/g, "-")}?q=${encodeURIComponent(query)}` },
+      { name: "Adzuna",     url: `https://www.adzuna.co.uk/search?q=${encodeURIComponent(query)}&loc=${encodeURIComponent(location)}` },
       { name: "CV-Library", url: `https://www.cv-library.co.uk/search-jobs?q=${encodeURIComponent(query)}&loc=${encodeURIComponent(location)}&us=1` },
     ];
 

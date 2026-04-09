@@ -3,7 +3,7 @@ import { agentBrowserToolRegistry } from "./tools/agent-browser-tool-registry";
 import { browserService } from "./service/browser-service";
 import { extensionBridge } from "./extension-bridge";
 
-const PORT = 3001;
+const PORT = parseInt(process.env.PORT || "3001", 10);
 
 process.on("unhandledRejection", (reason) => {
   console.error("🚨 Unhandled Rejection at:", reason);
