@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { applicationStatuses } from "@/lib/domain/enums";
 import { localJobsCache } from "@/lib/services/jobs/local-jobs-cache";
+import { requireAuth, isNextResponse } from "@/lib/server/auth-helpers";
 
 const updateSchema = z.object({
   status: z.enum(applicationStatuses),
@@ -13,6 +14,9 @@ type Params = {
 };
 
 export async function PATCH(request: Request, { params }: Params) {
+  const authResult = await requireAuth();
+  if (isNextResponse(authResult)) return authResult;
+
   const { id: jobId } = await params;
 
   try {
@@ -41,5 +45,31 @@ export async function PATCH(request: Request, { params }: Params) {
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to update job";
     return NextResponse.json({ error: message }, { status: 400 });
+  }
+}
+
+export async function DELETE(_request: Request, { params }: Params) {
+  const session = await requireAuth();
+  if (isNextResponse(session)) return session;
+
+  const { id: jobId } = await params;
+
+  try {
+    // Nullify nullable foreign keys before deleting
+    await prisma.outreachMessage.updateMany({ where: { jobId }, data: { jobId: null } });
+    await prisma.followUpTask.updateMany({ where: { jobId }, data: { jobId: null } });
+    await prisma.emailThread.updateMany({ where: { jobId }, data: { jobId: null } });
+    // JobScore and JobTagOnJob cascade-delete automatically
+    await prisma.job.delete({ where: { id: jobId } });
+
+    return NextResponse.json({ success: true });
+  } catch (err) {
+    const isNotFound =
+      err instanceof Error &&
+      ("code" in (err as Record<string, unknown>) ? (err as Record<string, unknown>).code === "P2025" : err.message.includes("Record to delete does not exist"));
+    return NextResponse.json(
+      { error: isNotFound ? "Job not found" : "Delete failed" },
+      { status: isNotFound ? 404 : 500 },
+    );
   }
 }

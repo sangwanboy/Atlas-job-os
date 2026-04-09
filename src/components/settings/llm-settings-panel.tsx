@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Settings2, Shield, Sparkles } from "lucide-react";
+import { Settings2, Shield, Sparkles, Lock } from "lucide-react";
+import { useSession } from "next-auth/react";
 import type {
   LlmProvider,
   LlmProviderUpdatePayload,
@@ -88,6 +89,9 @@ function providerTitle(label: string, hasApiKey: boolean, masked: string | null)
 }
 
 export function LlmSettingsPanel() {
+  const { data: session } = useSession();
+  const isAdmin = (session?.user as any)?.role === "ADMIN";
+
   const [settings, setSettings] = useState<LlmSettingsResponse | null>(null);
   const [draft, setDraft] = useState<DraftState | null>(null);
   const [status, setStatus] = useState<SaveStatus>("idle");
@@ -326,10 +330,55 @@ export function LlmSettingsPanel() {
 
   return (
     <div className="space-y-6">
-      <section className="panel p-6">
+
+      {/* ── User-visible: current active model (read-only for non-admins) ── */}
+      {!isAdmin && (
+        <section className="panel p-6">
+          <div className="flex items-center gap-2 mb-3">
+            <Sparkles className="h-5 w-5 text-accent" />
+            <h2 className="text-xl font-extrabold">Active AI Model</h2>
+          </div>
+          <p className="text-sm text-muted mb-4">
+            The AI model powering your Atlas agent. Contact your admin to change the global model or add API keys.
+          </p>
+          <div className="rounded-lg border bg-bg px-4 py-3 text-sm">
+            <span className="font-semibold text-text">Provider: </span>
+            <span className="text-muted">{settings?.globalDefaultProvider ?? "—"}</span>
+            <span className="mx-3 text-muted/40">·</span>
+            <span className="font-semibold text-text">Model: </span>
+            <span className="text-muted">{settings?.globalDefaultModel ?? "—"}</span>
+          </div>
+          {/* Token usage — visible to all users */}
+          {runtime && (
+            <div className="mt-4">
+              <div className="mb-1 flex items-center justify-between text-xs text-muted">
+                <span>Your monthly token usage</span>
+                <span>{Math.min(100, Math.round((runtime.usage.totalTokens / Math.max(1, runtime.settings.monthlyTokenBudget)) * 100))}%</span>
+              </div>
+              <div className="h-2 rounded-full bg-bg border">
+                <div
+                  className="h-full rounded-full bg-accent"
+                  style={{ width: `${Math.min(100, Math.round((runtime.usage.totalTokens / Math.max(1, runtime.settings.monthlyTokenBudget)) * 100))}%` }}
+                />
+              </div>
+              <p className="mt-2 text-xs text-muted">
+                {runtime.usage.totalTokens.toLocaleString()} tokens used · {runtime.usage.requests.toLocaleString()} requests this month
+              </p>
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* ── ADMIN ONLY: LLM Providers & Models ── */}
+      {isAdmin && <section className="panel p-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <h2 className="text-2xl font-extrabold">LLM Providers & Models</h2>
+            <div className="flex items-center gap-2">
+              <h2 className="text-2xl font-extrabold">LLM Providers & Models</h2>
+              <span className="rounded-full bg-amber-100 dark:bg-amber-900/30 px-2 py-0.5 text-xs font-semibold text-amber-700 dark:text-amber-400 flex items-center gap-1">
+                <Lock className="h-3 w-3" /> Admin only
+              </span>
+            </div>
             <p className="mt-1 text-sm text-muted">
               Add API keys for major providers and configure global/default model routing.
             </p>
@@ -405,14 +454,20 @@ export function LlmSettingsPanel() {
 
         {error ? <p className="mt-3 text-sm text-danger">{error}</p> : null}
         {status === "saved" ? <p className="mt-3 text-sm text-success">Settings saved.</p> : null}
-      </section>
+      </section>}
 
-      <section className="panel p-6">
+      {/* ── ADMIN ONLY: Token Usage & Runtime Controls ── */}
+      {isAdmin && <section className="panel p-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <h3 className="text-xl font-extrabold">Token Usage & Runtime Controls</h3>
+            <div className="flex items-center gap-2">
+              <h3 className="text-xl font-extrabold">Token Usage & Runtime Controls</h3>
+              <span className="rounded-full bg-amber-100 dark:bg-amber-900/30 px-2 py-0.5 text-xs font-semibold text-amber-700 dark:text-amber-400 flex items-center gap-1">
+                <Lock className="h-3 w-3" /> Admin only
+              </span>
+            </div>
             <p className="mt-1 text-sm text-muted">
-              Track estimated token usage and configure budget, response caps, and safety behavior.
+              Configure platform-wide budget, response caps, rate limits, and safety behaviour for all users.
             </p>
           </div>
           <button
@@ -711,9 +766,10 @@ export function LlmSettingsPanel() {
 
         {runtimeError ? <p className="mt-3 text-sm text-danger">{runtimeError}</p> : null}
         {runtimeStatus === "saved" ? <p className="mt-3 text-sm text-success">Runtime settings saved.</p> : null}
-      </section>
+      </section>}
 
-      <section className="grid gap-4 lg:grid-cols-2">
+      {/* ── ADMIN ONLY: Per-provider API keys & model config ── */}
+      {isAdmin && <section className="grid gap-4 lg:grid-cols-2">
         {settings.providers.map((provider) => {
           const providerDraft = draft.providers[provider.provider];
 
@@ -783,9 +839,10 @@ export function LlmSettingsPanel() {
             </article>
           );
         })}
-      </section>
+      </section>}
 
-      <section className="panel p-5">
+      {/* ── ADMIN ONLY: Security notes ── */}
+      {isAdmin && <section className="panel p-5">
         <h3 className="text-lg font-bold">Security Notes</h3>
         <ul className="mt-3 space-y-2 text-sm text-muted">
           <li className="flex items-center gap-2">
@@ -798,9 +855,9 @@ export function LlmSettingsPanel() {
             <Sparkles className="h-4 w-4" /> Model enablement list controls what each provider can serve.
           </li>
         </ul>
-      </section>
+      </section>}
 
-      {windowOpen ? (
+      {isAdmin && windowOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
           <div className="panel max-h-[90vh] w-full max-w-4xl overflow-auto p-6">
             <div className="mb-4 flex items-center justify-between">

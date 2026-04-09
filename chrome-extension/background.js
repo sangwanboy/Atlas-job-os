@@ -11,6 +11,10 @@ let ws = null;
 const atlasTabs = new Map(); // tabKey -> tabId  (one tab per platform for parallel search)
 let reconnectTimer = null;
 
+// Stores the latest scraped detail from the content script, keyed by tabId.
+// The content script sends "job_detail_scraped" automatically when it lands on a listing page.
+const lastScrapedDetail = new Map(); // tabId -> { data, timestamp }
+
 /**
  * Retry wrapper for chrome.scripting.executeScript.
  * The "Frame with ID 0 was removed" error occurs when the tab navigates
@@ -41,15 +45,22 @@ async function safeExecuteScript(tabId, scriptOptions, maxRetries = 3) {
 
 // ─── WebSocket Connection ────────────────────────────────────────────────────
 
+function broadcastStatus(connected) {
+  chrome.runtime.sendMessage({ type: "status_update", connected }).catch(() => {});
+}
+
 function connect() {
+  // Clear any pending reconnect timer to avoid double-connect
+  if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
   if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return;
 
+  console.log("[Atlas] Connecting to bridge at", BRIDGE_URL, "...");
   ws = new WebSocket(BRIDGE_URL);
 
   ws.onopen = () => {
     console.log("[Atlas] Connected to bridge at", BRIDGE_URL);
-    if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
     ws.send(JSON.stringify({ type: "register", agent: "chrome-extension" }));
+    broadcastStatus(true);
   };
 
   ws.onmessage = async (event) => {
@@ -58,11 +69,15 @@ function connect() {
     if (msg.cmd) await handleCommand(msg);
   };
 
-  ws.onerror = (err) => console.warn("[Atlas] WebSocket error:", err.message ?? err);
+  ws.onerror = () => {
+    // WebSocket error events carry no message in service workers — log what we can
+    console.warn("[Atlas] WebSocket error — bridge unreachable at", BRIDGE_URL, "(is npm run browser-server running?)");
+  };
 
   ws.onclose = () => {
     console.log("[Atlas] Bridge disconnected. Reconnecting in", RECONNECT_DELAY_MS, "ms...");
     ws = null;
+    broadcastStatus(false);
     reconnectTimer = setTimeout(connect, RECONNECT_DELAY_MS);
   };
 }
@@ -215,6 +230,47 @@ async function handleCommand(msg) {
         break;
       }
 
+      // Navigate to a job listing URL and scrape full details in one atomic call.
+      // The content script (content.js) auto-fires on listing pages and sends
+      // "job_detail_scraped" — we wait for that result first (event-driven),
+      // then fall back to executeScript if the content script didn't fire.
+      case "scrapeJobListing": {
+        const key = params.tabKey || "scrape-detail";
+        const tabId = await ensureNamedTab(key, params.url);
+
+        // Clear any stale cached result for this tab before navigating
+        lastScrapedDetail.delete(tabId);
+
+        await chrome.tabs.update(tabId, { url: params.url, active: false });
+        await waitForTabLoad(tabId, 20000).catch(() => {});
+        await sleep(400);
+        await acceptCookieBanners(tabId);
+
+        // Wait up to 8s for the content script to auto-scrape and report back
+        let detail = null;
+        const POLL_INTERVAL = 150;
+        const POLL_TIMEOUT = 8000;
+        const pollStart = Date.now();
+        while (Date.now() - pollStart < POLL_TIMEOUT) {
+          const cached = lastScrapedDetail.get(tabId);
+          if (cached && cached.timestamp >= pollStart) {
+            detail = cached.data;
+            break;
+          }
+          await sleep(POLL_INTERVAL);
+        }
+
+        // Fallback: content script didn't fire (page not matched or too slow)
+        if (!detail) {
+          console.warn("[Atlas] scrapeJobListing: content script timeout — falling back to executeScript");
+          const [fallbackResult] = await safeExecuteScript(tabId, { func: scrapeJobDetail });
+          detail = fallbackResult.result || {};
+        }
+
+        reply(id, "ok", { detail });
+        break;
+      }
+
       case "getLinks": {
         const key = params.tabKey || "default";
         const tabId = atlasTabs.get(key);
@@ -363,11 +419,20 @@ function scrapeJobCards() {
         "[data-at='job-item-location']",
         "[class*='location']", "[class*='Location']"
       );
+      const salaryEl = qs(el, "[data-at='job-item-salary-info']");
+      const descEl   = qs(el, "[data-at='jobcard-content']", "[data-at='job-item-middle']");
       const title = titleEl?.innerText?.trim();
       const jobUrl = titleEl?.href || qs(el, "a[href*='/job/']")?.href;
       if (title && jobUrl && !seen.has(jobUrl)) {
         seen.add(jobUrl);
-        cards.push({ title, company: companyEl?.innerText?.trim() || "", location: locationEl?.innerText?.trim() || "", url: jobUrl });
+        cards.push({
+          title,
+          company:     companyEl?.innerText?.trim() || "",
+          location:    locationEl?.innerText?.trim() || "",
+          url:         jobUrl,
+          salary:      salaryEl?.innerText?.trim()   || "",
+          description: descEl?.innerText?.trim()     || "",
+        });
       }
     });
     // Extra fallback: grab any <a> linking to /job/ with a visible text heading
@@ -477,66 +542,119 @@ function scrapeJobCards() {
   return cards;
 }
 
-// ─── Job Detail Scraper (injected into detail page) ─────────────────────────
+// ─── Job Detail Scraper (injected into listing page) ────────────────────────
 
 function scrapeJobDetail() {
   const url = window.location.href;
   const getText = (selectors) => {
     for (const sel of selectors) {
-      const el = document.querySelector(sel);
-      const t = el?.innerText?.trim();
-      if (t && t.length > 1) return t;
+      try {
+        const el = document.querySelector(sel);
+        const t = el?.innerText?.trim();
+        if (t && t.length > 1) return t;
+      } catch {}
     }
     return "";
   };
 
-  let company = "", salary = "", jobType = "", description = "";
+  let company = "", salary = "", jobType = "", description = "", datePosted = "";
 
   if (url.includes("linkedin.com")) {
-    company    = getText([".jobs-unified-top-card__company-name a", ".job-details-jobs-unified-top-card__company-name a", ".topcard__org-name-link"]);
-    salary     = getText([".jobs-unified-top-card__job-insight--salary span", ".compensation__salary", ".jobs-details-top-card__job-info span"]);
-    jobType    = getText([".jobs-unified-top-card__workplace-type", ".job-details-jobs-unified-top-card__workplace-type"]);
+    company     = getText([".jobs-unified-top-card__company-name a", ".job-details-jobs-unified-top-card__company-name a", ".topcard__org-name-link"]);
+    salary      = getText([".jobs-unified-top-card__job-insight--salary span", ".compensation__salary", ".jobs-details-top-card__job-info span"]);
+    jobType     = getText([".jobs-unified-top-card__workplace-type", ".job-details-jobs-unified-top-card__workplace-type"]);
+    datePosted  = getText([".jobs-unified-top-card__posted-date", ".job-details-jobs-unified-top-card__primary-description-without-tagline span"]);
     description = getText([".jobs-description-content__text--stretch", ".jobs-description__content .jobs-box__html-content", "#job-details"]);
 
-  } else if (url.includes("indeed.com")) {
-    company    = getText(["[data-testid='inlineHeader-companyName'] a", ".jobsearch-CompanyInfoWithoutHeaderImage .companyName", ".icl-u-lg-mr--sm"]);
-    salary     = getText(["#salaryInfoAndJobType span", ".attribute_snippet", "[data-testid='attribute_snippet_testid']"]);
-    jobType    = getText(["[data-testid='jobMetadataHeader-jobtype']", ".jobMetadataHeader-jobtype"]);
+  } else if (url.includes("indeed.com") || url.includes("indeed.co.uk")) {
+    company     = getText(["[data-testid='inlineHeader-companyName'] a", ".jobsearch-CompanyInfoWithoutHeaderImage .companyName", ".icl-u-lg-mr--sm"]);
+    salary      = getText(["#salaryInfoAndJobType span", ".attribute_snippet", "[data-testid='attribute_snippet_testid']"]);
+    jobType     = getText(["[data-testid='jobMetadataHeader-jobtype']", ".jobMetadataHeader-jobtype"]);
     description = getText(["#jobDescriptionText", ".jobsearch-jobDescriptionText"]);
 
   } else if (url.includes("reed.co.uk")) {
-    company    = getText([".col-company-header h2 a", ".employer-name a", "span[itemprop='name']"]);
-    salary     = getText(["[data-qa='salaryLabel']", ".salary span", "[itemprop='baseSalary']"]);
-    jobType    = getText(["[data-qa='jobTypeLabel']", ".contract-type"]);
+    company     = getText([".col-company-header h2 a", ".employer-name a", "span[itemprop='name']"]);
+    salary      = getText(["[data-qa='salaryLabel']", ".salary span", "[itemprop='baseSalary']"]);
+    jobType     = getText(["[data-qa='jobTypeLabel']", ".contract-type"]);
+    datePosted  = getText(["[data-qa='datePostedLabel']", ".date-posted"]);
     description = getText(["[itemprop='description']", "#job-description", ".description"]);
 
   } else if (url.includes("totaljobs.com")) {
-    company    = getText([".job-header__company a", ".company-name a"]);
-    salary     = getText([".job-header__salary", ".salary"]);
-    jobType    = getText([".job-header__type"]);
-    description = getText([".job-description", "#job-description"]);
+    company     = getText(["[data-at='metadata-company-name']", ".job-header__company a", ".company-name a"]);
+    salary      = getText(["[data-at='metadata-salary']", ".job-header__salary", ".salary"]);
+    jobType     = getText(["[data-at='metadata-work-type']", ".job-header__type"]);
+    description = getText(["[data-at='section-text-jobDescription-content']", "[data-at='job-ad-content']", ".job-description", "#job-description"]);
 
-  } else if (url.includes("adzuna.co.uk")) {
-    company    = getText(["[class*='CompanyName']", ".job-ad-display__company"]);
-    salary     = getText(["[class*='Salary']", ".job-ad-display__salary"]);
+  } else if (url.includes("adzuna.co.uk") || url.includes("adzuna.com")) {
+    company     = getText(["[class*='CompanyName']", ".job-ad-display__company"]);
+    salary      = getText(["[class*='Salary']", ".job-ad-display__salary"]);
     description = getText(["[class*='Description']", ".job-ad-display__body", "section.adp-body"]);
 
   } else if (url.includes("cv-library.co.uk")) {
-    company    = getText([".job-header__company", ".company-name"]);
-    salary     = getText([".job-header__salary", ".salary"]);
+    company     = getText([".job-header__company", ".company-name"]);
+    salary      = getText([".job-header__salary", ".salary"]);
     description = getText(["#job-description", ".job-description__content"]);
+
+  } else if (url.includes("glassdoor.com")) {
+    company     = getText(["[data-test='employer-name']", ".EmployerProfile_compactEmployerName__9MGcV"]);
+    salary      = getText(["[data-test='salary-estimate']", "[class*='SalaryEstimate']"]);
+    description = getText(["[class*='JobDetails_jobDescription']", "[data-test='jobDescription']", ".desc"]);
 
   } else {
     // Generic fallback — grab any sizeable block of text
-    company    = getText(["[class*='company']", "[class*='employer']", "[class*='organisation']"]);
-    salary     = getText(["[class*='salary']", "[class*='compensation']", "[class*='pay']"]);
+    company     = getText(["[class*='company']", "[class*='employer']", "[class*='organisation']"]);
+    salary      = getText(["[class*='salary']", "[class*='compensation']", "[class*='pay']"]);
     description = getText(["[class*='description']", "[id*='description']", "article", "main"]);
   }
 
-  // Trim description to 2000 chars to avoid huge payloads
-  if (description.length > 2000) description = description.slice(0, 2000) + "…";
+  // Cap description at 5000 chars (enough for full detail, avoids huge payloads)
+  if (description.length > 5000) description = description.slice(0, 5000) + "…";
 
-  return { company, salary, jobType, description, url };
+  // Extract skills from description text
+  const skills = extractSkillsFromText(description);
+
+  return { company, salary, jobType, datePosted, description, skills, url };
+}
+
+// ─── Skills Extractor ────────────────────────────────────────────────────────
+
+function extractSkillsFromText(text) {
+  if (!text || text.length < 20) return [];
+
+  // Known tech + soft skill keywords to look for in description
+  const SKILL_PATTERNS = [
+    // Languages & runtimes
+    /\b(JavaScript|TypeScript|Python|Java|C\+\+|C#|Go|Rust|Ruby|PHP|Swift|Kotlin|Scala|R\b|MATLAB)\b/gi,
+    // Frameworks & libraries
+    /\b(React|Next\.?js|Vue\.?js|Angular|Node\.?js|Express|Django|Flask|FastAPI|Spring|Laravel|\.NET|Rails|Svelte|Nuxt)\b/gi,
+    // Cloud & infra
+    /\b(AWS|Azure|GCP|Docker|Kubernetes|Terraform|Ansible|CI\/CD|Jenkins|GitHub Actions|Vercel|Heroku)\b/gi,
+    // Databases
+    /\b(PostgreSQL|MySQL|MongoDB|Redis|Elasticsearch|DynamoDB|SQLite|Cassandra|Supabase|Prisma)\b/gi,
+    // Data & ML
+    /\b(TensorFlow|PyTorch|scikit-learn|Pandas|NumPy|Spark|Kafka|Airflow|dbt|Tableau|Power BI)\b/gi,
+    // Tools & practices
+    /\b(Git|GraphQL|REST|API|Agile|Scrum|TDD|microservices|DevOps|Linux|Bash|SQL)\b/gi,
+  ];
+
+  const found = new Set();
+  for (const pattern of SKILL_PATTERNS) {
+    const matches = text.matchAll(pattern);
+    for (const m of matches) found.add(m[0].trim());
+  }
+
+  // Also scan bullet-point lines that look like skill requirements
+  const lines = text.split(/\n|\r/);
+  for (const line of lines) {
+    const cleaned = line.replace(/^[\s•·\-–*]+/, "").trim();
+    if (cleaned.length > 2 && cleaned.length < 60 && /^[A-Z]/.test(cleaned)) {
+      // Likely a skill bullet if it's short and starts uppercase
+      const noPunct = cleaned.replace(/[.,;:]$/, "").trim();
+      if (noPunct.length > 2 && noPunct.length < 50) found.add(noPunct);
+    }
+  }
+
+  return [...found].slice(0, 25);
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -609,6 +727,20 @@ async function acceptCookieBanners(tabId) {
   }
 }
 
+// ─── Content Script Messages ─────────────────────────────────────────────────
+
+// Listen for auto-scraped results from content.js running on job listing pages.
+// Keyed by tabId so scrapeJobListing can pick up the result via polling.
+chrome.runtime.onMessage.addListener((msg, sender) => {
+  if (msg.type === "job_detail_scraped" && sender.tab?.id) {
+    lastScrapedDetail.set(sender.tab.id, {
+      data: msg.data,
+      timestamp: Date.now(),
+    });
+    console.log("[Atlas] content script scraped detail from", msg.url);
+  }
+});
+
 function waitForTabLoad(tabId, timeoutMs = 30000) {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error("Tab load timeout")), timeoutMs);
@@ -659,18 +791,58 @@ async function captureFullPage(tabId) {
 }
 
 // ─── Keep-alive: prevent MV3 service worker from going idle ─────────────────
+// Edge suspends MV3 service workers more aggressively than Chrome.
+// Dual strategy:
+//   • Alarm (1 min — MV3 minimum): wakes a suspended worker
+//   • setInterval (10s): prevents suspension while worker is running via storage writes
 
-chrome.alarms.create("keep-alive", { periodInMinutes: 0.4 }); // every ~25s
+chrome.alarms.create("keep-alive", { periodInMinutes: 1 }); // MV3 minimum — clamps to 60s anyway
 chrome.alarms.onAlarm.addListener((alarm) => {
-  if (alarm.name === "keep-alive") connect();
+  if (alarm.name === "keep-alive") {
+    chrome.storage.local.set({ _keepAlive: Date.now() });
+    connect();
+  }
+});
+
+// In-process keep-alive: storage writes prevent the service worker from being
+// suspended mid-session (critical for Edge which has a ~30s idle timeout).
+let _keepAliveTimer = null;
+function startInProcessKeepAlive() {
+  if (_keepAliveTimer) return;
+  _keepAliveTimer = setInterval(() => {
+    chrome.storage.local.set({ _keepAlive: Date.now() });
+    if (!ws || ws.readyState === WebSocket.CLOSED || ws.readyState === WebSocket.CLOSING) {
+      connect();
+    }
+  }, 10_000);
+}
+
+// ─── Popup message handler ────────────────────────────────────────────────────
+
+chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+  if (msg.type === "get_status") {
+    sendResponse({
+      connected: ws?.readyState === WebSocket.OPEN,
+      bridgeUrl: BRIDGE_URL,
+    });
+  }
+  if (msg.type === "reconnect") {
+    ws?.close();
+    ws = null;
+    connect();
+    sendResponse({ ok: true });
+  }
+  return true; // keep channel open for async
 });
 
 // ─── Init ────────────────────────────────────────────────────────────────────
 
 connect();
-chrome.runtime.onStartup.addListener(connect);
+startInProcessKeepAlive();
+chrome.runtime.onStartup.addListener(() => { connect(); startInProcessKeepAlive(); });
 chrome.runtime.onInstalled.addListener(() => {
   console.log("[Atlas] Extension installed. Connecting to bridge...");
-  chrome.alarms.create("keep-alive", { periodInMinutes: 0.4 });
+  chrome.alarms.create("keep-alive", { periodInMinutes: 1 });
   connect();
+  startInProcessKeepAlive();
 });

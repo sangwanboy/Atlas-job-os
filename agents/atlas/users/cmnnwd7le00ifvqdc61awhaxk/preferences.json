@@ -1,8 +1,11 @@
 {
   "preferred_titles": [
+    "Product Manager",
     "Bartender"
   ],
   "preferred_locations": [
+    "London, UK",
     "Coventry, UK"
-  ]
+  ],
+  "remote_preference": "remote_ok"
 }

@@ -3,6 +3,7 @@
   "name": "Atlas Job OS",
   "version": "1.0",
   "description": "Gives Atlas full browser control for job searching",
+  "minimum_chrome_version": "102",
   "permissions": ["tabs", "debugger", "scripting", "storage", "activeTab", "alarms", "windows"],
   "host_permissions": ["<all_urls>"],
   "background": {
@@ -16,6 +17,7 @@
     }
   ],
   "action": {
-    "default_title": "Atlas Job OS"
+    "default_title": "Atlas Job OS",
+    "default_popup": "popup.html"
   }
 }

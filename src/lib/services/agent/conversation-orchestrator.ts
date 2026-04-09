@@ -11,7 +11,8 @@ import { agentRegistry } from "@/lib/services/agent/registry";
 import { tokenBudgetManager } from "@/lib/services/agent/token-budget-manager";
 import type { AgentRuntimeContext, AgentRuntimeResponse } from "@/lib/services/agent/types";
 import { auth } from "@/auth";
-import { ScraperService } from "@/lib/services/scraper/scraper-service";
+import { atlasState } from "@/lib/services/agent/atlas-state-manager";
+// ScraperService (Python worker) removed — all scraping via Chrome extension
 import { syncGmail } from "@/lib/services/integration/gmail/sync-engine";
 import { runtimeSettingsStore } from "@/lib/services/settings/runtime-settings-store";
 import { prisma } from "@/lib/db";
@@ -266,12 +267,12 @@ const toolDescriptors = [
   },
   {
     name: "browser_extension_enrich_job",
-    description: "Get full details for a single job listing using the Chrome extension. Navigates to the job URL, takes a full-page screenshot, and uses Vertex AI OCR to extract: company, salary, job type, full description, requirements. Use this after browser_extract_jobs returns basic card data. Parameters: { url: string }",
+    description: "Get full details for a single job listing using the Chrome extension. Navigates to the listing page and scrapes: company, salary, job type, full description, skills. Use this to get details for a specific URL. Parameters: { url: string }",
     parameters: { url: "string" },
   },
   {
     name: "enrich_pipeline_jobs",
-    description: "Scrape full descriptions, salary, and company for jobs already in the pipeline that are missing this data. AUTOMATICALLY call this when the user asks about job descriptions, says 'what info do you have', or asks to score/fit-check jobs. Parameters: { limit?: number (default 10, max 20) }",
+    description: "Scrape full descriptions, salary, and company for jobs already in the pipeline that are missing this data. Only call this when the user EXPLICITLY asks to enrich, fetch descriptions, or get more details about their saved jobs. Do NOT call automatically after searches or imports. Parameters: { limit?: number (default 10, max 20) }",
     parameters: { limit: "number?" },
   },
 ] as const;
@@ -646,13 +647,17 @@ async function executeToolCall(toolCall: ToolCall, sid: string, userId?: string)
     }
     const finalJobs = Array.from(uniqueJobsMap.values());
     
-    // Deduplication check against DB
+    // Deduplication check — direct DB query (avoids fragile internal HTTP round-trip)
     const urls = finalJobs.map(j => j.url).filter(u => u && u !== "#") as string[];
-    if (urls.length > 0) {
+    if (urls.length > 0 && userId) {
       try {
-        const { existingUrls } = await getInternalJson<{ existingUrls: string[] }>("/api/jobs", { checkUrl: urls }, userId);
+        const existing = await prisma.job.findMany({
+          where: { sourceUrl: { in: urls }, userId },
+          select: { sourceUrl: true },
+        });
+        const existingSet = new Set(existing.map(j => j.sourceUrl));
         for (const job of finalJobs) {
-          if (job.url && existingUrls.includes(job.url)) {
+          if (job.url && existingSet.has(job.url)) {
             job.isAlreadyImported = true;
           }
         }
@@ -670,14 +675,14 @@ async function executeToolCall(toolCall: ToolCall, sid: string, userId?: string)
       const richnessStr = richness.length > 0 ? ` [${richness.join(", ")}]` : "";
       return `${i + 1}. **${j.title}** at ${j.company} (${j.location})${richnessStr}${j.isAlreadyImported ? " [ALREADY IN PIPELINE]" : ""}`;
     }).join("\n");
-    // Strip full description/skills from preview JSON to avoid payload bloat,
-    // but expose richness metadata so the UI and model know what data is available.
-    // Full data is kept in pendingJobsStore server-side for import.
-    const previewJobs = finalJobs.map(({ description, skills, ...rest }) => ({
-      ...rest,
-      hasDescription: Boolean(description && description.length > 50),
-      hasSkills: Boolean(skills && (Array.isArray(skills) ? skills.length > 0 : skills.length > 0)),
-      descriptionPreview: description && description.length > 50 ? description.slice(0, 120).trim() + "…" : "",
+    // Include description/skills in preview JSON so the inline Import All button
+    // (PATH B: handleImportAllInMessage → saveJobDirect) has full data.
+    // Full data is also kept in pendingJobsStore server-side for PATH A imports.
+    const previewJobs = finalJobs.map((j) => ({
+      ...j,
+      hasDescription: Boolean(j.description && j.description.length > 50),
+      hasSkills: Boolean(j.skills && (Array.isArray(j.skills) ? j.skills.length > 0 : j.skills.length > 0)),
+      descriptionPreview: j.description && j.description.length > 50 ? j.description.slice(0, 120).trim() + "…" : "",
     }));
     const withDesc = finalJobs.filter(j => j.description && j.description.length > 50).length;
     return `__PREVIEW_JOBS__${JSON.stringify(previewJobs)}__END_PREVIEW__\n\n### 🔍 Job Discovery Preview\nPreviewed ${finalJobs.length} accumulated job(s) for your review (${withDesc} with full descriptions):\n${jobList}\n\nReview the list below. Jobs already in your pipeline are marked. Click 'Import All' to save the rest.`;
@@ -736,9 +741,13 @@ async function executeToolCall(toolCall: ToolCall, sid: string, userId?: string)
       await setPendingJobs(sid, pending); // Persist partial import statuses
     }
     
-    const reply = `Imported ${results.filter(r => r.startsWith("✅")).length}/${jobsToImport.length} jobs:\n${results.join("\n")}`;
-    return allImported 
-      ? `${reply}\n\nALL_JOBS_IMPORTED_SUCCESSFULLY\nAll jobs have been imported to your job pipeline. You can see them on the Jobs table.`
+    const importedCount = results.filter(r => r.startsWith("✅")).length;
+    const reply = `Imported ${importedCount}/${jobsToImport.length} jobs:\n${results.join("\n")}`;
+
+    // No auto-enrich here — scraper only runs when user explicitly asks
+
+    return allImported
+      ? `${reply}\n\nALL_JOBS_IMPORTED_SUCCESSFULLY\nAll jobs have been imported to your job pipeline. The user can ask to enrich descriptions later if needed.`
       : reply;
   }
   if (toolCall.tool === "get_pipeline") {
@@ -752,11 +761,11 @@ async function executeToolCall(toolCall: ToolCall, sid: string, userId?: string)
         const richness = [j.description && j.description.length > 50 ? "📄 desc" : "", j.skills ? "🔧 skills" : ""].filter(Boolean).join(", ");
         return `${i + 1}. **${j.title}** at ${j.company} (${j.location})${richness ? ` [${richness}]` : ""}`;
       }).join("\n");
-      const previewJobs = unimportedPending.map(({ description, skills, ...rest }) => ({
-        ...rest,
-        hasDescription: Boolean(description && description.length > 50),
-        hasSkills: Boolean(skills && (Array.isArray(skills) ? skills.length > 0 : skills.length > 0)),
-        descriptionPreview: description && description.length > 50 ? description.slice(0, 120).trim() + "…" : "",
+      const previewJobs = unimportedPending.map((j) => ({
+        ...j,
+        hasDescription: Boolean(j.description && j.description.length > 50),
+        hasSkills: Boolean(j.skills && (Array.isArray(j.skills) ? j.skills.length > 0 : j.skills.length > 0)),
+        descriptionPreview: j.description && j.description.length > 50 ? j.description.slice(0, 120).trim() + "…" : "",
       }));
       const withDesc = unimportedPending.filter(j => j.description && j.description.length > 50).length;
       return `__PREVIEW_JOBS__${JSON.stringify(previewJobs)}__END_PREVIEW__\n\n### 📋 Staged Preview (${unimportedPending.length} job${unimportedPending.length !== 1 ? "s" : ""} — ${withDesc} with descriptions — not yet imported)\n${list}\n\nThese jobs are staged in the preview but not yet saved. Use import_pending_jobs with action='import_all' to save them to the tracker.`;
@@ -933,8 +942,7 @@ async function executeToolCall(toolCall: ToolCall, sid: string, userId?: string)
     for (const job of prismaJobs) {
       if (!job.sourceUrl) { failed++; continue; }
       try {
-        const result = await ScraperService.scrape(job.sourceUrl, job.title);
-        const detail = result.jobs?.[0];
+        const detail = await extensionBridge.scrapeJobListing(job.sourceUrl, `enrich-pipeline-${job.id}`);
         if (detail?.description) {
           const salaryBounds = parseSalaryBounds(detail.salary);
           await prisma.job.update({
@@ -942,6 +950,7 @@ async function executeToolCall(toolCall: ToolCall, sid: string, userId?: string)
             data: {
               descriptionRaw: detail.description,
               descriptionClean: detail.description,
+              ...(detail.skills?.length ? { requiredSkills: detail.skills } : {}),
               ...(salaryBounds.salaryMin ? { salaryMin: salaryBounds.salaryMin } : {}),
               ...(salaryBounds.salaryMax ? { salaryMax: salaryBounds.salaryMax } : {}),
             },
@@ -972,7 +981,7 @@ async function executeToolCall(toolCall: ToolCall, sid: string, userId?: string)
       { name: "Indeed",     url: `https://uk.indeed.com/jobs?q=${encodeURIComponent(query)}&l=${encodeURIComponent(location)}` },
       { name: "Reed",       url: `https://www.reed.co.uk/jobs?keywords=${encodeURIComponent(query)}&location=${encodeURIComponent(location)}` },
       { name: "TotalJobs",  url: `https://www.totaljobs.com/jobs/${encodeURIComponent(query.replace(/\s+/g, "-").toLowerCase())}/in-${encodeURIComponent(location.replace(/\s+/g, "-").toLowerCase())}` },
-      { name: "Adzuna",     url: `https://www.adzuna.co.uk/jobs/search?q=${encodeURIComponent(query)}&loc=${encodeURIComponent(location)}` },
+      { name: "Adzuna",     url: `https://www.adzuna.co.uk/jobs/in-${location.toLowerCase().replace(/\s+/g, "-")}?q=${encodeURIComponent(query)}` },
       { name: "CV-Library", url: `https://www.cv-library.co.uk/search-jobs?q=${encodeURIComponent(query)}&loc=${encodeURIComponent(location)}&us=1` },
     ];
 
@@ -986,13 +995,13 @@ async function executeToolCall(toolCall: ToolCall, sid: string, userId?: string)
     const extConnected = (statusRes as any)?.data?.connected === true;
 
     if (!extConnected) {
-      return `⚠️ **Chrome extension not connected.** Please make sure the JOB OS extension is active in your browser and you're logged into the job sites you want to search. Once connected, try your search again.`;
+      return `⚠️ **Extension not connected.** The Atlas extension isn't reaching the bridge on port 3002.\n\n**To fix in Edge:**\n1. Open \`edge://extensions/\` → find **Atlas Job OS** → click **Reload** (circular arrow)\n2. Click **service worker** link on the extension card → check console for \`[Atlas] Connected to bridge\`\n3. Make sure the browser server is running: \`npm run browser-server\` in your terminal\n\n**To fix in Chrome:** Open \`chrome://extensions/\` → reload the Atlas extension.\n\nOnce the service worker console shows \`[Atlas] Connected\`, try your search again.`;
     }
 
     console.log(`[browser_extract_jobs] Extension-only search across ${targetPlatforms.length} platforms for: ${searchQuery}`);
 
     // Run extension across all target platforms in parallel
-    type RawJob = { title?: string; company?: string; location?: string; url?: string; salary?: string; description?: string; skills?: string | string[]; date_posted?: string; job_type?: string; score?: number; _platform?: string };
+    type RawJob = { title?: string; company?: string; location?: string; url?: string; salary?: string; description?: string; skills?: string | string[]; date_posted?: string; job_type?: string; score?: number; cvScore?: number; cvGaps?: string[]; _platform?: string };
     const allJobs: RawJob[] = [];
     const successfulPlatforms: string[] = [];
     const failedPlatforms: { name: string; error: string }[] = [];
@@ -1013,7 +1022,10 @@ async function executeToolCall(toolCall: ToolCall, sid: string, userId?: string)
           allJobs.push({
             title: j.title, company: j.company, location: j.location,
             url: j.link || j.url, salary: j.salary || undefined,
-            description: j.description || "", skills: j.requirements || "",
+            description: j.description || "",
+            skills: Array.isArray(j.skills) ? j.skills.join(", ") : (j.skills || j.requirements || ""),
+            datePosted: j.datePosted || j.date_posted || "",
+            jobType: j.jobType || j.job_type || "",
             _platform: j._platform,
           });
         }
@@ -1058,6 +1070,83 @@ async function executeToolCall(toolCall: ToolCall, sid: string, userId?: string)
       ? [/\busa?\b/, /\bunited states\b/, /\bireland\b/, /\bdublin\b/, /\bcanada\b/, /\baustralia\b/, /\bindia\b/]
       : [];
 
+    // Load user CV profile for CV-match scoring (non-blocking — falls back gracefully)
+    type CvProfile = {
+      technicalSkills?: string[];
+      softSkills?: string[];
+      targetRoles?: string[];
+      currentRole?: string;
+      yearsExperience?: number;
+      preferredLocations?: string[];
+      preferredIndustries?: string[];
+      salaryExpectation?: string;
+      workPreference?: string;
+    };
+    const cvProfile = userId
+      ? await atlasState.readUserJson<CvProfile>(userId, "user_profile.json", {})
+      : {};
+    const cvSkills = [
+      ...(cvProfile.technicalSkills ?? []),
+      ...(cvProfile.softSkills ?? []),
+    ].map(s => s.toLowerCase().trim());
+    const cvTargetRoles = (cvProfile.targetRoles ?? []).map(r => r.toLowerCase());
+    const cvCurrentRole = (cvProfile.currentRole ?? "").toLowerCase();
+
+    function scoreCvMatch(j: RawJob): { cvScore: number; cvGaps: string[] } {
+      if (!cvProfile || (!cvSkills.length && !cvTargetRoles.length)) {
+        return { cvScore: -1, cvGaps: [] }; // -1 = no CV uploaded, hide badge
+      }
+
+      let score = 0;
+      const gaps: string[] = [];
+      const titleNorm = (j.title ?? "").toLowerCase();
+      const descNorm = ((j.description ?? "") + " " + (Array.isArray(j.skills) ? j.skills.join(" ") : (j.skills ?? ""))).toLowerCase();
+
+      // 1. Target role match (40 pts) — does job title align with what user wants?
+      const roleMatch = cvTargetRoles.some(r =>
+        r.split(/\s+/).some(word => word.length > 3 && titleNorm.includes(word))
+      ) || (cvCurrentRole && cvCurrentRole.split(/\s+/).some(w => w.length > 3 && titleNorm.includes(w)));
+      if (roleMatch) score += 40;
+      else score += 5; // partial credit — any job is better than none
+
+      // 2. Technical skills overlap (35 pts)
+      if (cvSkills.length > 0) {
+        const matchedSkills = cvSkills.filter(s => descNorm.includes(s));
+        // Find gaps: explicit required skills not in CV
+        const jobExplicitSkills = (Array.isArray(j.skills) ? j.skills : (j.skills ?? "").split(","))
+          .map(s => s.trim().toLowerCase())
+          .filter(s => s.length > 2);
+        const explicitGaps = jobExplicitSkills.filter(s => !cvSkills.some(cs => cs.includes(s) || s.includes(cs)));
+        gaps.push(...explicitGaps.slice(0, 4).map(s => s.charAt(0).toUpperCase() + s.slice(1)));
+
+        const skillScore = cvSkills.length > 0
+          ? Math.min(35, Math.round((matchedSkills.length / Math.min(cvSkills.length, 10)) * 35))
+          : 0;
+        score += skillScore;
+      }
+
+      // 3. Location / work preference (15 pts)
+      const jobLoc = (j.location ?? "").toLowerCase();
+      const prefLocs = (cvProfile.preferredLocations ?? []).map(l => l.toLowerCase());
+      const workPref = (cvProfile.workPreference ?? "").toLowerCase();
+      const isRemote = /remote|hybrid/.test(jobLoc);
+      if (prefLocs.some(l => jobLoc.includes(l))) score += 10;
+      if (isRemote && /remote|hybrid/.test(workPref)) score += 5;
+      else if (!isRemote && /onsite|office/.test(workPref)) score += 5;
+
+      // 4. Salary expectation match (10 pts) — rough overlap check
+      if (cvProfile.salaryExpectation && j.salary) {
+        const extractNum = (s: string) => parseInt(s.replace(/[^0-9]/g, "")) || 0;
+        const jobSal = extractNum(j.salary);
+        const cvSal = extractNum(cvProfile.salaryExpectation);
+        if (jobSal > 0 && cvSal > 0 && Math.abs(jobSal - cvSal) / Math.max(jobSal, cvSal) < 0.3) {
+          score += 10;
+        }
+      }
+
+      return { cvScore: Math.max(0, Math.min(100, Math.round(score))), cvGaps: [...new Set(gaps)].slice(0, 4) };
+    }
+
     function scoreRelevance(j: RawJob): number {
       let score = j.score ?? 50; // start from scraper-provided score
 
@@ -1099,7 +1188,10 @@ async function executeToolCall(toolCall: ToolCall, sid: string, userId?: string)
     }
 
     // Apply relevance scores and filter out clearly wrong-geography results (score < 10)
-    const scored = cleaned.map(j => ({ ...j, score: scoreRelevance(j) }));
+    const scored = cleaned.map(j => {
+      const { cvScore, cvGaps } = scoreCvMatch(j);
+      return { ...j, score: scoreRelevance(j), cvScore, cvGaps };
+    });
     const relevant = scored.filter(j => (j.score ?? 0) >= 10);
 
     // Sort by combined score BEFORE dedup — most relevant + data-rich record wins per job
@@ -1146,9 +1238,11 @@ async function executeToolCall(toolCall: ToolCall, sid: string, userId?: string)
           datePosted: j.date_posted || "",
           jobType: j.job_type || "",
           score: j.score,
+          cvScore: j.cvScore,
+          cvGaps: j.cvGaps,
         }))
       }
-    }, sid);
+    }, sid, userId);
 
     const scoreList = topJobs.map((j: RawJob, i: number) =>
       `${i + 1}. ${j.title} at ${j.company} [${j._platform}] — score: ${Math.round(j.score ?? 0)}/100`

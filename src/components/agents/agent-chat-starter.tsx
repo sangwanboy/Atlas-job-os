@@ -6,7 +6,7 @@ import ReactMarkdown from "react-markdown";
 import { activeAgent, initialChat, createInitialChat } from "@/lib/mock/data";
 import type { SyncedAgentProfile } from "@/lib/services/agent/agent-profile-sync";
 import type { ChatMessageView } from "@/types/domain";
-import { Eye, Clock } from "lucide-react";
+import { Eye, Clock, ArrowDownToLine, CheckCircle2, X, FileText, Wrench, DollarSign } from "lucide-react";
 
 function ScraperTimer({ startedAt }: { startedAt: number }) {
   const [elapsed, setElapsed] = useState(Math.floor((Date.now() - startedAt) / 1000));
@@ -50,6 +50,7 @@ const ChatMessageItem = React.memo(({
   onDismiss,
   importing,
   scraperStartedAt,
+  isStreaming,
 }: {
   message: ChatMessageView;
   showToolUse: boolean;
@@ -59,6 +60,7 @@ const ChatMessageItem = React.memo(({
   onDismiss?: () => void;
   importing?: boolean;
   scraperStartedAt?: number | null;
+  isStreaming?: boolean;
 }) => {
   const content = useMemo(() => {
     return message.content
@@ -169,14 +171,22 @@ const ChatMessageItem = React.memo(({
             )}
             {/* Final response */}
             {content && (
-              <div className="prose prose-sm dark:prose-invert max-w-none prose-headings:font-bold prose-headings:mt-3 prose-headings:mb-1 prose-strong:font-bold prose-p:my-0 prose-p:leading-snug prose-ul:my-0 prose-ol:my-0 prose-li:my-0 prose-li:leading-snug">
+              <div className="prose prose-sm dark:prose-invert max-w-none prose-headings:font-bold prose-headings:mt-3 prose-headings:mb-1 prose-strong:font-bold prose-p:my-0 prose-p:leading-snug prose-ul:my-0 prose-ol:my-0 prose-li:my-0 prose-li:leading-snug prose-hr:hidden">
                 <ReactMarkdown
                   components={{
-                    a: ({ node, ...props }) => <a {...props} target="_blank" rel="noopener noreferrer" className="text-cyan-600 hover:underline" />
+                    a: ({ node, ...props }) => <a {...props} target="_blank" rel="noopener noreferrer" className="text-cyan-600 hover:underline" />,
+                    // Suppress <hr> — avoids flickering line during streaming when `---` is partially rendered
+                    hr: () => null,
                   }}
                 >
                   {content}
                 </ReactMarkdown>
+                {isStreaming && (
+                  <span
+                    aria-hidden="true"
+                    className="inline-block w-[2px] h-[0.85em] rounded-sm bg-slate-500 dark:bg-slate-400 align-middle ml-0.5 opacity-80 animate-[blink_0.9s_step-start_infinite]"
+                  />
+                )}
               </div>
             )}
 
@@ -300,7 +310,7 @@ const JobPreviewBox = ({
                 disabled={importing}
                 className="rounded-lg bg-gradient-to-r from-emerald-500 to-emerald-600 px-3 py-1.5 text-xs font-bold text-white shadow-sm transition-all hover:from-emerald-600 hover:to-emerald-700 hover:shadow-md disabled:opacity-50 active:scale-95"
               >
-                {importing ? "Importing..." : "✅ Import All"}
+                {importing ? "Importing..." : <><ArrowDownToLine className="inline h-3 w-3 mr-1" />Import All</>}
               </button>
             )}
             <button
@@ -308,13 +318,13 @@ const JobPreviewBox = ({
               disabled={importing}
               className="rounded-lg border border-slate-200 dark:border-white/10 bg-white/80 dark:bg-white/5 px-3 py-1.5 text-xs font-bold text-slate-600 dark:text-slate-300 shadow-sm transition-all hover:bg-slate-50 dark:hover:bg-white/10 hover:border-slate-300 dark:hover:border-white/20 disabled:opacity-50 active:scale-95"
             >
-              ❌ {jobs.every(j => j.isAlreadyImported) ? "Close" : "Dismiss"}
+              <X className="inline h-3 w-3 mr-1" />{jobs.every(j => j.isAlreadyImported) ? "Close" : "Dismiss"}
             </button>
           </div>
         </div>
         {jobs.every(j => j.isAlreadyImported) && (
-          <div className="mb-4 rounded-lg bg-emerald-50 border border-emerald-100 p-3 text-center animate-in zoom-in duration-300">
-            <p className="text-xs font-semibold text-emerald-800">🎉 All jobs have been imported to your job pipeline. You can see them on the Jobs interface.</p>
+          <div className="mb-4 rounded-lg bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-100 dark:border-emerald-500/20 p-3 text-center animate-in zoom-in duration-300">
+            <p className="text-xs font-semibold text-emerald-800 dark:text-emerald-300">🎉 All jobs have been imported to your job pipeline. You can see them on the Jobs interface.</p>
           </div>
         )}
         <div className="space-y-2 max-h-[400px] overflow-y-auto custom-scrollbar pr-1">
@@ -324,7 +334,7 @@ const JobPreviewBox = ({
                 <p className="font-semibold text-sm text-slate-800 dark:text-slate-100 truncate">{job.title}</p>
                 <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">{job.company} • {job.location}</p>
                 <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                  {/* Profile match score */}
+                  {/* Search relevance score (query+location fit, not profile match) */}
                   {job.score != null && (
                     (() => {
                       const pct = job.score > 1 ? Math.round(job.score) : Math.round(job.score * 100);
@@ -335,10 +345,32 @@ const JobPreviewBox = ({
                           : "bg-slate-50 dark:bg-white/5 text-slate-500 dark:text-slate-400 ring-slate-200/60 dark:ring-white/10";
                       return (
                         <span className={`inline-flex items-center rounded-md px-2 py-0.5 text-[10px] font-bold ring-1 ${color}`}>
-                          ⚡ {pct}% match
+                          ⚡ {pct}% relevance
                         </span>
                       );
                     })()
+                  )}
+                  {/* CV fit score */}
+                  {job.cvScore != null && job.cvScore >= 0 && (
+                    (() => {
+                      const cvPct = job.cvScore > 1 ? Math.round(job.cvScore) : Math.round(job.cvScore * 100);
+                      const cvColor = cvPct >= 70
+                        ? "bg-blue-50 dark:bg-blue-500/15 text-blue-700 dark:text-blue-400 ring-blue-200/60 dark:ring-blue-500/30"
+                        : cvPct >= 40
+                          ? "bg-violet-50 dark:bg-violet-500/15 text-violet-700 dark:text-violet-400 ring-violet-200/60 dark:ring-violet-500/30"
+                          : "bg-slate-50 dark:bg-white/5 text-slate-500 dark:text-slate-400 ring-slate-200/60 dark:ring-white/10";
+                      return (
+                        <span className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-bold ring-1 ${cvColor}`} title={job.cvGaps?.length ? `CV gaps: ${job.cvGaps.join(", ")}` : "Strong CV match"}>
+                          <FileText className="h-2.5 w-2.5" />{cvPct}% CV fit
+                        </span>
+                      );
+                    })()
+                  )}
+                  {/* CV gaps */}
+                  {job.cvGaps && job.cvGaps.length > 0 && (
+                    <span className="text-[10px] text-slate-400 dark:text-slate-500">
+                      gaps: {job.cvGaps.join(", ")}
+                    </span>
                   )}
                   {/* Salary */}
                   {(() => {
@@ -352,8 +384,8 @@ const JobPreviewBox = ({
                         ? "bg-blue-50 dark:bg-blue-500/15 text-blue-700 dark:text-blue-400 ring-blue-200/60 dark:ring-blue-500/30"
                         : "bg-emerald-50 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 ring-emerald-200/60 dark:ring-emerald-500/30";
                     return (
-                      <span className={`inline-flex items-center rounded-md px-2 py-0.5 text-[10px] font-bold ring-1 ${cls}`}>
-                        💰 {display}
+                      <span className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-bold ring-1 ${cls}`}>
+                        <DollarSign className="h-2.5 w-2.5" />{display}
                       </span>
                     );
                   })()}
@@ -365,8 +397,8 @@ const JobPreviewBox = ({
                   )}
                   {/* Date posted */}
                   {job.datePosted?.trim() && (
-                    <span className="inline-flex items-center rounded-md px-2 py-0.5 text-[10px] font-bold bg-cyan-50 dark:bg-cyan-500/15 text-cyan-700 dark:text-cyan-300 border border-cyan-100 dark:border-cyan-500/30">
-                      🕒 {job.datePosted.trim()}
+                    <span className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-bold bg-cyan-50 dark:bg-cyan-500/15 text-cyan-700 dark:text-cyan-300 border border-cyan-100 dark:border-cyan-500/30">
+                      <Clock className="h-2.5 w-2.5" />{job.datePosted.trim()}
                     </span>
                   )}
                   {/* Source */}
@@ -375,13 +407,13 @@ const JobPreviewBox = ({
                   )}
                   {/* Richness indicators */}
                   {job.hasDescription && (
-                    <span title={job.descriptionPreview || "Full description available"} className="inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold bg-indigo-50 dark:bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 ring-1 ring-indigo-200/60 dark:ring-indigo-500/30 cursor-help">
-                      📄 desc
+                    <span title={job.descriptionPreview || "Full description available"} className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-bold bg-indigo-50 dark:bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 ring-1 ring-indigo-200/60 dark:ring-indigo-500/30 cursor-help">
+                      <FileText className="h-2.5 w-2.5" />desc
                     </span>
                   )}
                   {job.hasSkills && (
-                    <span className="inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold bg-teal-50 dark:bg-teal-500/15 text-teal-700 dark:text-teal-300 ring-1 ring-teal-200/60 dark:ring-teal-500/30">
-                      🔧 skills
+                    <span className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-bold bg-teal-50 dark:bg-teal-500/15 text-teal-700 dark:text-teal-300 ring-1 ring-teal-200/60 dark:ring-teal-500/30">
+                      <Wrench className="h-2.5 w-2.5" />skills
                     </span>
                   )}
                   {/* View link */}
@@ -396,8 +428,8 @@ const JobPreviewBox = ({
                 </div>
               </div>
               {job.isAlreadyImported ? (
-                <div className="ml-2 flex-none px-2 py-1 text-[10px] font-bold text-emerald-600 bg-emerald-50/50 rounded-md border border-emerald-100/50">
-                  ✅ Imported
+                <div className="ml-2 flex-none px-2 py-1 text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50/50 dark:bg-emerald-500/10 rounded-md border border-emerald-100/50 dark:border-emerald-500/20 flex items-center gap-1">
+                  <CheckCircle2 className="h-3 w-3" />Imported
                 </div>
               ) : (
                 <button
@@ -443,6 +475,8 @@ export function AgentChatStarter() {
   const chatBottomRef = useRef<HTMLDivElement>(null);
   const newChatRef = useRef(false);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const lastTextDeltaRef = useRef<number>(0);
+  const [isTextActive, setIsTextActive] = useState(false);
 
   useEffect(() => {
     // History scroll only
@@ -574,7 +608,6 @@ export function AgentChatStarter() {
   // Effect 2: Loading Sync Status (reaction to active session, debounced)
   useEffect(() => {
     let ignore = false;
-    let interval: number;
 
     const debounce = setTimeout(() => {
       async function loadSyncStatus() {
@@ -588,13 +621,11 @@ export function AgentChatStarter() {
         }
       }
       void loadSyncStatus();
-      interval = window.setInterval(loadSyncStatus, 20_000);
     }, 300); // debounce — skip if sessionId changes rapidly
 
     return () => {
       ignore = true;
       clearTimeout(debounce);
-      window.clearInterval(interval);
     };
   }, [sessionId, urlSessionId]);
 
@@ -740,6 +771,8 @@ export function AgentChatStarter() {
               const statusIdx = processingSteps.indexOf(update.status);
               if (statusIdx !== -1) setLoadingTextIndex(statusIdx);
             } else if (update.type === "delta") {
+              lastTextDeltaRef.current = Date.now();
+              setIsTextActive(true);
               setMessages(prev => prev.map(m =>
                 m.id === assistantMessageId
                   ? { ...m, content: ((m.content as string) || "") + (update.text as string) } as any
@@ -752,6 +785,7 @@ export function AgentChatStarter() {
                   : m
               ));
             } else if (update.type === "tool_start") {
+              setIsTextActive(false);
               if (update.tool === "browser_extract_jobs") setScraperStartedAt(Date.now());
               setMessages(prev => prev.map(m =>
                 m.id === assistantMessageId
@@ -822,6 +856,7 @@ export function AgentChatStarter() {
     } finally {
       abortControllerRef.current = null;
       setLoading(false);
+      setIsTextActive(false);
     }
   }
 
@@ -967,7 +1002,7 @@ export function AgentChatStarter() {
                           ? 'bg-red-50/50 dark:bg-red-900/20 border-red-200/40 dark:border-red-500/20'
                           : 'bg-emerald-50/50 dark:bg-emerald-900/20 border-emerald-200/40 dark:border-emerald-500/20'}`}>
                           <p className="font-bold text-[10px] flex items-center gap-1">
-                            <span className={isErr ? 'text-red-500' : 'text-emerald-500'}>●</span>
+                            <span className={isErr ? 'text-red-500' : 'text-emerald-500'}>{isErr ? '✗' : '✓'}</span>
                             <span className="dark:text-slate-200">{log.tool}</span>
                           </p>
                           <p className="text-[9px] text-muted truncate">{JSON.stringify(log.parameters).slice(0, 80)}</p>
@@ -1069,7 +1104,7 @@ export function AgentChatStarter() {
                 <div className="max-w-[85%] rounded-xl px-4 py-3 bg-white/60 dark:bg-white/5 border border-white/20 dark:border-white/10 w-2/3 h-32 self-start shadow-sm" />
               </div>
             ) : (
-              messages.map((message) => {
+              messages.map((message, msgIdx) => {
                 // Use __END_PREVIEW__ boundary — avoids breaking on ] inside job descriptions
                 let messageJobs: JobPreview[] | null = null;
                 const boundaryMatch = message.content.match(/__PREVIEW_JOBS__([\s\S]*?)__END_PREVIEW__/i);
@@ -1096,6 +1131,7 @@ export function AgentChatStarter() {
                     onDismiss={handleDismissJobs}
                     importing={importingJobs}
                     scraperStartedAt={scraperStartedAt}
+                    isStreaming={loading && isTextActive && msgIdx === messages.length - 1 && message.role === "ASSISTANT"}
                   />
                 );
               })

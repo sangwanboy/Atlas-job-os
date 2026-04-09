@@ -1,9 +1,9 @@
 {
-  "mode": "job-discovery",
-  "strategy": "platform-specific-search",
+  "mode": "discovery",
+  "strategy": "job-review",
   "todos": [
-    "Import 9 Reed jobs upon confirmation",
-    "Monitor for .NET/Java skill gaps in future searches",
-    "Maintain strict single-platform search (Reed) as per user instruction"
+    "Import London SDE jobs if confirmed by Tushar Sangwan",
+    "Search for SDE roles in Manchester (pending)",
+    "Sync Gmail for hospitality or tech follow-ups"
   ]
 }

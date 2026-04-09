@@ -5,7 +5,7 @@ import type { Route } from "next";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { Bot, BriefcaseBusiness, ChartNoAxesCombined, FileText, LayoutDashboard, Megaphone, Settings, Users, PanelLeftClose, PanelLeftOpen, X } from "lucide-react";
+import { Bot, BriefcaseBusiness, ChartNoAxesCombined, FileText, LayoutDashboard, Megaphone, MessageSquare, Settings, Users, PanelLeftClose, PanelLeftOpen, X } from "lucide-react";
 import type { RuntimeSettingsResponse } from "@/types/settings";
 
 const navItems = [
@@ -55,8 +55,10 @@ export function AppSidebar({ mobileOpen, onClose, collapsed, onToggleCollapse }:
       }
     }
     void load();
-    const interval = setInterval(load, 30000);
-    return () => clearInterval(interval);
+    // Re-fetch only when user returns to the tab, not on a timer
+    function onFocus() { void load(); }
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
   }, []);
 
   const totalTokens = sidebarTokens;
@@ -139,6 +141,17 @@ export function AppSidebar({ mobileOpen, onClose, collapsed, onToggleCollapse }:
                   >
                     <Users className="h-4 w-4" />
                   </Link>
+                  <Link
+                    href="/admin/feedback"
+                    title="Beta Feedback"
+                    className={`flex items-center justify-center rounded-xl border p-2 w-full transition ${
+                      pathname?.startsWith("/admin/feedback")
+                        ? "border-cyan-200/80 bg-cyan-50/80 text-slate-900"
+                        : "border-transparent text-muted hover:border-white/70 hover:bg-white/75 hover:text-text"
+                    }`}
+                  >
+                    <MessageSquare className="h-4 w-4" />
+                  </Link>
                 </>
               )}
             </nav>
@@ -186,12 +199,23 @@ export function AppSidebar({ mobileOpen, onClose, collapsed, onToggleCollapse }:
                     href="/admin/users"
                     className={`group flex items-center gap-3 rounded-xl border px-3 py-2 text-sm font-semibold transition ${
                       pathname?.startsWith("/admin/users")
-                        ? "border-cyan-200/80 bg-cyan-50/80 text-slate-900"
+                        ? "border-cyan-200/80 dark:border-cyan-500/30 bg-cyan-50/80 dark:bg-cyan-500/10 text-slate-900 dark:text-cyan-300"
                         : "border-transparent text-muted hover:border-white/70 hover:bg-white/75 hover:text-text"
                     }`}
                   >
                     <Users className="h-4 w-4" />
                     Manage Users
+                  </Link>
+                  <Link
+                    href="/admin/feedback"
+                    className={`group flex items-center gap-3 rounded-xl border px-3 py-2 text-sm font-semibold transition ${
+                      pathname?.startsWith("/admin/feedback")
+                        ? "border-cyan-200/80 dark:border-cyan-500/30 bg-cyan-50/80 dark:bg-cyan-500/10 text-slate-900 dark:text-cyan-300"
+                        : "border-transparent text-muted hover:border-white/70 hover:bg-white/75 hover:text-text"
+                    }`}
+                  >
+                    <MessageSquare className="h-4 w-4" />
+                    Beta Feedback
                   </Link>
                 </>
               )}
@@ -287,6 +311,18 @@ export function AppSidebar({ mobileOpen, onClose, collapsed, onToggleCollapse }:
               >
                 <Users className="h-4 w-4" />
                 Manage Users
+              </Link>
+              <Link
+                href="/admin/feedback"
+                onClick={onClose}
+                className={`group flex items-center gap-3 rounded-xl border px-3 py-2 text-sm font-semibold transition ${
+                  pathname?.startsWith("/admin/feedback")
+                    ? "border-cyan-200/80 bg-cyan-50/80 text-slate-900"
+                    : "border-transparent text-muted hover:border-white/70 hover:bg-white/75 hover:text-text"
+                }`}
+              >
+                <MessageSquare className="h-4 w-4" />
+                Beta Feedback
               </Link>
             </>
           )}

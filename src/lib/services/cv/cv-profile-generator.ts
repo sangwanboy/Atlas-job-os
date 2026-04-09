@@ -96,6 +96,13 @@ export class CvProfileGenerator {
         await atlasState.writeText(ATLAS_FILES.userProfile, timestampedProfile);
       }
 
+      // Also persist structured JSON for fast CV-match scoring (no markdown parsing needed)
+      if (userId) {
+        await atlasState.writeUserJson(userId, "user_profile.json", parsed);
+      } else {
+        await atlasState.writeJson("user_profile.json", parsed);
+      }
+
       // Write CV upgrade tips + summary to cv_summary.md (per-user if userId provided)
       const cvSummaryMd = buildCvSummaryMarkdown(parsed, upgradeTips, fileName);
       if (userId) {
@@ -123,13 +130,17 @@ export class CvProfileGenerator {
       console.error("[CvProfileGenerator] Error:", message);
 
       // Fallback: write a minimal stub — do NOT dump raw CV text which may be binary garbage
-      const fallbackProfile = `# User Profile\n\n*Profile extraction failed for ${fileName}. Please re-process the file once Vertex AI is available.*\n\nError: ${message}`;
-      if (userId) {
-        await atlasState.writeUserText(userId, ATLAS_FILES.userProfile, fallbackProfile);
-      } else {
-        await atlasState.writeText(ATLAS_FILES.userProfile, fallbackProfile);
+      try {
+        const fallbackProfile = `# User Profile\n\n*Profile extraction failed for ${fileName}. Please re-process the file once Vertex AI is available.*\n\nError: ${message}`;
+        if (userId) {
+          await atlasState.writeUserText(userId, ATLAS_FILES.userProfile, fallbackProfile);
+        } else {
+          await atlasState.writeText(ATLAS_FILES.userProfile, fallbackProfile);
+        }
+        await continuitySyncService.logContextMemory(`CV profile (fallback) saved from: ${fileName}`, userId);
+      } catch (writeErr) {
+        console.error("[CvProfileGenerator] Fallback write also failed:", writeErr instanceof Error ? writeErr.message : String(writeErr));
       }
-      await continuitySyncService.logContextMemory(`CV profile (fallback) saved from: ${fileName}`, userId);
 
       return {
         success: false,

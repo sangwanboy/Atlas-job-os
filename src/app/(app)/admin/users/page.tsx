@@ -332,7 +332,7 @@ export default function AdminUsersPage() {
               <h3 className="text-lg font-extrabold">Create New User</h3>
               <button
                 onClick={() => setShowCreateModal(false)}
-                className="rounded-full bg-slate-100 p-1.5 hover:bg-slate-200"
+                className="rounded-full bg-slate-100 dark:bg-white/10 p-1.5 hover:bg-slate-200 dark:hover:bg-white/20 transition-colors cursor-pointer"
               >
                 <X className="h-4 w-4" />
               </button>
@@ -433,7 +433,7 @@ export default function AdminUsersPage() {
               <h3 className="text-lg font-extrabold">Reset Password</h3>
               <button
                 onClick={() => setResetTarget(null)}
-                className="rounded-full bg-slate-100 p-1.5 hover:bg-slate-200"
+                className="rounded-full bg-slate-100 dark:bg-white/10 p-1.5 hover:bg-slate-200 dark:hover:bg-white/20 transition-colors cursor-pointer"
               >
                 <X className="h-4 w-4" />
               </button>

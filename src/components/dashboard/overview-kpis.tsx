@@ -1,9 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import { ArrowDownRight, ArrowUpRight, Minus } from "lucide-react";
-import type { KpiMetric } from "@/types/domain";
+import { useDashboardStats } from "@/hooks/use-dashboard-stats";
 
 function TrendIcon({ trend }: { trend: "up" | "down" | "flat" }) {
   if (trend === "up") {
@@ -16,34 +14,18 @@ function TrendIcon({ trend }: { trend: "up" | "down" | "flat" }) {
 }
 
 export function OverviewKpis() {
-  const [metrics, setMetrics] = useState<KpiMetric[]>([]);
-  const [loading, setLoading] = useState(true);
-  const router = useRouter();
+  const { data, loading, error } = useDashboardStats();
+  const metrics = data?.kpiMetrics ?? [];
 
-  const fetchStats = async () => {
-    try {
-      const res = await fetch("/api/dashboard/stats");
-      if (!res.ok) {
-        if (res.status === 401) router.push("/login");
-        return;
-      }
-      const data = await res.json();
-      if (data.kpiMetrics) {
-        setMetrics(data.kpiMetrics);
-      }
-    } catch (err) {
-      console.error("Failed to fetch kpis:", err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchStats();
-    // Real-time sync at 30s interval as requested
-    const interval = setInterval(fetchStats, 30000);
-    return () => clearInterval(interval);
-  }, []);
+  if (error) {
+    return (
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <article className="kpi-card glass-panel col-span-full text-center text-sm text-rose-500 py-6">
+          Unable to load metrics. Please refresh the page.
+        </article>
+      </section>
+    );
+  }
 
   if (loading && metrics.length === 0) {
     return (
@@ -61,11 +43,11 @@ export function OverviewKpis() {
         <article key={metric.label} className="kpi-card glass-panel hover:scale-[1.02] transition-transform duration-300">
           <p className="text-sm font-medium text-slate-500 dark:text-slate-400">{metric.label}</p>
           <div className="mt-2 flex items-end justify-between">
-            <p className="text-3xl font-black tracking-tighter text-slate-900 dark:text-slate-100">{metric.value}</p>
+            <p className="text-3xl font-black tracking-tighter text-slate-900 dark:text-slate-100">{metric.value ?? "—"}</p>
             <div className="flex items-center gap-1 text-sm font-bold bg-white/80 dark:bg-white/10 px-2 py-0.5 rounded-full shadow-sm">
-              <TrendIcon trend={metric.trend} />
+              <TrendIcon trend={metric.trend ?? "flat"} />
               <span className={metric.trend === 'up' ? 'text-emerald-600 dark:text-emerald-400' : metric.trend === 'down' ? 'text-rose-600 dark:text-rose-400' : 'text-slate-500 dark:text-slate-400'}>
-                {metric.delta}
+                {metric.delta ?? "—"}
               </span>
             </div>
           </div>

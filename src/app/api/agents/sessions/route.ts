@@ -7,18 +7,18 @@ export async function GET(request: Request) {
   const agentId = searchParams.get("agentId");
   const sessionId = searchParams.get("sessionId");
 
+  const authResult = await requireAuth();
+  if (isNextResponse(authResult)) return authResult;
+  const { userId } = authResult;
+
   try {
     if (sessionId) {
       const messages = await agentStore.getSessionMessages(sessionId);
       return NextResponse.json({ messages });
     }
 
-    const authResult = await requireAuth();
-    if (isNextResponse(authResult)) return authResult;
-    const { userId } = authResult;
-
     if (agentId) {
-      const sessions = await agentStore.listSessions({ agentId, userId });
+      const sessions = await agentStore.listSessions({ agentId, userId: userId });
       let hydratedMessages: unknown[] = [];
       if (sessions.length > 0) {
         hydratedMessages = await agentStore.getSessionMessages(sessions[0].id);

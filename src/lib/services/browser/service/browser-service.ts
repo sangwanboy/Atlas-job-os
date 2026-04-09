@@ -995,18 +995,18 @@ Return ONLY a valid JSON array of job objects — no markdown, no explanation.`;
 
     if (cards.length === 0) return [];
 
-    // Phase 2 — Visit each job detail page and scrape description, salary, company
-    const limit = Math.min(cards.length, 15);
-    const topCards = cards.slice(0, limit);
+    // Phase 2 — Parallel detail scraping: runs concurrently with other platforms' searches.
+    // Each batch slot gets its own tab key so 3 listing pages load simultaneously.
+    const topCards = cards.slice(0, 20);
     const enriched: any[] = [];
 
+    console.log(`[ExtensionExtract:${key}] Phase 2: enriching ${topCards.length} jobs (reusing platform tab)`);
+
+    // Reuse the SAME platform tab for all detail scraping — no extra tabs
     for (const card of topCards) {
       if (extensionBridge.isCancelled()) break;
       try {
-        console.log(`[ExtensionExtract:${key}] Phase 2: fetching details for "${card.title}" — ${card.url}`);
-        await extensionBridge.navigate(card.url, key);
-        await new Promise((r) => setTimeout(r, 800 + Math.round(Math.random() * 800))); // human-like settle
-        const detail = await extensionBridge.getJobDetail(key);
+        const detail = await extensionBridge.scrapeJobListing(card.url, key);
         enriched.push({
           id: Buffer.from(`${card.title}-${card.url}`).toString("base64"),
           title: card.title || "Untitled Role",
@@ -1016,12 +1016,13 @@ Return ONLY a valid JSON array of job objects — no markdown, no explanation.`;
           url: card.url,
           salary: detail.salary || null,
           jobType: detail.jobType || null,
+          datePosted: detail.datePosted || null,
           description: detail.description || "",
+          skills: detail.skills || [],
           source: "Extension+DOM",
         });
       } catch (err) {
-        console.warn(`[ExtensionExtract] Phase 2 failed for ${card.url}:`, err);
-        // Still include card with basic data if enrichment fails
+        console.warn(`[ExtensionExtract] Phase 2 failed for ${card.url}:`, (err as Error).message);
         enriched.push({
           id: Buffer.from(`${card.title}-${card.url}`).toString("base64"),
           title: card.title || "Untitled Role",
@@ -1031,6 +1032,7 @@ Return ONLY a valid JSON array of job objects — no markdown, no explanation.`;
           url: card.url,
           salary: null,
           description: "",
+          skills: [],
           source: "Extension+DOM",
         });
       }
@@ -1040,50 +1042,48 @@ Return ONLY a valid JSON array of job objects — no markdown, no explanation.`;
     return enriched;
   }
 
-  private async internalEnrichJobs(
-    sessionId: string,
-    pageId: string | undefined,
-    jobs: Array<{ url: string; title?: string; company?: string; location?: string; salary?: string }>,
-  ): Promise<{ sessionId: string; pageId: string; jobs: any[] }> {
-    const resolved = this.sessionManager.getPage(sessionId, pageId);
+  /**
+   * Enrich jobs via Chrome extension — no Playwright.
+   * Navigates the extension tab to each listing URL and scrapes description + skills.
+   */
+  async enrichJobs(input: BrowserEnrichJobsInput): Promise<BrowserActionResult<{ sessionId: string; pageId: string; jobs: Array<any> }>> {
+    const t0 = Date.now();
+    if (!extensionBridge.isConnected()) {
+      return {
+        status: "error", tool: "browser_enrich_jobs",
+        timestamp: new Date().toISOString(),
+        data: { sessionId: input.sessionId, pageId: input.pageId ?? "", jobs: input.jobs },
+        error: { code: "EXTENSION_NOT_CONNECTED", message: "Chrome extension not connected — cannot enrich jobs", retriable: false },
+        metadata: { attempt: 1, retries: 0, durationMs: Date.now() - t0 },
+      };
+    }
+
     const enrichedJobs: any[] = [];
-    const jobsToProcess = jobs.slice(0, 10);
+    const jobsToProcess = input.jobs.slice(0, 20);
 
     for (const job of jobsToProcess) {
+      if (!job.url) { enrichedJobs.push(job); continue; }
       try {
-        await resolved.page.goto(job.url, { waitUntil: "domcontentloaded", timeout: 15000 });
-        await resolved.page.waitForSelector(".description__text, .show-more-less-html__snippet, .job-description, .artdeco-card, .jobs-description", { timeout: 5000 }).catch(() => {});
-
-        const details = await resolved.page.evaluate(() => {
-          const descSelectors = [".description__text--rich", ".show-more-less-html__snippet", ".job-description", ".jobs-description__container", ".jobs-box__html-content"];
-          let description = "";
-          for (const sel of descSelectors) {
-            const el = document.querySelector(sel);
-            if (el && el.textContent?.trim().length && el.textContent.trim().length > 50) {
-              description = el.textContent.trim();
-              if (description.length > 200) break; 
-            }
-          }
-          return { description: description.slice(0, 4000) };
-        });
-
+        const detail = await extensionBridge.scrapeJobListing(job.url, `enrich-${input.sessionId}`);
         enrichedJobs.push({
           ...job,
-          description: details.description || "No full description could be extracted.",
-          id: Buffer.from(`${job.title}-${job.company}-${job.location}`).toString("base64")
+          description: detail.description || job.description || "",
+          skills: detail.skills?.length ? detail.skills.join(", ") : (job.skills || ""),
+          salary: detail.salary || job.salary || "",
+          jobType: detail.jobType || job.jobType || "",
+          datePosted: detail.datePosted || job.datePosted || "",
         });
-      } catch (err) {
-        enrichedJobs.push({ ...job, description: "Deep extraction timed out. Metadata preserved." });
+      } catch {
+        enrichedJobs.push(job); // keep original on failure, don't drop
       }
     }
 
-    return { sessionId, pageId: resolved.pageId, jobs: enrichedJobs };
-  }
-
-  async enrichJobs(input: BrowserEnrichJobsInput): Promise<BrowserActionResult<{ sessionId: string; pageId: string; jobs: Array<any> }>> {
-    return this.executeSessionAction("browser_enrich_jobs", input.sessionId, async () => {
-      return this.internalEnrichJobs(input.sessionId, input.pageId, input.jobs);
-    });
+    return {
+      status: "ok", tool: "browser_enrich_jobs",
+      timestamp: new Date().toISOString(),
+      data: { sessionId: input.sessionId, pageId: input.pageId ?? "", jobs: enrichedJobs },
+      metadata: { attempt: 1, retries: 0, durationMs: Date.now() - t0 },
+    };
   }
 
   async screenshot(input: BrowserScreenshotInput): Promise<BrowserActionResult<{ sessionId: string; pageId: string; filePath: string }>> {
@@ -1134,22 +1134,19 @@ Return ONLY a valid JSON array of job objects — no markdown, no explanation.`;
       return { status: "error", tool: "browser_extension_enrich_job", timestamp: new Date().toISOString(), data: { job: null }, error: { code: "EXTENSION_NOT_CONNECTED", message: "Chrome extension not connected", retriable: false }, metadata: { attempt: 1, retries: 0, durationMs: 0 } };
     }
     try {
-      await extensionBridge.navigate(input.url);
-      await new Promise((r) => setTimeout(r, 600));
-      const png = await extensionBridge.screenshot();
-      const details = await extractJobFromScreenshot(png, input.url);
+      // Use DOM scraping via extension — faster and more reliable than screenshot+OCR
+      const detail = await extensionBridge.scrapeJobListing(input.url);
       const job = {
-        title: details?.title || "",
-        company: details?.company || "",
-        location: details?.location || "",
-        salary: details?.salary || null,
-        jobType: details?.jobType || null,
-        datePosted: details?.datePosted || null,
-        description: details?.description || "",
-        requirements: details?.requirements || "",
+        company: detail.company || "",
+        location: "",
+        salary: detail.salary || null,
+        jobType: detail.jobType || null,
+        datePosted: detail.datePosted || null,
+        description: detail.description || "",
+        skills: detail.skills || [],
         url: input.url,
         link: input.url,
-        source: "Extension+OCR",
+        source: "Extension",
       };
       return { status: "ok", tool: "browser_extension_enrich_job", timestamp: new Date().toISOString(), data: { job }, metadata: { attempt: 1, retries: 0, durationMs: Date.now() - t0 } };
     } catch (err: any) {

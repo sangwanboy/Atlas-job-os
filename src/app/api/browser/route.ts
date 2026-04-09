@@ -3,6 +3,7 @@ import { z } from "zod";
 import { agentBrowserToolRegistry } from "@/lib/services/browser/tools/agent-browser-tool-registry";
 import type { BrowserToolName } from "@/lib/services/browser/types/browser-types";
 import { acquireBrowserSlot } from "@/lib/browser-pool";
+import { requireAuth, isNextResponse } from "@/lib/server/auth-helpers";
 
 // Unified Browser API Schema based on USER request and internal registry
 const browserRequestSchema = z.object({
@@ -37,6 +38,8 @@ const actionToToolMap: Record<string, BrowserToolName> = {
 };
 
 export async function POST(request: Request) {
+  const authResult = await requireAuth();
+  if (isNextResponse(authResult)) return authResult;
   try {
     const json = await request.json();
     const { action, sessionId, params } = browserRequestSchema.parse(json);

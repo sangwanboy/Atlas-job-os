@@ -130,6 +130,10 @@ class ExtensionBridgeService {
     await this.send("closeTab", {});
   }
 
+  async closeNamedTab(tabKey: string): Promise<void> {
+    await this.send("closeTab", { tabKey }, 5_000);
+  }
+
   async navigate(url: string, tabKey = "default"): Promise<void> {
     await this.send("navigate", { url, tabKey }, 30_000);
   }
@@ -164,13 +168,32 @@ class ExtensionBridgeService {
     return result.cards ?? [];
   }
 
-  async getJobDetail(tabKey = "default"): Promise<{ company: string; salary: string; jobType: string; description: string; url: string }> {
-    const result = await this.send<{ detail: { company: string; salary: string; jobType: string; description: string; url: string } }>(
+  async getJobDetail(tabKey = "default"): Promise<{ company: string; salary: string; jobType: string; description: string; skills: string[]; url: string }> {
+    const result = await this.send<{ detail: { company: string; salary: string; jobType: string; description: string; skills: string[]; url: string } }>(
       "getJobDetail",
       { tabKey },
       15_000,
     );
-    return result.detail ?? { company: "", salary: "", jobType: "", description: "", url: "" };
+    return result.detail ?? { company: "", salary: "", jobType: "", description: "", skills: [], url: "" };
+  }
+
+  /**
+   * Navigate to a job listing page and scrape full details (description, skills, salary, jobType).
+   * This is the primary enrichment path — uses Chrome extension, no Playwright.
+   */
+  async scrapeJobListing(url: string, tabKey = "scrape-detail"): Promise<{
+    company: string; salary: string; jobType: string; datePosted: string;
+    description: string; skills: string[]; url: string;
+  }> {
+    const result = await this.send<{ detail: {
+      company: string; salary: string; jobType: string; datePosted: string;
+      description: string; skills: string[]; url: string;
+    } }>(
+      "scrapeJobListing",
+      { url, tabKey },
+      30_000,
+    );
+    return result.detail ?? { company: "", salary: "", jobType: "", datePosted: "", description: "", skills: [], url };
   }
 
   async ping(): Promise<boolean> {

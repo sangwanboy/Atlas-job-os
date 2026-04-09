@@ -1,8 +1,8 @@
 # Atlas Job OS — User Manual
 
-## Starting the App
+## Starting the App (Self-hosted / Dev)
 
-Run these commands in **4 separate PowerShell terminals** every time you start the app. Start them in order.
+Run these commands in **4 separate terminals** every time you start the app. Start them in order.
 
 **Terminal 1 — PostgreSQL database**
 ```powershell
@@ -38,11 +38,21 @@ Then open: **http://localhost:3000**
 
 > **Important:** Always start `atlas-db` and `atlas-redis` Docker containers **before** running `npm run dev`. If Next.js starts before the database is up, Prisma's connection pool initialises against a dead socket and all DB queries will fail with `Can't reach database server at localhost:5432` — even after Docker starts. Fix: `docker start atlas-db` then Ctrl+C and restart `npm run dev`.
 
+> **Windows tip:** Always use `Set-Location D:\Projects\Atlas-job-os` (not `cd /d`) in PowerShell to switch drives.
+
 ---
 
 ## What is Atlas Job OS?
 
-Atlas is an AI-powered job search operating system. Instead of manually browsing job boards, you talk to Atlas in plain English. Atlas searches multiple job sites, scores each role against your CV profile, and manages your entire job pipeline — from discovery to application tracking to email follow-ups.
+Atlas is an AI-powered job search operating system. Instead of manually browsing job boards, you talk to Atlas in plain English. Atlas searches multiple job sites simultaneously using your real logged-in browser (via the Chrome extension), scores each role against your CV profile, and manages your entire job pipeline — from discovery to application tracking to email follow-ups.
+
+**Key capabilities:**
+- Natural-language job search across 6 UK platforms simultaneously
+- Automatic description + skills extraction from each listing page
+- CV-based match scoring (relevance + fit)
+- Full pipeline management: status, notes, priority, apply tracking
+- Gmail integration for email thread linking and follow-up drafting
+- AI memory system that learns your preferences across sessions
 
 ---
 
@@ -53,11 +63,10 @@ Atlas is an AI-powered job search operating system. Instead of manually browsing
 Go to **My CV** in the left sidebar.
 
 - Click **Upload CV** and select your PDF or Word document.
-- Atlas extracts your profile automatically using AI (Vertex AI vision for scanned PDFs, pdf-parse for digital PDFs).
+- Atlas extracts your profile automatically using AI.
 - After processing you'll see a **Profile Preview** showing what Atlas knows about you — name, location, skills, experience.
 
 **Tagging your CV:**
-Each uploaded CV can be tagged to control which jobs Atlas targets it against:
 
 | Tag | When to use |
 |-----|-------------|
@@ -82,58 +91,46 @@ Type naturally — Atlas understands intent:
 
 **What Atlas does with a job search:**
 
-Atlas uses whichever extraction mode is available:
+1. Opens a dedicated Atlas tab in your Chrome/Edge browser (via the extension)
+2. Searches all 6 platforms in parallel — LinkedIn, Indeed, Reed, TotalJobs, Adzuna, CV-Library
+3. Scrapes job cards from search results (title, company, location, URL)
+4. For each job: navigates to the listing page, waits for the content script to auto-extract full details
+5. Returns structured results: title, company, location, salary, job type, full description, skills
+6. Scores every result against your CV and search query
+7. Presents them in the **Job Discovery Preview** box in the chat
 
-**With Chrome Extension (recommended):**
-1. Opens a dedicated Atlas tab in your Chrome browser
-2. Navigates to the job search results page (LinkedIn / Indeed)
-3. Scrapes job cards from the DOM (title, location, URL)
-4. Visits each job page → takes a full-page screenshot → sends to Vertex AI for OCR extraction
-5. Returns structured results: title, company, location, salary, job type, full description
-6. Presents them in the **Job Discovery Preview** box
-
-**Without extension (Playwright fallback):**
-1. Searches 8 UK job boards in parallel (LinkedIn, Indeed, Reed, TotalJobs, Adzuna, CV-Library, Monster, CWJobs)
-2. Uses a stealth Chromium browser with fingerprint spoofing
-3. Scores each card against your search query and extracts full details
-
-Atlas streams its response in real-time. Simple messages respond in ~3 seconds. Job searches take 15–60s depending on the number of job pages visited. Click the **cyan stop button** at any time to cancel — this also closes the Atlas tab immediately.
+Atlas streams its response in real-time. Simple messages respond in ~3 seconds. Job searches take 15–60s depending on the number of job pages visited. Click the **stop button** at any time to cancel — this also closes the Atlas tab immediately.
 
 ---
 
 ## Parallel Job Search (Chrome Extension)
 
-When the Chrome extension is connected, Atlas searches **all 6 platforms simultaneously**:
+Atlas searches **all 6 platforms simultaneously** using named background tabs in your real browser:
 
 | Platform | Notes |
 |----------|-------|
-| LinkedIn | Requires being logged in to LinkedIn in Chrome |
+| LinkedIn | Requires being logged in to LinkedIn in your browser |
 | Indeed | Includes country-code variants (e.g., uk.indeed.com) |
 | Reed | UK-focused, strong for permanent roles |
 | TotalJobs | UK-focused, broad coverage |
 | Adzuna | Aggregator — pulls from many sources |
 | CV-Library | UK specialist boards |
 
-All 6 are opened in parallel named tabs managed by the extension, then results are merged and scored together.
+All 6 are searched in parallel, results are merged, scored, and deduplicated together. The extension keeps 3 detail-page scrapes running concurrently within each platform for speed.
 
 ### Cookie Banners Are Auto-Accepted
 
-The extension automatically dismisses cookie consent overlays on all supported platforms. You do not need to interact with them manually.
+The extension automatically dismisses cookie consent overlays on all supported platforms using common GDPR banner selector patterns. You do not need to interact with them manually.
 
-### If Source Labels Show the Wrong Platform
+### Source Labels
 
-If all jobs in the preview box show "LinkedIn" as the source regardless of which site they came from, the extension is running an older version of `background.js`. Fix:
-
-1. Open `edge://extensions/` (or `chrome://extensions/`)
-2. Find the **Atlas** extension card
-3. Click the **circular refresh icon** to reload it
-4. Reconnect: the extension auto-reconnects to `ws://localhost:3002` within a few seconds (check the service worker DevTools console for `[Atlas] Connected`)
+Every job card shows which platform it came from. If all cards show the same source, reload the extension (see Chrome Extension Setup → Troubleshooting).
 
 ### If a Platform Returns No Results
 
-- Ensure you are logged in to that platform in Chrome before starting the search
+- Ensure you are logged in to that platform in the same browser before starting the search
 - Some platforms (e.g., LinkedIn) rate-limit searches — wait 30–60 seconds and retry
-- The extension uses human-like typing delays and cookie-banner dismissal to avoid blocks, but heavy usage may still trigger temporary rate limits
+- The extension uses human-like typing delays and cookie-banner dismissal to avoid blocks
 
 ---
 
@@ -154,14 +151,14 @@ When Atlas finds jobs, a preview panel appears in the chat:
 ```
 
 **Badges explained:**
-- **⚡ % match** — how well the job title/company matches your search query (green = strong, amber = partial, grey = weak)
-- **💰** — salary badge is colour-coded: **grey** = not disclosed/N/A, **blue** = competitive/negotiable/market rate, **green** = actual figures stated
+- **⚡ % match** — relevance to your search query (green = strong, amber = partial, grey = weak)
+- **💰** — colour-coded salary: **grey** = not disclosed, **blue** = competitive/negotiable, **green** = stated figures
 - **Job type** — Full-time / Part-time / Contract / Temporary (violet badge)
 - **🕒** — how long ago it was posted
 - **Source** — which job board it came from
 
 **Actions:**
-- **Import** (per card) — saves that single job to your pipeline
+- **Import** (per card) — saves that single job to your pipeline with full description and skills
 - **Import All** — saves all staged jobs at once
 - **Dismiss** — clears the preview without saving
 - **View listing ↗** — opens the original job page in a new tab
@@ -177,20 +174,38 @@ Go to **Jobs** in the left sidebar.
 This is your full tracking board. Every imported job is here with:
 
 - Title, company, location, salary
-- Full description and skills (extracted from the job page)
-- Apply URL
-- Status tracking: **Discovered → Applied → Interview → Offer → Rejected**
+- Full description and skills (extracted from the job page via content script)
+- Apply URL, source platform
+- Status: **Discovered → Applied → Interview → Offer → Rejected**
 - Priority level: Low / Medium / High
-- Date added
+- CV match score and relevance score
+- Date added, date posted
 
 **Filtering and searching:**
-Use the search bar at the top to filter by keyword, or click column headers to sort.
+Use the search bar to filter by keyword, or click column headers to sort by date, score, or salary.
 
-**Updating a job:**
-Tell Atlas directly:
-
+**Updating a job from chat:**
 > "Mark the Tata Technologies role as Applied"
 > "Set the Barclays job to High priority"
+> "Add a note to the Amazon job: interview scheduled for Thursday"
+
+**Re-fetching details:**
+If a job is missing its description or skills, open the Job Review Drawer (click any row) and click **Re-fetch Details**. Atlas navigates to the listing page and extracts fresh content.
+
+---
+
+## CV Match Score
+
+Every job card shows two scores:
+- **⚡ X% relevance** — How closely the job title/location matches your search query
+- **📄 X% CV fit** — How well the job matches your uploaded CV (role, skills, location, salary)
+
+The CV fit badge is colour-coded:
+- 🔵 Blue (70%+) — Strong match
+- 🟣 Violet (40–69%) — Partial match
+- ⬜ Grey (<40%) — Weak match
+
+The CV fit badge is hidden until you upload and process your CV.
 
 ---
 
@@ -198,62 +213,31 @@ Tell Atlas directly:
 
 Go to **Settings** in the left sidebar.
 
-### LLM Provider
-Choose which AI powers Atlas:
+### What Regular Users See
 
-| Provider | Best for |
-|----------|----------|
-| Google Gemini (Vertex AI) | Default — fastest, best job analysis |
-| OpenAI GPT-4.1 | Strong reasoning |
-| Anthropic Claude | Nuanced writing |
-| Groq | Speed |
-| Mistral / DeepSeek / others | Cost-efficient |
+- **Active AI Model** — shows the current global provider and model (set by admin)
+- **Your token usage** — monthly usage bar showing how many tokens you've used
+- **Gmail Integration** — connect/disconnect your Gmail account
 
-Switch model mid-conversation — Atlas adapts immediately.
+### Admin-Only Settings
 
-### Agent Behaviour
-- **Max Turns** — how many tool calls Atlas can chain per response
-- **Deterministic Mode** — lower temperature for more consistent responses
-- **Memory Budget** — how much context Atlas retains between turns
+Admins see additional sections (regular users do not see these):
 
-### Admin-Controlled Global Settings
-These are set by the admin and apply to **all users**:
-- **Max Jobs Per Search** — total jobs Atlas scrapes per search across all platforms (pool size, default 20)
-- **Output Per Prompt** — how many top-scored jobs appear in the chat preview box (default 10)
+**LLM Providers & Models**
+- Global Default Provider and Model (applies to all users)
+- Per-provider API keys (masked on read)
+- Model enablement and default model per provider
+- Model Selection Window — enable/disable specific models per provider
 
----
-
-## Admin Features
-
-### User Management (`/admin/users`)
-Admins can:
-- View all registered users with their roles
-- Promote users to Admin or demote to User
-- Reset any user's password
-- Delete users
-- Create new accounts directly
-
-### Push Atlas Config
-After customising your Atlas agent (go to **Agent Workspace** and send a message first), click **Push Atlas Config** on the Users page to propagate your Atlas soul, identity, and mind configuration to all existing users. New users are automatically seeded when they open Agent Workspace for the first time.
-
-**Workflow:**
-1. Open **Agent Workspace** → send any message (creates your Atlas agent in the database)
-2. Customise Atlas as needed through conversation
-3. Go to **Admin Users → Push Atlas Config**
-4. All users' Atlas agents are updated with your configuration
-
----
-
-## CV Management (Advanced)
-
-In **My CV**:
-
-- **Multiple CVs** — upload different versions for different job types
-- **Profile Preview** — scroll to read what Atlas extracted (2000 char preview, full profile used internally)
-- **Tag management** — click the tag pills (Professional / Part-time / Role-specific / General) to reassign at any time
-- **Delete** — removes the file and its metadata
-
-Atlas injects your active CV profile into every job search turn, so it always knows your background when scoring roles.
+**Token Usage & Runtime Controls**
+- Monthly Token Budget and Soft Limit
+- Per Response Token Cap
+- Max Jobs Per Search (pool size, default 20)
+- Output Per Prompt (how many jobs appear in preview box, default 10)
+- Rate Limit (requests/hour per user)
+- Monthly Budget (USD) per user
+- Safety toggles: auto-summarize, strict loop protection, strict agent response, provider fallback, PII redaction
+- Usage by provider breakdown
 
 ---
 
@@ -272,9 +256,9 @@ Atlas remembers things between sessions using a layered memory system:
 | **History** | Past conversations | **Per-user** — completely private |
 | **CV Profile** | Your extracted skills and experience | **Per-user** — completely private |
 
-The **Memory Health** panel (bottom of the Agent Profile sidebar) shows which layers are loaded and when they were last synced.
+**Every new user starts with a clean slate.** Atlas has no knowledge of other users.
 
-**Every new user starts with a clean slate.** Atlas has no knowledge of other users — it learns your name, preferences, and work history exclusively through your own conversations.
+The **Memory Health** panel (bottom of the Agent Profile sidebar) shows which layers are loaded and when they were last synced.
 
 ---
 
@@ -289,19 +273,74 @@ Go to **Settings** → **Gmail Integration** → click **Connect Gmail**. This o
 - **Draft-First Mode** — Atlas generates reply drafts for your review, never sends directly
 
 ### Using Gmail with Atlas
-Tell Atlas:
-
 > "Sync my inbox"
 > "Check for any replies about the Amazon application"
-
-Atlas scans your Gmail for job-related threads and links them to pipeline entries.
-
-Generate follow-up emails:
-
 > "Write a follow-up email for the Tata Technologies interview thread"
 
 ### Disconnecting
 Go to **Settings** → click **Disconnect**. This revokes the OAuth token and removes all stored credentials. Your emails remain untouched in Gmail.
+
+---
+
+## Admin Features
+
+### User Management (`/admin/users`)
+Admins can:
+- View all registered users with their roles and registration dates
+- Promote users to Admin or demote to User
+- Reset any user's password
+- Delete users
+
+### Push Atlas Config
+After customising your Atlas agent (go to **Agent Workspace** and send a message first), click **Push Atlas Config** on the Users page to propagate your Atlas soul, identity, and operating rules to all existing users.
+
+**Workflow:**
+1. Open **Agent Workspace** → send any message (creates your Atlas agent in the database)
+2. Customise Atlas as needed through conversation
+3. Go to **Admin → Users → Push Atlas Config**
+4. All users' Atlas agents are updated with your configuration
+
+### Beta Feedback (`/admin/feedback`)
+View all beta feedback submitted via the 💬 Feedback button. Feedback is stored in `data/feedback.jsonl` and optionally forwarded to a Slack/Discord webhook via `FEEDBACK_WEBHOOK_URL` in `.env.local`.
+
+---
+
+## Chrome Extension Setup
+
+The extension works in both **Chrome** and **Edge** (Chromium-based). It gives Atlas full control of your real logged-in browser sessions, bypassing LinkedIn and Indeed auth walls entirely.
+
+**Installing in Chrome:**
+1. Open Chrome → `chrome://extensions`
+2. Enable **Developer mode** (top-right toggle)
+3. Click **Load unpacked** → select the `chrome-extension` folder inside the project
+4. Start the browser server: `npm run browser-server` (keep the terminal open)
+5. The extension auto-connects — click **service worker** on the extension card to confirm: `[Atlas] Connected to bridge at ws://localhost:3002`
+
+**Installing in Edge:**
+1. Open Edge → `edge://extensions`
+2. Enable **Developer mode** (bottom-left toggle)
+3. Click **Load unpacked** → select the `chrome-extension` folder inside the project
+4. Start the browser server: `npm run browser-server`
+5. Click **service worker** on the extension card → confirm `[Atlas] Connected to bridge at ws://localhost:3002`
+
+**How it works:**
+- Atlas opens a dedicated background tab in your browser for job browsing
+- The content script auto-fires when the tab lands on a job listing page, extracting full details without needing screenshot OCR
+- All other tabs are untouched
+- The tab closes automatically when the search completes
+- Keep-alive mechanism (alarm every ~12s + storage ping every 10s) keeps the service worker alive in both Chrome and Edge
+
+**If the extension shows ERR_CONNECTION_REFUSED:**
+The browser server isn't running. Start `npm run browser-server` — the extension retries every 3 seconds.
+
+**If the extension disconnects in Edge after inactivity:**
+Open `edge://extensions/` → find **Atlas Job OS** → click the **reload** (circular arrow) icon. Reconnects within a few seconds.
+
+**If LinkedIn shows a sign-in wall in the Atlas tab:**
+Log into LinkedIn in a regular browser tab first. The Atlas tab shares your browser session.
+
+**If source labels all show the wrong platform:**
+The extension is running an older version of `background.js`. Open the extensions page → find Atlas → click the circular refresh icon to reload it. It auto-reconnects within seconds.
 
 ---
 
@@ -312,23 +351,22 @@ Go to **Settings** → click **Disconnect**. This revokes the OAuth token and re
 > ❌ "Find jobs"
 
 **Use your CV tags:**
-Upload a hospitality-focused CV tagged **Part-time** and a tech CV tagged **Professional**. Atlas will use the right one per search context.
+Upload a hospitality CV tagged **Part-time** and a tech CV tagged **Professional**. Atlas picks the right one per search context.
 
 **Import then refine:**
-Import a broad set first, then tell Atlas:
 > "Remove all the jobs that require 5+ years experience"
 > "Prioritise the remote roles"
+> "Show only jobs with stated salaries above £30k"
 
 **Managing your pipeline from chat:**
-You can control the pipeline directly through Atlas without opening the Jobs page:
 > "Clear the pipeline" — removes all staged jobs from the current session
-> "Delete the Tata Technologies job" — removes a specific job by name
-> "Show me the pipeline in the preview box" — renders your current staged jobs as preview cards
+> "Delete the Tata Technologies job" — removes by name
+> "Show me the pipeline in the preview box" — re-renders your current jobs as preview cards
 
 **Check the match score:**
 - ⚡ 80%+ — strong keyword match to your query
 - ⚡ 40–79% — partial match, worth reviewing
-- ⚡ <40% — Atlas included it but it's a looser fit
+- ⚡ <40% — looser fit, Atlas included it but verify relevance
 
 ---
 
@@ -339,81 +377,63 @@ You can control the pipeline directly through Atlas without opening the Jobs pag
 | Send message | Enter |
 | New line in message | Shift + Enter |
 | New chat | Click **+ New Chat** |
-| Stop generation | Click the **cyan circular button** (appears while Atlas is typing) |
+| Stop generation | Click the **cyan stop button** (appears while Atlas is typing) |
 
 ---
 
-## Chrome Extension Setup
+## Sending Feedback (Beta)
 
-The Chrome extension gives Atlas full control over your real logged-in Chrome browser. This bypasses LinkedIn and Indeed auth walls entirely.
+See the **💬 Feedback** button in the bottom-right corner of every page.
 
-**Installing:**
-1. Open Chrome → `chrome://extensions`
-2. Enable **Developer mode** (top-right toggle)
-3. Click **Load unpacked** → select the `chrome-extension` folder inside the project
-4. Start the browser server: run `start-browser-server.cmd` (keep the window open)
-5. The extension auto-connects — click **service worker** on the extension card to confirm: `[Atlas] Connected to bridge at ws://localhost:3002`
+1. **Choose a type** — Bug 🐛, Suggestion 💡, or Other 💬
+2. **Describe the issue** — What happened? What did you expect?
+3. **Hit Send** — Goes directly to the team
 
-**How it works:**
-- Atlas opens a dedicated tab in your Chrome window for job browsing
-- All other tabs are untouched
-- The tab closes automatically when you stop Atlas or the search completes
-- The extension stays alive via a keep-alive alarm (fires every ~25 seconds)
-
-**If the extension shows ERR_CONNECTION_REFUSED:**
-The browser server isn't running. Start `start-browser-server.cmd` — the extension retries every 3 seconds.
-
-**If LinkedIn shows a sign-in wall in the Atlas tab:**
-Log into LinkedIn in a regular Chrome tab first. The Atlas tab shares your Chrome session.
+Your email and the current page URL are captured automatically.
 
 ---
 
 ## Troubleshooting
 
 **"LinkedIn is temporarily blocking automated access"**
-If the extension is not connected, LinkedIn rate-limits scrapers periodically. Install the Chrome extension for bot-free access using your real session. Or try Indeed directly:
+LinkedIn rate-limits searches periodically. Wait 30–60 seconds, or search a different platform:
 > "Search Indeed for software engineer jobs in London"
 
 **Jobs have no salary shown**
-Many employers don't publish salaries. Atlas shows a grey "Not disclosed" badge. If the listing says "Competitive" or "Negotiable", Atlas shows a blue badge. A green badge means an actual figure was stated.
+Many employers don't publish salaries. Grey badge = not disclosed. Blue = competitive/negotiable. Green = stated figures.
 
-**Port conflict — `ClientFetchError: Unexpected token '<'`**
-A stale Node.js process is occupying port 3000, forcing Next.js onto port 3001, while `AUTH_URL` still points to :3000 — Auth.js gets HTML back instead of JSON. Fix: kill all node processes before starting dev.
-- Windows: `cmd /c "taskkill /F /IM node.exe"` (plain `taskkill /F` fails in some shells)
-- Linux/macOS: `pkill node`
+**Jobs imported with empty description/skills**
+Open the Job Review Drawer → click **Re-fetch Details**. The extension navigates to the listing and re-extracts. Requires the browser server to be running.
 
-Then restart in order: `npm run dev` first (wait for "Ready on :3000"), then `npm run browser-server` in a second terminal.
-
-**Windows — `npm error: Could not read package.json`**
-When opening a new PowerShell terminal from `C:\Users\...`, use `Set-Location` to switch drives:
-```powershell
-Set-Location D:\Projects\Atlas-job-os
-```
-`cd /d D:\Projects\Atlas-job-os` is cmd.exe syntax — it will throw a parameter error in PowerShell. In PowerShell, `cd` and `Set-Location` both work without any flags to switch drives.
-
-**Atlas responds conversationally instead of searching for jobs**
-If you ask "find me jobs" or "search for software roles" and Atlas just chats back without searching, the session may have been interrupted. Start a new chat and try again. (Fixed Apr 3 2026: fast-path classifier now correctly routes all job/role/search messages to tool mode.)
+**Atlas responds conversationally instead of searching**
+Start a new chat. The fast-path classifier routes all job/role/search intent to tool mode — if it missed, a fresh session resets the context.
 
 **Atlas calls `get_pipeline` but shows no output**
-Fixed Apr 3 2026. If Atlas ran a tool silently with no response visible, upgrade to the latest version. The pipeline tool now always displays its real result rather than being overridden by pre-generated LLM text.
+Start a new chat. The orchestrator now always displays the real pipeline result and never allows pre-generated LLM text to override a tool result.
 
 **Atlas seems slow**
-Simple conversational messages (greetings, questions) respond in ~3 seconds using a lightweight fast-path. Job searches take 8–15 seconds due to browser automation. If Atlas feels slow on simple messages, check the model in use (shown in Agent Profile) — Gemini Flash is the fastest option.
+Simple messages respond in ~3s. Job searches take 15–60s due to browser automation and detail-page scraping. For faster simple responses, use Gemini Flash (ask your admin).
 
-**Atlas shows `<continuity_update>` or JSON in the chat**
-This was a known bug (fixed). Update to the latest version — internal sync blocks are now stripped from the stream before display.
+**Atlas shows `<continuity_update>` or JSON tags in chat**
+Fixed — internal sync blocks are stripped from the stream before display. Refresh the page if you still see them.
 
 **CV profile shows wrong information**
-Delete the CV and re-upload. If the PDF is a scanned image, Atlas uses Vertex AI vision — ensure your Google credentials are configured in Settings.
+Delete the CV and re-upload a clean digital PDF (not a scanned image).
+
+**Dashboard Pipeline shows 0 after a job search**
+Redis may not be running. Start it with `docker start atlas-redis`. Imported jobs always show correctly regardless of Redis state.
 
 **`[Redis] connection error:` in server logs**
-Redis is not running. Start it with `docker start atlas-redis` (or the Docker command in the README). The app continues to work without Redis but pending jobs are lost on server restart and rate limiting is disabled. For production use, Redis must be running.
+Start Redis: `docker start atlas-redis`. The app continues without it but pending jobs (previewed, not imported) are lost on server restart and rate limiting is disabled.
 
-**Dashboard Pipeline shows 0 even after a job search**
-If Redis is not connected, the pending jobs store (which tracks jobs previewed but not yet imported) cannot persist. Start Redis and reload — the pipeline count will update after your next search. Imported jobs always show correctly under "Jobs Saved" regardless of Redis.
+**Port conflict — `ClientFetchError: Unexpected token '<'`**
+A stale Node.js process is on port 3000. Kill it: `cmd /c "taskkill /F /IM node.exe"`. Then restart: `npm run dev` first (wait for "Ready on :3000"), then `npm run browser-server`.
+
+**Windows — `npm error: Could not read package.json`**
+You're in the wrong directory. In PowerShell: `Set-Location D:\Projects\Atlas-job-os` (not `cd /d`).
 
 **Rate limit error: "Rate limit exceeded"**
-You've made more than 100 Atlas requests in the past hour. Wait for the `Retry-After` period shown in the response, or ask your admin to raise the limit (`TOKEN_BUDGET_MONTHLY_USD` in `.env`).
+You've exceeded your hourly request limit. Wait for the `Retry-After` period, or ask your admin to raise the limit.
 
 ---
 
@@ -422,38 +442,45 @@ You've made more than 100 Atlas requests in the past hour. Wait for the `Retry-A
 ```
 User chat → Next.js API (/api/agents/chat)
             │
-            ├─ Rate limit check (Redis sliding window, 100/hr)
-            ├─ Monthly budget check (TokenUsage table)
+            ├─ Rate limit check (Redis sliding window, per user)
+            ├─ Monthly token budget check (DB-backed TokenUsage table)
             │
             ↓
           ConversationOrchestrator
           [auth + getAgent in parallel]
-          [history + continuity in parallel]
+          [history + continuity layers in parallel]
             ↓
-          Gemini (Vertex AI) ← CV profile + memory layers
+          Gemini 2.0 Flash (Vertex AI) ← CV profile + memory layers
           [SSE streaming with system_instruction separation]
           [Fast-path: lightweight prompt for simple messages]
-          [<continuity_update> blocks filtered in real-time]
+          [<continuity_update> blocks stripped from stream]
             ↓
           Tool: browser_extract_jobs
             ↓
-          ScraperService → worker.py (Playwright stealth)
-          [6 platforms in parallel via Chrome Extension]
-          [Persistent Chromium profile + fingerprint spoofing]
-          [scraper_selectors.json overrides loaded at startup]
+          ExtensionBridge → Chrome Extension (ws://localhost:3002)
+          [6 platforms in parallel via named background tabs]
+          [Phase 1: scrapeJobCards — DOM card extraction]
+          [Phase 2: scrapeJobListing — navigate to listing + content script auto-scrape]
+          [3 concurrent detail scrapes per platform batch]
             ↓
-          Listing scan + detail scrape
+          Content script (content.js) fires on job listing page:
+          — detects URL pattern (LinkedIn/Indeed/Reed/TotalJobs/Adzuna/CV-Library/Glassdoor)
+          — extracts title, company, location, salary, jobType, datePosted, description (5k cap)
+          — extractSkillsFromText() — regex patterns for 25 tech/soft skills
+          — sends job_detail_scraped message to background
+          — background stores in lastScrapedDetail Map (tabId → data)
+          — scrapeJobListing command polls map, falls back to executeScript if content script missed
             ↓
           preview_jobs tool
             ↓
           Redis (pending:session:{sid}, 2h TTL) ← pending jobs stored here
             ↓
-          Preview box in chat → user clicks Import
+          Preview box in chat → user clicks Import / Import All
             ↓
           import_pending_jobs tool → Prisma → PostgreSQL
 
 Background (npm run workers):
-  BullMQ Worker: job-scrape   ← scrape jobs off HTTP thread
+  BullMQ Worker: job-scrape   ← heavy scrape tasks off HTTP thread
   BullMQ Worker: gmail-sync   ← background Gmail polling
   Both backed by Redis queues
 ```
@@ -462,8 +489,12 @@ Background (npm run workers):
 - `src/lib/redis.ts` — ioredis singleton, pending jobs helpers, rate limiting
 - `src/lib/logger.ts` — Pino structured logger
 - `src/lib/queue/` — BullMQ queue definitions and workers
-- `src/lib/services/agent/conversation-orchestrator.ts` — tool router
-- `src/lib/services/scraper/worker.py` — Playwright browser worker
-- `src/lib/services/ai/provider.ts` — Vertex AI / LLM providers
+- `src/lib/services/agent/conversation-orchestrator.ts` — tool router + AI orchestration
+- `src/lib/services/browser/extension-bridge.ts` — WebSocket bridge to Chrome extension
+- `src/lib/services/browser/service/browser-service.ts` — extractJobsViaExtension, parallel detail scraping
+- `src/lib/services/ai/provider.ts` — Vertex AI / LLM provider abstraction
 - `src/lib/services/agent/token-budget-manager.ts` — DB-backed token tracking
-- `src/components/agents/agent-chat-starter.tsx` — chat UI
+- `chrome-extension/background.js` — service worker, command handler, scrapeJobListing
+- `chrome-extension/content.js` — per-page auto-scraper, extractSkillsFromText
+- `src/components/agents/agent-chat-starter.tsx` — chat UI with preview box
+- `src/components/jobs/job-review-drawer.tsx` — job detail drawer with Re-fetch Details

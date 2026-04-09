@@ -35,6 +35,7 @@ export function JobsTable() {
   const [sorting, setSorting] = React.useState<SortingState>([{ id: "score", desc: true }]);
   const [selectedJob, setSelectedJob] = React.useState<JobRow | null>(null);
   const [isDeduplicating, setIsDeduplicating] = React.useState(false);
+  const [statusFilter, setStatusFilter] = React.useState("ALL");
 
   /* Hide the hidden company column (Bug 13) */
   const [columnVisibility] = React.useState<VisibilityState>({ company: false });
@@ -85,6 +86,20 @@ export function JobsTable() {
     }
   }, []);
 
+  const deleteJob = React.useCallback(async (jobId: string) => {
+    if (!confirm("Remove this job permanently?")) return;
+    try {
+      const res = await fetch(`/api/jobs/${jobId}`, { method: "DELETE" });
+      if (!res.ok) throw new Error();
+      setRows((current) => current.filter((row) => row.id !== jobId));
+      cachedJobs = cachedJobs?.filter((row) => row.id !== jobId) ?? null;
+      setSyncMessage("Job removed.");
+      setTimeout(() => setSyncMessage(""), 3000);
+    } catch {
+      setSyncMessage("Error removing job.");
+    }
+  }, []);
+
   const columns = React.useMemo(
     () => [
       columnHelper.accessor("title", {
@@ -129,6 +144,7 @@ export function JobsTable() {
       }),
       columnHelper.accessor("status", {
         header: "Status",
+        filterFn: "equals",
         cell: (info) => {
           const current = info.getValue();
           const statusColors: Record<string, string> = {
@@ -157,7 +173,30 @@ export function JobsTable() {
         header: "Priority",
         cell: (info) => <span className="badge bg-bg">{info.getValue()}</span>,
       }),
-      columnHelper.accessor("source", { header: "Source" }),
+      columnHelper.accessor("source", {
+        header: "Source",
+        cell: (info) => {
+          const val = info.getValue() || "";
+          const key = val.toLowerCase().replace(/[\s\-]/g, "");
+          const badgeStyles: Record<string, string> = {
+            linkedin: "bg-blue-500/20 text-blue-400 border-blue-500/30",
+            indeed: "bg-purple-500/20 text-purple-400 border-purple-500/30",
+            reed: "bg-green-500/20 text-green-400 border-green-500/30",
+            totaljobs: "bg-orange-500/20 text-orange-400 border-orange-500/30",
+            glassdoor: "bg-teal-500/20 text-teal-400 border-teal-500/30",
+            adzuna: "bg-rose-500/20 text-rose-400 border-rose-500/30",
+            cvlibrary: "bg-amber-500/20 text-amber-400 border-amber-500/30",
+            monster: "bg-indigo-500/20 text-indigo-400 border-indigo-500/30",
+            cwjobs: "bg-sky-500/20 text-sky-400 border-sky-500/30",
+          };
+          const style = badgeStyles[key] ?? "bg-slate-500/20 text-slate-400 border-slate-500/30";
+          return (
+            <span className={`inline-block text-[11px] font-semibold px-2 py-0.5 rounded-full border ${style}`}>
+              {val}
+            </span>
+          );
+        },
+      }),
       columnHelper.accessor("postedAt", { header: "Posted" }),
       columnHelper.display({
         id: "actions",
@@ -179,17 +218,28 @@ export function JobsTable() {
               type="button"
               className="btn-secondary px-3 py-1"
               onClick={() => {
-                void setStatus(info.row.original.id, "SAVED");
                 setSelectedJob(info.row.original);
               }}
             >
               Review
             </button>
+            <button
+              type="button"
+              className="btn-secondary px-3 py-1 text-red-400 hover:text-red-300"
+              onClick={() => void deleteJob(info.row.original.id)}
+            >
+              Remove
+            </button>
           </div>
         ),
       }),
     ],
-    [setStatus],
+    [setStatus, deleteJob],
+  );
+
+  const columnFilters = React.useMemo(
+    () => (statusFilter === "ALL" ? [] : [{ id: "status", value: statusFilter }]),
+    [statusFilter],
   );
 
   const table = useReactTable({
@@ -200,15 +250,16 @@ export function JobsTable() {
     getFilteredRowModel: getFilteredRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
     initialState: { pagination: { pageSize: 20 } },
-    state: { globalFilter, sorting, columnVisibility },
+    state: { globalFilter, sorting, columnVisibility, columnFilters },
     onGlobalFilterChange: setGlobalFilter,
     onSortingChange: setSorting,
   });
 
   const totalRows = table.getFilteredRowModel().rows.length;
   const pagination = table.getState().pagination;
+  const pageRowCount = table.getRowModel().rows.length;
   const start = totalRows === 0 ? 0 : pagination.pageIndex * pagination.pageSize + 1;
-  const end = totalRows === 0 ? 0 : Math.min(totalRows, start + table.getRowModel().rows.length - 1);
+  const end = totalRows === 0 || pageRowCount === 0 ? 0 : Math.min(totalRows, pagination.pageIndex * pagination.pageSize + pageRowCount);
 
   async function cleanDuplicates() {
     setIsDeduplicating(true);
@@ -298,6 +349,16 @@ export function JobsTable() {
             placeholder="Filter table"
             className="field w-full sm:w-44"
           />
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="field w-full sm:w-36"
+          >
+            <option value="ALL">All Statuses</option>
+            {["NEW", "SAVED", "APPLIED", "INTERVIEW", "OFFER", "REJECTED", "ARCHIVED"].map((s) => (
+              <option key={s} value={s}>{s}</option>
+            ))}
+          </select>
         </div>
       </div>
 
@@ -332,22 +393,33 @@ export function JobsTable() {
             ))}
           </thead>
           <tbody>
-            {table.getRowModel().rows.length === 0 ? (
+            {table.getRowModel().rows.map((row) => (
+              <tr key={row.id} className="border-t">
+                {row.getVisibleCells().map((cell) => (
+                  <td key={cell.id} className="px-3 py-3 align-top">
+                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                  </td>
+                ))}
+              </tr>
+            ))}
+            {!isLoading && table.getRowModel().rows.length === 0 && (
               <tr className="border-t">
                 <td colSpan={columns.length} className="px-3 py-8 text-center text-sm text-muted">
-                  No jobs match your search.
+                  {rows.length === 0 ? (
+                    <div className="py-6">
+                      <p className="text-lg font-semibold text-slate-700 dark:text-slate-200 mb-2">Your pipeline is empty</p>
+                      <p className="text-sm text-muted mb-4">
+                        Search for jobs above, or chat with Atlas to discover roles matched to your profile.
+                      </p>
+                      <a href="/agents/workspace" className="btn-primary inline-block px-4 py-2">
+                        Chat with Atlas
+                      </a>
+                    </div>
+                  ) : (
+                    "No jobs match your current filters."
+                  )}
                 </td>
               </tr>
-            ) : (
-              table.getRowModel().rows.map((row) => (
-                <tr key={row.id} className="border-t">
-                  {row.getVisibleCells().map((cell) => (
-                    <td key={cell.id} className="px-3 py-3 align-top">
-                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                    </td>
-                  ))}
-                </tr>
-              ))
             )}
           </tbody>
         </table>

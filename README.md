@@ -389,6 +389,7 @@ src/
 │   │   ├── jobs/           # Jobs CRUD
 │   │   ├── admin/users/    # Admin user management API
 │   │   ├── register/       # Registration endpoint
+│   │   ├── feedback/           # Beta feedback submission
 │   │   └── integrations/   # Gmail, exports
 │   ├── login/
 │   └── register/
@@ -452,6 +453,29 @@ prisma/
 | GET | `/api/health` | Health check (DB + Redis ping) — 200 ok / 503 degraded |
 | POST | `/api/integrations/gmail/sync` | Sync Gmail inbox |
 | GET | `/api/exports/jobs` | Export jobs as XLSX |
+| POST | `/api/feedback` | Submit beta feedback (saves to data/feedback.jsonl) |
+
+---
+
+## Beta Feedback & Error Tracking
+
+Atlas ships with two feedback layers for beta testing:
+
+### Automatic Error Capture (Sentry)
+Install is included. Just add your DSN to `.env.local`:
+```env
+NEXT_PUBLIC_SENTRY_DSN=https://xxx@oXXX.ingest.sentry.io/XXX
+SENTRY_DSN=https://xxx@oXXX.ingest.sentry.io/XXX
+```
+Create a free project at [sentry.io](https://sentry.io) to get your DSN. Every unhandled exception and API crash is captured automatically with stack trace + user context.
+
+### Manual Feedback Widget
+A floating `💬 Feedback` button appears on every page. Beta users can report bugs or suggestions directly from the app. Submissions are:
+- Saved to `data/feedback.jsonl` (one JSON entry per line)
+- Optionally pinged to a Slack/Discord channel via webhook:
+```env
+FEEDBACK_WEBHOOK_URL=https://hooks.slack.com/services/xxx   # or Discord webhook URL
+```
 
 ---
 

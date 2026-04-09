@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import type { ApplicationStatus } from "@/lib/domain/enums";
+import { requireAuth, isNextResponse } from "@/lib/server/auth-helpers";
 
 const mockFunnel = [
   { week: "Week 1", applications: 14, replies: 5, interviews: 2 },
@@ -19,11 +20,14 @@ function startOfWeek(date: Date) {
 }
 
 export async function GET() {
+  const authResult = await requireAuth();
+  if (isNextResponse(authResult)) return authResult;
+  const { userId } = authResult;
   try {
     const now = new Date();
     const start = startOfWeek(new Date(now.getTime() - 27 * 24 * 60 * 60 * 1000));
     const jobs = (await prisma.job.findMany({
-      where: { createdAt: { gte: start } },
+      where: { userId, createdAt: { gte: start } },
       select: { createdAt: true, applicationStatus: true },
       orderBy: { createdAt: "asc" },
     })) as Array<{ createdAt: Date; applicationStatus: ApplicationStatus }>;
@@ -38,8 +42,8 @@ export async function GET() {
       const weekEnd = new Date(weekStart);
       weekEnd.setDate(weekStart.getDate() + 7);
       const items = jobs.filter((job) => job.createdAt >= weekStart && job.createdAt < weekEnd);
-      const applications = items.length;
-      const replies = items.filter((job) => job.applicationStatus === "INTERVIEW" || job.applicationStatus === "OFFER").length;
+      const applications = items.filter((job) => job.applicationStatus === "APPLIED" || job.applicationStatus === "INTERVIEW" || job.applicationStatus === "OFFER" || job.applicationStatus === "REJECTED").length;
+      const replies = items.filter((job) => job.applicationStatus === "INTERVIEW" || job.applicationStatus === "OFFER" || job.applicationStatus === "REJECTED").length;
       const interviews = items.filter((job) => job.applicationStatus === "INTERVIEW" || job.applicationStatus === "OFFER").length;
       return {
         week: `Week ${index + 1}`,

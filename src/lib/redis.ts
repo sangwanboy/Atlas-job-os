@@ -6,8 +6,7 @@ export function getRedis(): Redis {
   if (!redis) {
     redis = new Redis(process.env.REDIS_URL ?? 'redis://localhost:6379', {
       maxRetriesPerRequest: 3,
-      lazyConnect: true,
-      enableOfflineQueue: false,
+      lazyConnect: false,
     });
     redis.on('error', (err: Error) => {
       // Log but don't crash — app degrades gracefully without Redis

@@ -55,6 +55,8 @@ export class AgentBrowserToolRegistry {
         return this.service.extensionExtractJobs(validateBrowserToolInput("browser_extension_extract_jobs", rawInput) as { searchUrl: string; query?: string; location?: string });
       case "browser_extension_enrich_job":
         return this.service.enrichJobViaExtension(validateBrowserToolInput("browser_extension_enrich_job", rawInput) as { url: string });
+      case "browser_scrape_job_listing":
+        return this.service.enrichJobViaExtension(validateBrowserToolInput("browser_scrape_job_listing", rawInput) as { url: string });
       default: {
         const neverTool: never = tool;
         throw new Error(`Unsupported browser tool: ${String(neverTool)}`);

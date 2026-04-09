@@ -185,3 +185,12 @@ body {
 .shadow-well {
   box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.05);
 }
+
+/* Fix browser autofill obscuring text in dark mode */
+.dark input:-webkit-autofill,
+.dark input:-webkit-autofill:hover,
+.dark input:-webkit-autofill:focus {
+  -webkit-box-shadow: 0 0 0 1000px hsl(220 26% 16%) inset !important;
+  -webkit-text-fill-color: hsl(210 40% 96%) !important;
+  caret-color: hsl(210 40% 96%);
+}

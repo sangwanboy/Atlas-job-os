@@ -4,6 +4,7 @@ import { useState, useCallback } from "react";
 import { AppSidebar } from "@/components/layout/app-sidebar";
 import { TopNav } from "@/components/layout/top-nav";
 import { AgentProvider } from "@/components/providers/agent-provider";
+import { FeedbackWidget } from "@/components/feedback/FeedbackWidget";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -49,6 +50,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           </main>
         </div>
       </div>
+      <FeedbackWidget />
     </AgentProvider>
   );
 }

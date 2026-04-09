@@ -16,7 +16,7 @@ process.on("uncaughtException", (error) => {
 
 const server = createServer(async (req, res) => {
   // CORS Headers
-  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Origin", "http://localhost:3000");
   res.setHeader("Access-Control-Allow-Methods", "POST, GET, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
@@ -124,7 +124,7 @@ const server = createServer(async (req, res) => {
   res.end();
 });
 
-server.listen(PORT, "0.0.0.0", () => {
+server.listen(PORT, "127.0.0.1", () => {
   console.log(`🚀 Browser service running on http://localhost:${PORT}`);
   console.log(`- Health check: http://localhost:${PORT}/health`);
   console.log(`- Browser API: http://localhost:${PORT}/api/browser`);

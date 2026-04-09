@@ -68,7 +68,7 @@ function LoginForm() {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             autoComplete="email"
-            className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-text placeholder:text-muted/40 focus:border-cyan-400 focus:outline-none focus:ring-1 focus:ring-cyan-400/50 transition-all"
+            className="w-full rounded-xl border border-white/10 bg-white/70 dark:bg-white/[0.08] px-4 py-3 text-text placeholder:text-muted/60 focus:border-cyan-400 focus:outline-none focus:ring-1 focus:ring-cyan-400/50 transition-all"
           />
         </div>
 
@@ -83,7 +83,7 @@ function LoginForm() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               autoComplete="current-password"
-              className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 pr-12 text-text placeholder:text-muted/40 focus:border-cyan-400 focus:outline-none focus:ring-1 focus:ring-cyan-400/50 transition-all"
+              className="w-full rounded-xl border border-white/10 bg-white/70 dark:bg-white/[0.08] px-4 py-3 pr-12 text-text placeholder:text-muted/60 focus:border-cyan-400 focus:outline-none focus:ring-1 focus:ring-cyan-400/50 transition-all"
             />
             <button
               type="button"
@@ -147,9 +147,11 @@ export default function LoginPage() {
             </p>
           </div>
 
-          <div className="mt-6 rounded-xl border border-white/10 bg-white/5 p-3 text-center text-xs text-muted">
-            <p>Default admin: <span className="font-mono text-text/70">admin@jobos.local</span> / <span className="font-mono text-text/70">admin123</span></p>
-          </div>
+          {process.env.NODE_ENV === "development" && (
+            <div className="mt-6 rounded-xl border border-white/10 bg-white/5 p-3 text-center text-xs text-muted">
+              <p>Default admin: <span className="font-mono text-text/70">admin@jobos.local</span> / <span className="font-mono text-text/70">admin123</span></p>
+            </div>
+          )}
         </div>
       </div>
     </div>

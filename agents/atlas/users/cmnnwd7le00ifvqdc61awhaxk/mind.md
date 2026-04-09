@@ -1,9 +1,9 @@
 {
-  "mode": "discovery",
-  "strategy": "awaiting_import_confirmation",
+  "mode": "reviewing_results",
+  "strategy": "evaluating_pm_roles_london",
   "todos": [
-    "Import jobs to pipeline upon sid's confirmation",
-    "Check for specific CV gaps once a resume is uploaded",
-    "Monitor for new Coventry hospitality listings"
+    "Wait for sid to review the 10 previewed jobs",
+    "Import selected or all jobs to the pipeline upon confirmation",
+    "Search for more roles if the current 40 aren't sufficient"
   ]
 }

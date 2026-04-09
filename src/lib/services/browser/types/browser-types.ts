@@ -17,7 +17,8 @@ export type BrowserToolName =
   | "browser_resume"
   | "browser_extension_status"
   | "browser_extension_extract_jobs"
-  | "browser_extension_enrich_job";
+  | "browser_extension_enrich_job"
+  | "browser_scrape_job_listing";
 
 export type BrowserActionStatus = "ok" | "error";
 

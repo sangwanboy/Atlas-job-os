@@ -2,8 +2,11 @@ import { NextResponse } from "next/server";
 import { browserService } from "@/lib/services/browser/service/browser-service";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { requireAuth, isNextResponse } from "@/lib/server/auth-helpers";
 
-export async function POST() {
+export async function POST(request: Request) {
+    const authResult = await requireAuth();
+    if (isNextResponse(authResult)) return authResult;
     const sessionId = "hgv-london-api-" + Date.now();
     console.log(`[API Discovery] Starting search for HGV Driver jobs in London...`);
     

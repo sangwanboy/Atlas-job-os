@@ -6,7 +6,7 @@ import { ThemeProvider } from "next-themes";
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
-      <SessionProvider refetchInterval={300} refetchOnWindowFocus={false}>
+      <SessionProvider basePath="/api/auth" refetchInterval={3600} refetchOnWindowFocus={false} refetchWhenOffline={false}>
         {children}
       </SessionProvider>
     </ThemeProvider>

@@ -26,6 +26,15 @@ const config: Config = {
       fontFamily: {
         sans: ["Manrope", "ui-sans-serif", "system-ui", "sans-serif"],
       },
+      keyframes: {
+        blink: {
+          "0%, 100%": { opacity: "1" },
+          "50%": { opacity: "0" },
+        },
+      },
+      animation: {
+        blink: "blink 0.9s step-start infinite",
+      },
     },
   },
   plugins: [typography],

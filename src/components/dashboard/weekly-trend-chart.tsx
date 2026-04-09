@@ -2,33 +2,14 @@
 
 import { useEffect, useState } from "react";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import type { DashboardTrendPoint } from "@/types/domain";
+import { useDashboardStats } from "@/hooks/use-dashboard-stats";
 
 export function WeeklyTrendChart() {
   const [isMounted, setIsMounted] = useState(false);
-  const [data, setData] = useState<DashboardTrendPoint[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data: stats, loading } = useDashboardStats();
+  const data = stats?.weeklyTrend ?? [];
 
-  const fetchTrend = async () => {
-    try {
-      const res = await fetch("/api/dashboard/stats");
-      const json = await res.json();
-      if (json.weeklyTrend) {
-        setData(json.weeklyTrend);
-      }
-    } catch (err) {
-      console.error("Failed to fetch trend:", err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => { 
-    setIsMounted(true); 
-    fetchTrend();
-    const interval = setInterval(fetchTrend, 30000);
-    return () => clearInterval(interval);
-  }, []);
+  useEffect(() => { setIsMounted(true); }, []);
 
   return (
     <div className="panel p-5 glass-panel">
@@ -44,7 +25,15 @@ export function WeeklyTrendChart() {
         </div>
       </div>
       <div className="h-[280px] w-full">
-        {isMounted && !loading && (
+        {(!isMounted || loading) && (
+          <div className="h-full w-full animate-pulse rounded-xl bg-slate-100 dark:bg-white/5" />
+        )}
+        {isMounted && !loading && data.length < 2 && (
+          <div className="flex h-full items-center justify-center text-sm text-slate-400">
+            Not enough data to display a trend yet.
+          </div>
+        )}
+        {isMounted && !loading && data.length >= 2 && (
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={data} margin={{ left: -20, right: 10, top: 10, bottom: 0 }}>
               <defs>
@@ -80,6 +69,7 @@ export function WeeklyTrendChart() {
           </ResponsiveContainer>
         )}
       </div>
+
     </div>
   );
 }

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { requireAuth, isNextResponse } from "@/lib/server/auth-helpers";
 
 const mockSources = [
   { source: "LinkedIn Alert", count: 12 },
@@ -9,8 +10,12 @@ const mockSources = [
 ];
 
 export async function GET() {
+  const authResult = await requireAuth();
+  if (isNextResponse(authResult)) return authResult;
+  const { userId } = authResult;
   try {
     const jobs = (await prisma.job.findMany({
+      where: { userId },
       select: { source: true },
       take: 250,
     })) as Array<{ source: string }>;
@@ -20,7 +25,8 @@ export async function GET() {
     }
 
     const grouped = jobs.reduce((acc: Record<string, number>, job) => {
-      acc[job.source] = (acc[job.source] ?? 0) + 1;
+      const key = job.source?.trim() || "Unknown";
+      acc[key] = (acc[key] ?? 0) + 1;
       return acc;
     }, {});
 
