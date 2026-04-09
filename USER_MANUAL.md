@@ -34,6 +34,8 @@ npm run workers
 
 Then open: **http://localhost:3000**
 
+You'll land on the **Atlas landing page** — a public marketing page with animated hero, feature overview, FAQ, and a live beta slot counter. Click **"Claim Your Spot"** to register, or **"Sign In"** if you already have an account.
+
 **Health check:** `http://localhost:3000/api/health` should return `{"status":"ok","db":"ok","redis":"ok"}`.
 
 > **Important:** Always start `atlas-db` and `atlas-redis` Docker containers **before** running `npm run dev`. If Next.js starts before the database is up, Prisma's connection pool initialises against a dead socket and all DB queries will fail with `Can't reach database server at localhost:5432` — even after Docker starts. Fix: `docker start atlas-db` then Ctrl+C and restart `npm run dev`.
@@ -53,6 +55,25 @@ Atlas is an AI-powered job search operating system. Instead of manually browsing
 - Full pipeline management: status, notes, priority, apply tracking
 - Gmail integration for email thread linking and follow-up drafting
 - AI memory system that learns your preferences across sessions
+
+---
+
+## Landing Page
+
+When you visit Atlas for the first time at `http://localhost:3000`, you'll see the public landing page. This is where new users learn about Atlas and sign up.
+
+**What's on the landing page:**
+- **Hero section** — animated headline showing what Atlas does, a live beta counter, and floating glass cards previewing Atlas's search, scoring, and pipeline features
+- **Social proof** — scrolling quotes from beta testers
+- **How It Works** — 3 simple steps: Upload CV → Agent searches → Review & approve outreach
+- **Features** — 6 feature cards covering all major Atlas capabilities
+- **Demo Preview** — an animated replica of the Atlas dashboard
+- **FAQ** — answers to common questions (click to expand)
+- **Sign up CTA** — "Claim Your Spot" button (or "Join Waitlist" if all 50 beta slots are taken)
+
+**Beta access:** The first 50 users who register get instant access. After that, new registrations are added to a waitlist. Admin accounts are not counted toward the 50-slot limit.
+
+**Sidebar badge:** Once logged in, you'll see a **BETA · v1.0** badge in the bottom-left of the sidebar — a visual reminder that Atlas is in beta.
 
 ---
 

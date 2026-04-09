@@ -264,6 +264,25 @@ Admin users can manage all users at `/admin/users`:
 
 ---
 
+## Landing Page & Beta Access
+
+Atlas serves an animated public landing page at `/` — the first thing visitors see. The page features:
+
+- **Hero section** — typewriter headline cycling through Atlas capabilities, animated gradient mesh background with floating particles, 3 glassmorphism UI mockup cards (searching, job score, pipeline kanban)
+- **Live beta counter** — fetches from `/api/beta-slots`, shows "X of 50 spots remaining" with real-time animation. First 50 users get instant access; after that, new users are placed on a waitlist
+- **Social proof** — infinite-scroll marquee of beta tester quotes
+- **How it works** — 3-step scroll-reveal (Upload CV → Agent searches → Approve outreach)
+- **Feature grid** — 6 animated cards covering all major capabilities
+- **Demo preview** — browser-chrome-wrapped replica of the Atlas dashboard
+- **FAQ accordion** — 7 common questions with animated expand/collapse
+- **Footer CTA** — final conversion section with beta counter + registration link
+
+**Beta mechanics:** Admin accounts are excluded from the 50-slot count. The CTA dynamically switches between "Claim Your Spot" and "Join Waitlist" based on remaining slots.
+
+**Tech:** Framer Motion animations, CSS keyframe gradient mesh, Tailwind glassmorphism. All components in `src/components/landing/`.
+
+---
+
 ## Features
 
 ### Job Discovery (Atlas Agent)
@@ -394,9 +413,10 @@ src/
 │   ├── login/
 │   └── register/
 ├── components/
+│   ├── landing/            # Public landing page (hero, nav, features, FAQ, etc.)
 │   ├── agents/             # Atlas chat UI
 │   ├── jobs/               # Jobs table + review drawer
-│   └── layout/             # Sidebar + top nav
+│   └── layout/             # Sidebar + top nav (includes BETA v1.0 badge)
 ├── lib/
 │   ├── redis.ts            # ioredis singleton + pending jobs helpers + rate limiting
 │   ├── logger.ts           # Pino structured logger (pretty in dev, JSON in prod)
@@ -453,6 +473,7 @@ prisma/
 | GET | `/api/health` | Health check (DB + Redis ping) — 200 ok / 503 degraded |
 | POST | `/api/integrations/gmail/sync` | Sync Gmail inbox |
 | GET | `/api/exports/jobs` | Export jobs as XLSX |
+| GET | `/api/beta-slots` | Public beta slot counter (slotsUsed, slotsRemaining, isWaitlist) |
 | POST | `/api/feedback` | Submit beta feedback (saves to data/feedback.jsonl) |
 
 ---
@@ -469,13 +490,16 @@ SENTRY_DSN=https://xxx@oXXX.ingest.sentry.io/XXX
 ```
 Create a free project at [sentry.io](https://sentry.io) to get your DSN. Every unhandled exception and API crash is captured automatically with stack trace + user context.
 
-### Manual Feedback Widget
-A floating `💬 Feedback` button appears on every page. Beta users can report bugs or suggestions directly from the app. Submissions are:
+### Manual Feedback
+Beta users can submit feedback via the Admin > Beta Feedback tab. Submissions are:
 - Saved to `data/feedback.jsonl` (one JSON entry per line)
 - Optionally pinged to a Slack/Discord channel via webhook:
 ```env
 FEEDBACK_WEBHOOK_URL=https://hooks.slack.com/services/xxx   # or Discord webhook URL
 ```
+
+### Beta Version Badge
+The app sidebar displays a **BETA · v1.0** badge in the lower-left corner (all states: expanded, collapsed, mobile). This is a visual indicator for beta testers.
 
 ---
 
