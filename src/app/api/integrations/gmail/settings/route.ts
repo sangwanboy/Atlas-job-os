@@ -7,7 +7,6 @@ const HARDCODED_USER_ID = "cm7c10bsw000008ld6v3cct9q";
 export async function GET() {
   try {
     // Try Prisma first
-    // @ts-expect-error
     const settings = await prisma.integrationSettings.findUnique({
       where: { userId: HARDCODED_USER_ID },
     });

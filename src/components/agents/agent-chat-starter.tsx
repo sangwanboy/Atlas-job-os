@@ -284,6 +284,8 @@ type JobPreview = {
   datePosted?: string;
   jobType?: string;
   score?: number;
+  cvScore?: number;
+  cvGaps?: string[];
   isAlreadyImported?: boolean;
   hasDescription?: boolean;
   hasSkills?: boolean;

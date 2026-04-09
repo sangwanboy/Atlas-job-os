@@ -64,9 +64,10 @@ export async function DELETE(_request: Request, { params }: Params) {
 
     return NextResponse.json({ success: true });
   } catch (err) {
+    const errObj = err as unknown as Record<string, unknown>;
     const isNotFound =
       err instanceof Error &&
-      ("code" in (err as Record<string, unknown>) ? (err as Record<string, unknown>).code === "P2025" : err.message.includes("Record to delete does not exist"));
+      ("code" in errObj ? errObj.code === "P2025" : err.message.includes("Record to delete does not exist"));
     return NextResponse.json(
       { error: isNotFound ? "Job not found" : "Delete failed" },
       { status: isNotFound ? 404 : 500 },

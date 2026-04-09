@@ -9,3 +9,5 @@ Sentry.init({
   replaysSessionSampleRate: 0.05,
   integrations: [Sentry.replayIntegration()],
 });
+
+export const onRouterTransitionStart = Sentry.captureRouterTransitionStart;

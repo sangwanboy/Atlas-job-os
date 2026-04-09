@@ -46,8 +46,10 @@ export default withSentryConfig(nextConfig, {
   org: process.env.SENTRY_ORG,
   project: process.env.SENTRY_PROJECT,
   silent: true,           // suppress build output noise
-  disableLogger: true,
-  automaticVercelMonitors: false,
+  webpack: {
+    treeshake: { removeDebugLogging: true },
+    automaticVercelMonitors: false,
+  },
   // Don't upload source maps unless SENTRY_AUTH_TOKEN is set
   sourcemaps: {
     disable: !process.env.SENTRY_AUTH_TOKEN,
