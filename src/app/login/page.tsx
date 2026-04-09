@@ -165,11 +165,13 @@ export default function LoginPage() {
             </p>
           </div>
 
+          {/* Default admin credentials — dev only, commented out for security
           {process.env.NODE_ENV === "development" && (
             <div className="mt-6 rounded-xl border border-white/10 bg-white/5 p-3 text-center text-xs text-muted">
               <p>Default admin: <span className="font-mono text-text/70">admin@jobos.local</span> / <span className="font-mono text-text/70">admin123</span></p>
             </div>
           )}
+          */}
         </div>
       </div>
     </div>
