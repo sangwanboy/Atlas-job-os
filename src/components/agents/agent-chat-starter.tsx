@@ -7,6 +7,7 @@ import { activeAgent, initialChat, createInitialChat } from "@/lib/mock/data";
 import type { SyncedAgentProfile } from "@/lib/services/agent/agent-profile-sync";
 import type { ChatMessageView } from "@/types/domain";
 import { Eye, Clock, ArrowDownToLine, CheckCircle2, X, FileText, Wrench, DollarSign } from "lucide-react";
+import { ExtensionBanner } from "./extension-banner";
 
 function ScraperTimer({ startedAt }: { startedAt: number }) {
   const [elapsed, setElapsed] = useState(Math.floor((Date.now() - startedAt) / 1000));
@@ -1082,6 +1083,8 @@ export function AgentChatStarter() {
               </>
             )}
           </div>
+
+          <ExtensionBanner />
 
         </div>
       </aside>
