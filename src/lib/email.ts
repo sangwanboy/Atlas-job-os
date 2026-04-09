@@ -1,6 +1,6 @@
 import { Resend } from "resend";
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
 const FROM = process.env.EMAIL_FROM || "Atlas <noreply@yourdomain.com>";
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 
@@ -29,6 +29,7 @@ function ctaButton(text: string, href: string) {
 }
 
 export async function sendWelcomeEmail(to: string, name: string): Promise<void> {
+  if (!resend) { console.warn("[email] RESEND_API_KEY not set, skipping welcome email"); return; }
   try {
     await resend.emails.send({
       from: FROM,
@@ -51,6 +52,7 @@ export async function sendWelcomeEmail(to: string, name: string): Promise<void> 
 }
 
 export async function sendWaitlistEmail(to: string, name: string): Promise<void> {
+  if (!resend) { console.warn("[email] RESEND_API_KEY not set, skipping waitlist email"); return; }
   try {
     await resend.emails.send({
       from: FROM,
@@ -72,6 +74,7 @@ export async function sendWaitlistEmail(to: string, name: string): Promise<void>
 }
 
 export async function sendApprovedEmail(to: string, name: string): Promise<void> {
+  if (!resend) { console.warn("[email] RESEND_API_KEY not set, skipping approved email"); return; }
   try {
     await resend.emails.send({
       from: FROM,

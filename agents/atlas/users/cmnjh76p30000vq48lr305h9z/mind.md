@@ -2,8 +2,8 @@
   "mode": "discovery",
   "strategy": "job-review",
   "todos": [
-    "Import London SDE jobs if confirmed by Tushar Sangwan",
-    "Search for SDE roles in Manchester (pending)",
-    "Sync Gmail for hospitality or tech follow-ups"
+    "Wait for Tushar Sangwan to review and confirm import of hospitality roles",
+    "Identify if Tushar wants to pivot toward hospitality management or stay in tech-marketing",
+    "Sync Gmail for any updates on the previous SDE applications"
   ]
 }

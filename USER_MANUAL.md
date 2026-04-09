@@ -71,7 +71,9 @@ When you visit Atlas for the first time at `http://localhost:3000`, you'll see t
 - **FAQ** — answers to common questions (click to expand)
 - **Sign up CTA** — "Claim Your Spot" button (or "Join Waitlist" if all 50 beta slots are taken)
 
-**Beta access:** The first 50 users who register get instant access. After that, new registrations are added to a waitlist. Admin accounts are not counted toward the 50-slot limit.
+**Beta access:** The first 50 users who register get instant access and receive a welcome email. After that, new registrations are added to a waitlist and receive a waitlist confirmation email. Admin accounts are not counted toward the 50-slot limit.
+
+**Waitlist:** If you registered after all 50 slots were taken, you'll receive an email when a spot opens or when the admin manually approves your account. No action needed on your part — just wait for the approval email.
 
 **Sidebar badge:** Once logged in, you'll see a **BETA · v1.0** badge in the bottom-left of the sidebar — a visual reminder that Atlas is in beta.
 
@@ -121,6 +123,8 @@ Type naturally — Atlas understands intent:
 7. Presents them in the **Job Discovery Preview** box in the chat
 
 Atlas streams its response in real-time. Simple messages respond in ~3 seconds. Job searches take 15–60s depending on the number of job pages visited. Click the **stop button** at any time to cancel — this also closes the Atlas tab immediately.
+
+**Scraper progress timer:** While Atlas is searching, an animated progress bar with an elapsed-time counter appears in the chat. It stays visible even after Atlas starts streaming its response — you can always see how long the search took.
 
 ---
 
@@ -312,6 +316,11 @@ Admins can:
 - Reset any user's password
 - Delete users
 
+### Waitlist Management
+The Users table shows each user's status. Waitlist users show an **Approve** and **Reject** button:
+- **Approve** — activates the account immediately and sends the user an approval email with a sign-in link
+- **Reject** — permanently deletes the waitlist account
+
 ### Push Atlas Config
 After customising your Atlas agent (go to **Agent Workspace** and send a message first), click **Push Atlas Config** on the Users page to propagate your Atlas soul, identity, and operating rules to all existing users.
 
@@ -323,6 +332,17 @@ After customising your Atlas agent (go to **Agent Workspace** and send a message
 
 ### Beta Feedback (`/admin/feedback`)
 View all beta feedback submitted via the 💬 Feedback button. Feedback is stored in `data/feedback.jsonl` and optionally forwarded to a Slack/Discord webhook via `FEEDBACK_WEBHOOK_URL` in `.env.local`.
+
+---
+
+## Extension Status Banner
+
+The **Agent Profile** sidebar (right panel in the Agent Workspace) shows a live banner at the top indicating the Chrome extension's connection status:
+
+- **Connected** — green banner confirming the extension is active and Atlas will use real-browser scraping
+- **Not connected** — amber banner with a link to the Chrome extension setup section below
+
+The banner refreshes automatically — no page reload needed.
 
 ---
 

@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Atlas Job OS</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      width: 260px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #0f1117;
+      color: #e2e8f0;
+      padding: 16px;
+    }
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+    .logo {
+      width: 32px;
+      height: 32px;
+      background: linear-gradient(135deg, #06b6d4, #3b82f6);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+    }
+    .title { font-size: 15px; font-weight: 600; color: #f1f5f9; }
+    .subtitle { font-size: 11px; color: #64748b; margin-top: 1px; }
+
+    .status-card {
+      background: #1e2330;
+      border: 1px solid #2d3748;
+      border-radius: 10px;
+      padding: 12px 14px;
+      margin-bottom: 12px;
+    }
+    .status-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .status-label { font-size: 11px; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em; }
+    .status-value {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+    }
+    .dot.connected { background: #22c55e; box-shadow: 0 0 6px #22c55e88; }
+    .dot.disconnected { background: #ef4444; }
+    .dot.checking { background: #f59e0b; animation: pulse 1s infinite; }
+    @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.4; } }
+
+    .bridge-url {
+      margin-top: 8px;
+      font-size: 10px;
+      color: #475569;
+      font-family: monospace;
+    }
+
+    .btn {
+      width: 100%;
+      padding: 9px;
+      border-radius: 8px;
+      border: none;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.15s;
+    }
+    .btn:hover { opacity: 0.85; }
+    .btn:active { opacity: 0.7; }
+    .btn-primary { background: linear-gradient(135deg, #06b6d4, #3b82f6); color: #fff; }
+    .btn-secondary { background: #1e2330; border: 1px solid #2d3748; color: #94a3b8; margin-top: 8px; }
+
+    .hint {
+      font-size: 11px;
+      color: #475569;
+      margin-top: 12px;
+      line-height: 1.5;
+    }
+    .hint a { color: #06b6d4; text-decoration: none; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="logo">⚡</div>
+    <div>
+      <div class="title">Atlas Job OS</div>
+      <div class="subtitle">Browser Extension</div>
+    </div>
+  </div>
+
+  <div class="status-card">
+    <div class="status-row">
+      <span class="status-label">Bridge Status</span>
+      <span class="status-value" id="statusValue">
+        <span class="dot checking" id="statusDot"></span>
+        <span id="statusText">Checking…</span>
+      </span>
+    </div>
+    <div class="bridge-url" id="bridgeUrl"></div>
+  </div>
+
+  <button class="btn btn-primary" id="reconnectBtn">Reconnect</button>
+  <button class="btn btn-secondary" id="diagBtn">Open Service Worker Console</button>
+
+  <div class="hint" id="hint"></div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

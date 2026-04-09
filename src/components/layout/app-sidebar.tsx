@@ -253,19 +253,19 @@ export function AppSidebar({ mobileOpen, onClose, collapsed, onToggleCollapse }:
 
       {/* Mobile slide-over sidebar */}
       <aside
-        className={`fixed inset-y-0 left-0 z-40 flex flex-col w-[260px] border-r border-white/60 dark:border-white/10 bg-white/95 dark:bg-slate-900/98 backdrop-blur p-5 shadow-2xl transition-transform duration-300 lg:hidden ${
+        className={`fixed inset-y-0 left-0 z-40 flex flex-col w-[260px] border-r border-white/60 dark:border-white/10 bg-white/95 dark:bg-slate-900 backdrop-blur p-5 shadow-2xl transition-transform duration-300 lg:hidden ${
           mobileOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
         <div className="flex items-start justify-between mb-6">
-          <div className="rounded-2xl border border-white/65 bg-white/70 p-4 shadow-sm flex-1 mr-2">
+          <div className="rounded-2xl border border-white/65 dark:border-white/10 bg-white/70 dark:bg-white/5 p-4 shadow-sm flex-1 mr-2">
             <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-muted">AIG</p>
             <h1 className="mt-2 text-lg font-black leading-tight text-cyan-600">JOB OS</h1>
             <p className="mt-2 text-xs text-muted">Agent-led job discovery, ranking, and outreach operations.</p>
           </div>
           <button
             onClick={onClose}
-            className="mt-1 rounded-lg border border-white/60 bg-white/75 p-1.5 text-muted hover:bg-white hover:text-text transition-colors flex-none"
+            className="mt-1 rounded-lg border border-white/60 dark:border-white/10 bg-white/75 dark:bg-white/5 p-1.5 text-muted hover:bg-white dark:hover:bg-white/10 hover:text-text transition-colors flex-none"
           >
             <X className="h-4 w-4" />
           </button>
@@ -282,8 +282,8 @@ export function AppSidebar({ mobileOpen, onClose, collapsed, onToggleCollapse }:
                 onClick={onClose}
                 className={`group flex items-center gap-3 rounded-xl border px-3 py-2 text-sm font-semibold transition ${
                   active
-                    ? "border-cyan-200/80 bg-cyan-50/80 text-slate-900"
-                    : "border-transparent text-muted hover:border-white/70 hover:bg-white/75 hover:text-text"
+                    ? "border-cyan-200/80 dark:border-cyan-500/40 bg-cyan-50/80 dark:bg-cyan-500/15 text-slate-900 dark:text-cyan-300"
+                    : "border-transparent text-muted hover:border-white/70 dark:hover:border-white/10 hover:bg-white/75 dark:hover:bg-white/10 hover:text-text"
                 }`}
               >
                 <Icon className="h-4 w-4" />
@@ -293,14 +293,14 @@ export function AppSidebar({ mobileOpen, onClose, collapsed, onToggleCollapse }:
           })}
           {isAdmin && (
             <>
-              <div className="my-2 border-t border-white/40" />
+              <div className="my-2 border-t border-white/40 dark:border-white/10" />
               <Link
                 href="/admin/users"
                 onClick={onClose}
                 className={`group flex items-center gap-3 rounded-xl border px-3 py-2 text-sm font-semibold transition ${
                   pathname?.startsWith("/admin/users")
-                    ? "border-cyan-200/80 bg-cyan-50/80 text-slate-900"
-                    : "border-transparent text-muted hover:border-white/70 hover:bg-white/75 hover:text-text"
+                    ? "border-cyan-200/80 dark:border-cyan-500/40 bg-cyan-50/80 dark:bg-cyan-500/15 text-slate-900 dark:text-cyan-300"
+                    : "border-transparent text-muted hover:border-white/70 dark:hover:border-white/10 hover:bg-white/75 dark:hover:bg-white/10 hover:text-text"
                 }`}
               >
                 <Users className="h-4 w-4" />

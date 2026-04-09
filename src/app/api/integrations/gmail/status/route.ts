@@ -8,7 +8,7 @@ export async function GET() {
   const userId = session?.user?.id;
 
   try {
-    // @ts-ignore
+    // @ts-expect-error
     const account = userId ? await prisma.integrationAccount.findUnique({
       where: {
         userId_provider: {
@@ -18,13 +18,13 @@ export async function GET() {
       },
       select: {
         status: true,
-        // @ts-ignore
+        // @ts-expect-error
         email: true,
-        // @ts-ignore
+        // @ts-expect-error
         syncStatus: true,
-        // @ts-ignore
+        // @ts-expect-error
         lastSyncedAt: true,
-        // @ts-ignore
+        // @ts-expect-error
         syncError: true,
       },
     }) : null;
@@ -32,33 +32,33 @@ export async function GET() {
     if (account) {
       return NextResponse.json({
         connected: true,
-        // @ts-ignore
+        // @ts-expect-error
         email: account.email,
         status: account.status,
-        // @ts-ignore
+        // @ts-expect-error
         syncStatus: account.syncStatus,
-        // @ts-ignore
+        // @ts-expect-error
         lastSyncedAt: account.lastSyncedAt,
-        // @ts-ignore
+        // @ts-expect-error
         syncError: account.syncError,
       });
     }
 
     // Check local fallback
     const local = cache.get();
-    // @ts-ignore
+    // @ts-expect-error
     if (local.account) {
       return NextResponse.json({
         connected: true,
-        // @ts-ignore
+        // @ts-expect-error
         email: local.account.email,
-        // @ts-ignore
+        // @ts-expect-error
         status: local.account.status,
-        // @ts-ignore
+        // @ts-expect-error
         syncStatus: local.account.syncStatus,
-        // @ts-ignore
+        // @ts-expect-error
         lastSyncedAt: local.account.lastSyncedAt,
-        // @ts-ignore
+        // @ts-expect-error
         syncError: local.account.syncError,
         isLocal: true
       });
@@ -68,19 +68,19 @@ export async function GET() {
   } catch (error) {
     console.warn("[Gmail Status API] Prisma unreachable, checking local fallback.");
     const local = cache.get();
-    // @ts-ignore
+    // @ts-expect-error
     if (local.account) {
       return NextResponse.json({
         connected: true,
-        // @ts-ignore
+        // @ts-expect-error
         email: local.account.email,
-        // @ts-ignore
+        // @ts-expect-error
         status: local.account.status,
-        // @ts-ignore
+        // @ts-expect-error
         syncStatus: local.account.syncStatus,
-        // @ts-ignore
+        // @ts-expect-error
         lastSyncedAt: local.account.lastSyncedAt,
-        // @ts-ignore
+        // @ts-expect-error
         syncError: local.account.syncError,
         isLocal: true,
         dbOffline: true

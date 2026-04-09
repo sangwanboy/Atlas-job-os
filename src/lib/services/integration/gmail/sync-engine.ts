@@ -32,7 +32,7 @@ export async function syncGmail(
   try {
     
     try {
-      // @ts-ignore
+      // @ts-expect-error
       account = await prisma.integrationAccount.findUnique({
         where: { userId_provider: { userId, provider: "google" } },
         include: { user: { include: { integrationSettings: true } } }
@@ -61,7 +61,7 @@ export async function syncGmail(
     // Set sync status to locking (try Prisma, ignore if fail)
     if (!skipPrisma && account.id) {
       try {
-        // @ts-ignore
+        // @ts-expect-error
         await prisma.integrationAccount.update({
           where: { userId_provider: { userId, provider: "google" } },
           data: { syncStatus: "SYNCING", syncError: null }
@@ -103,7 +103,7 @@ export async function syncGmail(
       let dbThread: any = null;
       if (!skipPrisma) {
         try {
-          // @ts-ignore
+          // @ts-expect-error
           dbThread = await prisma.emailThread.findUnique({
             where: { externalId: thread.id }
           });
@@ -155,7 +155,7 @@ export async function syncGmail(
       if (!skipPrisma) {
         try {
           if (!dbThread) {
-            // @ts-ignore
+            // @ts-expect-error
             dbThread = await prisma.emailThread.create({
               data: {
                 userId,
@@ -172,7 +172,7 @@ export async function syncGmail(
               }
             });
           } else {
-            // @ts-ignore
+            // @ts-expect-error
             await prisma.emailThread.update({
               where: { id: dbThread.id },
               data: {
@@ -187,7 +187,7 @@ export async function syncGmail(
           for (const msg of threadData.messages) {
             if (!msg.id) continue;
 
-            // @ts-ignore
+            // @ts-expect-error
             const msgExists = await prisma.emailMessage.findUnique({ where: { externalId: msg.id } });
             if (msgExists) continue;
 
@@ -197,7 +197,7 @@ export async function syncGmail(
             const mDate = new Date(Number(msg.internalDate));
             const bodyContent = getBody(msg.payload);
 
-            // @ts-ignore
+            // @ts-expect-error
             await prisma.emailMessage.create({
               data: {
                 threadId: dbThread.id,
@@ -223,7 +223,7 @@ export async function syncGmail(
     // Done Syncing (Try Prisma)
     if (!skipPrisma) {
       try {
-        // @ts-ignore
+        // @ts-expect-error
         await prisma.integrationAccount.update({
           where: { userId_provider: { userId, provider: "google" } },
           data: { syncStatus: "IDLE", lastSyncedAt }
@@ -260,7 +260,7 @@ export async function syncGmail(
     console.error("[Gmail Sync Error]:", error);
     try {
       if (account?.id) {
-        // @ts-ignore
+        // @ts-expect-error
         await prisma.integrationAccount.update({
           where: { userId_provider: { userId, provider: "google" } },
           data: { syncStatus: "ERROR", syncError: error.message }

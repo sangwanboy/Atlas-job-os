@@ -857,7 +857,7 @@ async function executeToolCall(toolCall: ToolCall, sid: string, userId?: string)
     if (!userId) return "Cannot retrieve threads: no user session.";
     const limit = Number(toolCall.parameters.limit) || 10;
     try {
-      // @ts-ignore
+      // @ts-expect-error
       const threads = await prisma.emailThread.findMany({
         where: { userId },
         orderBy: { lastMessageAt: "desc" },

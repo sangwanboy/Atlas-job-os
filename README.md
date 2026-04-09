@@ -65,6 +65,10 @@ GMAIL_CLIENT_ID=
 GMAIL_CLIENT_SECRET=
 GMAIL_REDIRECT_URI=http://localhost:3000/api/integrations/gmail/callback
 
+# Email notifications via Resend (optional — app works without it, emails are silently skipped)
+RESEND_API_KEY=re_your_resend_api_key
+EMAIL_FROM=Atlas <noreply@yourdomain.com>
+
 # Browser service mode — "headed" shows Playwright window, "headless" runs silently
 BROWSER_MODE=headed
 
@@ -279,6 +283,8 @@ Atlas serves an animated public landing page at `/` — the first thing visitors
 
 **Beta mechanics:** Admin accounts are excluded from the 50-slot count. The CTA dynamically switches between "Claim Your Spot" and "Join Waitlist" based on remaining slots.
 
+**Waitlist flow:** Users who register after all 50 slots are taken receive a `WAITLIST` status and a waitlist email. Admins can approve or reject waitlist users from `/admin/users` — approval sends an approval email and activates their account.
+
 **Tech:** Framer Motion animations, CSS keyframe gradient mesh, Tailwind glassmorphism. All components in `src/components/landing/`.
 
 ---
@@ -333,6 +339,8 @@ Used when extension is not connected. Stealth Chromium with Bezier mouse curves,
 
 ### Agent Chat (Atlas)
 - Stateful multi-turn AI chat powered by Gemini (`gemini-3-flash-preview` default)
+- **Extension status banner** — the Agent Profile sidebar shows a live banner indicating whether the Chrome extension is connected or disconnected, with a direct link to setup instructions when not connected
+- **Scraper progress timer** — an animated progress bar with elapsed-time counter is shown in the chat during job searches and remains visible while Atlas streams its response (does not disappear when the assistant starts typing)
 - **Live streaming** — tokens emitted in real-time via Gemini SSE with proper `system_instruction` separation
 - **Full tool registry** — all 20 tools are described in the system prompt (PIPELINE, GMAIL, MEMORY, BROWSER groups). Atlas reasons from descriptions alone — no hardcoded trigger phrases. New tools are auto-available once added to the registry.
 - **Fast-path for simple messages** — greetings and conversational messages use a lightweight prompt (skips tool definitions, search guidelines, CV context) for ~3s response time instead of 30s+
@@ -378,8 +386,21 @@ Every user has completely isolated data:
 - **User profile** — `user_profile.md`, `mind.md`, `preferences.json` stored in `agents/atlas/users/{userId}/` (not shared)
 - **Settings** — stored in `RuntimeSettingsRecord` table keyed by userId
 
+### Email Notifications (Resend)
+
+Atlas sends transactional emails via [Resend](https://resend.com) when `RESEND_API_KEY` is set. Emails are silently skipped (with a console warning) if the key is absent — the app works fully without it.
+
+| Trigger | Email sent |
+|---------|-----------|
+| User registers within the 50-slot limit | Welcome email with sign-in link |
+| User registers after slots are full | Waitlist confirmation email |
+| Admin approves a waitlist user | Approval email with sign-in link |
+
+HTML template uses Atlas brand colours (dark card, cyan BETA badge). Configured via `EMAIL_FROM` (sender address) and `NEXT_PUBLIC_APP_URL` (CTA link base).
+
 ### Admin Controls
 - **Push Atlas Config** — `/admin/users` page button that copies admin's Atlas soul/identity/mindConfig to all existing users' agents. (Admin must start a chat first to seed their own agent.)
+- **Waitlist management** — approve or reject waitlist users from `/admin/users`. Approving sends a Resend approval email and activates the account immediately.
 - **Max Jobs Per Search** — global scraper pool cap, stored under `"global"` key, applies to all users (default: 20)
 - **Output Per Prompt** — global preview box cap, how many top-scored jobs appear in chat (default: 10)
 - **Monthly Token Budget**, **Per Response Token Cap**, **Soft Limit Percent** — runtime budget controls
@@ -475,6 +496,8 @@ prisma/
 | GET | `/api/exports/jobs` | Export jobs as XLSX |
 | GET | `/api/beta-slots` | Public beta slot counter (slotsUsed, slotsRemaining, isWaitlist) |
 | POST | `/api/feedback` | Submit beta feedback (saves to data/feedback.jsonl) |
+| POST | `/api/admin/users/[id]/approve` | Approve a waitlist user (sends approval email) |
+| POST | `/api/admin/users/[id]/reject` | Reject and delete a waitlist user |
 
 ---
 

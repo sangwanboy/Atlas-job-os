@@ -314,7 +314,7 @@ export class BrowserService extends EventEmitter {
         Object.defineProperty(navigator, "webdriver", { get: () => undefined });
 
         // 2. Mock Chrome Runtime
-        // @ts-ignore
+        // @ts-expect-error
         window.chrome = {
           runtime: {},
           loadTimes: () => {},
@@ -324,7 +324,7 @@ export class BrowserService extends EventEmitter {
 
         // 3. Fake Permissions
         const originalQuery = window.navigator.permissions.query;
-        // @ts-ignore
+        // @ts-expect-error
         window.navigator.permissions.query = (parameters) => (
           parameters.name === 'notifications' ?
             Promise.resolve({ state: Notification.permission }) :
