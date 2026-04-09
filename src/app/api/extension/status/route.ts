@@ -12,11 +12,11 @@ export async function GET() {
   }
 
   try {
-    const res = await fetch(`${BROWSER_SERVER_URL}/command`, {
+    const res = await fetch(`${BROWSER_SERVER_URL}/api/browser`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        command: "extension_status",
+        action: "extension_status",
         sessionId: session.user.id,
         params: {},
       }),
@@ -27,10 +27,12 @@ export async function GET() {
       return NextResponse.json({ connected: false, tabOpen: false });
     }
 
-    const data = await res.json();
+    const result = await res.json();
+    // Browser service wraps payload in result.data
+    const payload = result?.data ?? result;
     return NextResponse.json({
-      connected: data?.connected ?? false,
-      tabOpen: data?.tabOpen ?? false,
+      connected: payload?.connected ?? false,
+      tabOpen: payload?.tabOpen ?? false,
     });
   } catch {
     return NextResponse.json({ connected: false, tabOpen: false });

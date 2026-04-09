@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Puzzle, ExternalLink, CheckCircle, X, RefreshCw } from "lucide-react";
+import { Puzzle, X, RefreshCw } from "lucide-react";
 
 type Status = "loading" | "connected" | "disconnected";
 
@@ -37,18 +37,7 @@ export function ExtensionBanner() {
   // Auto-show again if it was dismissed but is still disconnected
   // Don't show if connected or loading
   if (status === "loading") return null;
-  if (status === "connected") {
-    if (dismissed) return null;
-    return (
-      <div className="mt-3 flex items-center gap-2 rounded-xl border border-emerald-200 dark:border-emerald-500/30 bg-emerald-50 dark:bg-emerald-500/10 px-4 py-2.5 text-sm">
-        <CheckCircle className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
-        <span className="text-emerald-700 dark:text-emerald-300 font-medium">Chrome extension connected</span>
-        <button onClick={() => setDismissed(true)} className="ml-auto text-emerald-500/50 hover:text-emerald-600 transition-colors">
-          <X className="h-3.5 w-3.5" />
-        </button>
-      </div>
-    );
-  }
+  if (status === "connected") return null;
 
   if (dismissed) return null;
 

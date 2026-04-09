@@ -71,7 +71,9 @@ const ChatMessageItem = React.memo(({
       .replace(/__PREVIEW_JOBS__[\s\S]*/gi, "")
       // Strip raw tool-call JSON blobs that leak during streaming
       .replace(/\{\s*"tool"\s*:\s*"[a-z_]+"\s*,\s*"parameters"\s*:[\s\S]*/m, "")
-      .trim();
+      .trim()
+      // Strip trailing pipe/cursor characters left by LLM
+      .replace(/\s*\|\s*$/, "");
   }, [message.content]);
 
   const extractedJobs = useMemo(() => {
@@ -165,15 +167,16 @@ const ChatMessageItem = React.memo(({
                     Last: {typeof lastCompletedTool.result === "string" ? lastCompletedTool.result.slice(0, 80) : "Done"}
                   </p>
                 )}
-                {scraperStartedAt && activeToolLog?.tool === "browser_extract_jobs" && (
-                  <>
-                    <ScraperTimer startedAt={scraperStartedAt} />
-                    <p className="mt-1.5 text-[10px] text-cyan-600/80 dark:text-cyan-400/70 flex items-center gap-1">
-                      <Eye className="h-3 w-3 flex-shrink-0" />
-                      Watch the live search in your browser tab above
-                    </p>
-                  </>
-                )}
+              </div>
+            )}
+            {/* Scraper progress — always visible when active, even if content is present */}
+            {scraperStartedAt && activeToolLog?.tool === "browser_extract_jobs" && (
+              <div className="space-y-1.5">
+                <ScraperTimer startedAt={scraperStartedAt} />
+                <p className="text-[10px] text-cyan-600/80 dark:text-cyan-400/70 flex items-center gap-1">
+                  <Eye className="h-3 w-3 flex-shrink-0" />
+                  Watch the live search in your browser tab above
+                </p>
               </div>
             )}
             {/* Final response */}
