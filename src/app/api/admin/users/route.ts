@@ -4,10 +4,12 @@ import {
   getAllUsers,
   createUser,
   updateUserRole,
+  updateUserStatus,
   deleteUser,
   resetUserPassword,
 } from "@/lib/services/auth/local-user-store";
 import { atlasState, ATLAS_FILES } from "@/lib/services/agent/atlas-state-manager";
+import { sendApprovedEmail } from "@/lib/email";
 
 async function requireAdmin() {
   const session = await auth();
@@ -132,6 +134,40 @@ export async function POST(request: Request) {
         } catch (err) {
           return NextResponse.json(
             { error: err instanceof Error ? err.message : "Delete failed" },
+            { status: 400 },
+          );
+        }
+      }
+
+      case "approve": {
+        const { userId } = data as { userId: string };
+        if (!userId) {
+          return NextResponse.json({ error: "userId required." }, { status: 400 });
+        }
+        const approved = await updateUserStatus(userId, "ACTIVE");
+        if (!approved) {
+          return NextResponse.json({ error: "User not found." }, { status: 404 });
+        }
+        // Create Atlas profile for newly approved user
+        await atlasState.writeUserText(approved.id, ATLAS_FILES.userProfile,
+          `# User Profile: ${approved.name}\n\nNo profile yet. Atlas will build this as we talk.\n`
+        );
+        // Send approval email (fire-and-forget)
+        void sendApprovedEmail(approved.email, approved.name);
+        return NextResponse.json({ user: approved });
+      }
+
+      case "reject": {
+        const { userId } = data as { userId: string };
+        if (!userId) {
+          return NextResponse.json({ error: "userId required." }, { status: 400 });
+        }
+        try {
+          await deleteUser(userId);
+          return NextResponse.json({ success: true });
+        } catch (err) {
+          return NextResponse.json(
+            { error: err instanceof Error ? err.message : "Reject failed" },
             { status: 400 },
           );
         }

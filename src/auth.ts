@@ -21,6 +21,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const user = await authenticateUser(email, password);
         if (!user) return null;
 
+        // Block non-active users (PENDING waitlist, SUSPENDED)
+        if (user.status !== "ACTIVE") return null;
+
         return {
           id: user.id,
           email: user.email,

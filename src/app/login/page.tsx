@@ -11,6 +11,7 @@ function LoginForm() {
   const searchParams = useSearchParams();
   const callbackUrl = searchParams?.get("callbackUrl") || "/dashboard";
   const registered = searchParams?.get("registered");
+  const waitlisted = searchParams?.get("waitlisted");
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -36,7 +37,18 @@ function LoginForm() {
     setLoading(false);
 
     if (result?.error) {
-      setError("Invalid email or password.");
+      // Check if this is a pending (waitlisted) user
+      try {
+        const checkRes = await fetch(`/api/register/status?email=${encodeURIComponent(email)}`);
+        const checkData = await checkRes.json();
+        if (checkData.status === "PENDING") {
+          setError("Your account is on the waitlist. We'll email you when you're approved.");
+        } else {
+          setError("Invalid email or password.");
+        }
+      } catch {
+        setError("Invalid email or password.");
+      }
     } else {
       router.push(callbackUrl as any);
       router.refresh();
@@ -48,6 +60,12 @@ function LoginForm() {
       {registered && (
         <div className="mb-6 rounded-xl border border-emerald-400/30 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
           Account created successfully. Sign in below.
+        </div>
+      )}
+
+      {waitlisted && (
+        <div className="mb-6 rounded-xl border border-amber-400/30 bg-amber-50 px-4 py-3 text-sm text-amber-700">
+          You&apos;re on the waitlist! We&apos;ll email you when your account is approved.
         </div>
       )}
 

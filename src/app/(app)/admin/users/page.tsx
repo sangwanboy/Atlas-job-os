@@ -13,6 +13,9 @@ import {
   X,
   MessageSquare,
   RefreshCw,
+  CheckCircle,
+  XCircle,
+  Clock,
 } from "lucide-react";
 
 type UserEntry = {
@@ -20,6 +23,7 @@ type UserEntry = {
   email: string;
   name: string;
   role: "USER" | "ADMIN";
+  status: "ACTIVE" | "PENDING" | "SUSPENDED";
   createdAt: string;
 };
 
@@ -277,7 +281,7 @@ export default function AdminUsersPage() {
       {/* ── Users Tab ── */}
       {activeTab === "users" && (
         <div className="flex-1 overflow-y-auto min-h-0 pb-6">
-          <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4">
+          <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4">
             <div className="panel p-4 text-center">
               <p className="text-xs text-muted">Total Users</p>
               <p className="mt-1 text-2xl font-extrabold">{users.length}</p>
@@ -286,14 +290,23 @@ export default function AdminUsersPage() {
               <p className="text-xs text-muted">Admins</p>
               <p className="mt-1 text-2xl font-extrabold text-cyan-600">{users.filter((u) => u.role === "ADMIN").length}</p>
             </div>
-            <div className="panel col-span-2 p-4 text-center sm:col-span-1">
-              <p className="text-xs text-muted">Regular Users</p>
-              <p className="mt-1 text-2xl font-extrabold">{users.filter((u) => u.role === "USER").length}</p>
+            <div className="panel p-4 text-center">
+              <p className="text-xs text-muted">Active Users</p>
+              <p className="mt-1 text-2xl font-extrabold">{users.filter((u) => u.role === "USER" && u.status === "ACTIVE").length}</p>
+            </div>
+            <div className="panel p-4 text-center">
+              <p className="text-xs text-muted">Pending</p>
+              <p className="mt-1 text-2xl font-extrabold text-amber-600">{users.filter((u) => u.status === "PENDING").length}</p>
             </div>
           </div>
 
           <div className="space-y-3">
-            {users.map((user) => (
+            {[...users].sort((a, b) => {
+              // PENDING users first, then by creation date
+              if (a.status === "PENDING" && b.status !== "PENDING") return -1;
+              if (a.status !== "PENDING" && b.status === "PENDING") return 1;
+              return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+            }).map((user) => (
               <div key={user.id} className="panel flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex items-center gap-3 min-w-0">
                   <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-500/20 to-blue-500/20 text-sm font-bold text-cyan-700">
@@ -308,11 +321,40 @@ export default function AdminUsersPage() {
                         {user.role === "ADMIN" && <Shield className="h-2.5 w-2.5" />}
                         {user.role}
                       </span>
+                      {user.status === "PENDING" && (
+                        <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-amber-100 text-amber-700 border border-amber-200">
+                          <Clock className="h-2.5 w-2.5" />
+                          PENDING
+                        </span>
+                      )}
+                      {user.status === "SUSPENDED" && (
+                        <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-rose-100 text-rose-700 border border-rose-200">
+                          SUSPENDED
+                        </span>
+                      )}
                     </div>
                     <p className="truncate text-xs text-muted">{user.email}</p>
                   </div>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
+                  {user.status === "PENDING" && (
+                    <>
+                      <button
+                        onClick={() => handleAction("approve", { userId: user.id })}
+                        className="flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-600 transition hover:bg-emerald-100"
+                      >
+                        <CheckCircle className="h-3.5 w-3.5" />
+                        Approve
+                      </button>
+                      <button
+                        onClick={() => { if (confirm(`Reject and delete ${user.name} (${user.email})?`)) handleAction("reject", { userId: user.id }); }}
+                        className="flex items-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-600 transition hover:bg-rose-100"
+                      >
+                        <XCircle className="h-3.5 w-3.5" />
+                        Reject
+                      </button>
+                    </>
+                  )}
                   <button
                     onClick={() => handleAction("updateRole", { userId: user.id, role: user.role === "ADMIN" ? "USER" : "ADMIN" })}
                     disabled={user.id === session?.user?.id}
@@ -416,37 +458,44 @@ export default function AdminUsersPage() {
 
       {/* Create User Modal */}
       {showCreateModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-sm" onClick={() => setShowCreateModal(false)}>
-          <div className="w-full max-w-md rounded-2xl border border-white/60 bg-white/95 p-5 shadow-2xl backdrop-blur-xl sm:p-6" onClick={(e) => e.stopPropagation()}>
-            <div className="mb-5 flex items-center justify-between">
-              <h3 className="text-lg font-extrabold">Create New User</h3>
-              <button onClick={() => setShowCreateModal(false)} className="rounded-full bg-slate-100 dark:bg-white/10 p-1.5 hover:bg-slate-200 dark:hover:bg-white/20 transition-colors cursor-pointer">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm" onClick={() => setShowCreateModal(false)}>
+          <div className="w-full max-w-md rounded-2xl border border-white/60 dark:border-white/10 bg-white dark:bg-slate-900 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            {/* Modal header */}
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-white/10 px-6 py-4">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-cyan-500/15 text-cyan-600">
+                  <UserPlus className="h-4 w-4" />
+                </div>
+                <h3 className="text-base font-extrabold text-text">Create New User</h3>
+              </div>
+              <button onClick={() => setShowCreateModal(false)} className="rounded-lg p-1.5 text-muted hover:bg-slate-100 dark:hover:bg-white/10 hover:text-text transition-colors">
                 <X className="h-4 w-4" />
               </button>
             </div>
-            <form onSubmit={handleCreate} className="space-y-4">
+            {/* Modal body */}
+            <form onSubmit={handleCreate} className="space-y-4 px-6 py-5">
               <div>
-                <label className="mb-1 block text-xs font-semibold text-muted">Name</label>
-                <input type="text" required value={createForm.name} onChange={(e) => setCreateForm((f) => ({ ...f, name: e.target.value }))} className="field" placeholder="Full name" />
+                <label className="mb-1.5 block text-xs font-semibold text-muted uppercase tracking-wide">Full Name</label>
+                <input type="text" required value={createForm.name} onChange={(e) => setCreateForm((f) => ({ ...f, name: e.target.value }))} className="field" placeholder="e.g. Jane Smith" />
               </div>
               <div>
-                <label className="mb-1 block text-xs font-semibold text-muted">Email</label>
-                <input type="email" required value={createForm.email} onChange={(e) => setCreateForm((f) => ({ ...f, email: e.target.value }))} className="field" placeholder="user@company.com" />
+                <label className="mb-1.5 block text-xs font-semibold text-muted uppercase tracking-wide">Email Address</label>
+                <input type="email" required value={createForm.email} onChange={(e) => setCreateForm((f) => ({ ...f, email: e.target.value }))} className="field" placeholder="jane@company.com" />
               </div>
               <div>
-                <label className="mb-1 block text-xs font-semibold text-muted">Password</label>
+                <label className="mb-1.5 block text-xs font-semibold text-muted uppercase tracking-wide">Password</label>
                 <input type="password" required minLength={6} value={createForm.password} onChange={(e) => setCreateForm((f) => ({ ...f, password: e.target.value }))} className="field" placeholder="Min. 6 characters" />
               </div>
               <div>
-                <label className="mb-1 block text-xs font-semibold text-muted">Role</label>
-                <select value={createForm.role} onChange={(e) => setCreateForm((f) => ({ ...f, role: e.target.value as "USER" | "ADMIN" }))} className="field">
-                  <option value="USER">User</option>
-                  <option value="ADMIN">Admin</option>
+                <label className="mb-1.5 block text-xs font-semibold text-muted uppercase tracking-wide">Role</label>
+                <select value={createForm.role} onChange={(e) => setCreateForm((f) => ({ ...f, role: e.target.value as "USER" | "ADMIN" }))} className="field appearance-none cursor-pointer">
+                  <option value="USER">User — standard access</option>
+                  <option value="ADMIN">Admin — full access</option>
                 </select>
               </div>
-              <div className="flex gap-2 pt-2">
-                <button type="button" onClick={() => setShowCreateModal(false)} className="btn-secondary flex-1">Cancel</button>
-                <button type="submit" className="btn-primary flex-1">Create User</button>
+              <div className="flex gap-3 pt-1">
+                <button type="button" onClick={() => setShowCreateModal(false)} className="btn-secondary flex-1 py-2.5">Cancel</button>
+                <button type="submit" className="btn-primary flex-1 py-2.5">Create User</button>
               </div>
             </form>
           </div>
@@ -455,24 +504,32 @@ export default function AdminUsersPage() {
 
       {/* Reset Password Modal */}
       {resetTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-sm" onClick={() => setResetTarget(null)}>
-          <div className="w-full max-w-sm rounded-2xl border border-white/60 bg-white/95 p-5 shadow-2xl backdrop-blur-xl sm:p-6" onClick={(e) => e.stopPropagation()}>
-            <div className="mb-5 flex items-center justify-between">
-              <h3 className="text-lg font-extrabold">Reset Password</h3>
-              <button onClick={() => setResetTarget(null)} className="rounded-full bg-slate-100 dark:bg-white/10 p-1.5 hover:bg-slate-200 dark:hover:bg-white/20 transition-colors cursor-pointer">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm" onClick={() => setResetTarget(null)}>
+          <div className="w-full max-w-sm rounded-2xl border border-white/60 dark:border-white/10 bg-white dark:bg-slate-900 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-white/10 px-6 py-4">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-amber-500/15 text-amber-600">
+                  <KeyRound className="h-4 w-4" />
+                </div>
+                <h3 className="text-base font-extrabold text-text">Reset Password</h3>
+              </div>
+              <button onClick={() => setResetTarget(null)} className="rounded-lg p-1.5 text-muted hover:bg-slate-100 dark:hover:bg-white/10 hover:text-text transition-colors">
                 <X className="h-4 w-4" />
               </button>
             </div>
-            <p className="mb-4 text-sm text-muted">
-              Set a new password for <span className="font-semibold text-text">{resetTarget.name}</span> ({resetTarget.email})
-            </p>
-            <form onSubmit={handleResetPassword} className="space-y-4">
-              <input type="password" required minLength={6} value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className="field" placeholder="New password (min. 6 chars)" />
-              <div className="flex gap-2">
-                <button type="button" onClick={() => setResetTarget(null)} className="btn-secondary flex-1">Cancel</button>
-                <button type="submit" className="btn-primary flex-1">Reset Password</button>
-              </div>
-            </form>
+            <div className="px-6 py-5">
+              <p className="mb-4 text-sm text-muted">
+                Set a new password for <span className="font-semibold text-text">{resetTarget.name}</span>
+                <span className="block text-xs mt-0.5">{resetTarget.email}</span>
+              </p>
+              <form onSubmit={handleResetPassword} className="space-y-4">
+                <input type="password" required minLength={6} value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className="field" placeholder="New password (min. 6 chars)" />
+                <div className="flex gap-3">
+                  <button type="button" onClick={() => setResetTarget(null)} className="btn-secondary flex-1 py-2.5">Cancel</button>
+                  <button type="submit" className="btn-primary flex-1 py-2.5">Reset Password</button>
+                </div>
+              </form>
+            </div>
           </div>
         </div>
       )}

@@ -8,7 +8,7 @@ const SLOTS_TOTAL = 50;
 
 export async function GET() {
   try {
-    const slotsUsed = await prisma.user.count({ where: { role: "USER" } });
+    const slotsUsed = await prisma.user.count({ where: { role: "USER", status: "ACTIVE" } });
     const slotsRemaining = Math.max(0, SLOTS_TOTAL - slotsUsed);
     return NextResponse.json(
       { slotsUsed, slotsTotal: SLOTS_TOTAL, slotsRemaining, isWaitlist: slotsRemaining === 0 },

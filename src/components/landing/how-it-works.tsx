@@ -45,17 +45,6 @@ export function HowItWorks() {
       </motion.div>
 
       <div className="mt-16 relative">
-        {/* Connector line — desktop */}
-        <div className="hidden lg:block absolute top-10 left-[16%] right-[16%] h-px">
-          <motion.div
-            className="h-full bg-gradient-to-r from-cyan-500/0 via-cyan-500/30 to-cyan-500/0"
-            initial={{ scaleX: 0 }}
-            whileInView={{ scaleX: 1 }}
-            viewport={{ once: true }}
-            transition={{ duration: 1.2, delay: 0.4 }}
-          />
-        </div>
-
         <div className="grid gap-6 lg:grid-cols-3">
           {STEPS.map((step, i) => {
             const Icon = step.icon;

@@ -48,7 +48,11 @@ export default function RegisterPage() {
         return;
       }
 
-      router.push("/login?registered=1");
+      if (data.waitlisted) {
+        router.push("/login?waitlisted=1");
+      } else {
+        router.push("/login?registered=1");
+      }
     } catch {
       setError("Something went wrong. Try again.");
       setLoading(false);

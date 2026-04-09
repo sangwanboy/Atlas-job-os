@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { createUser, findUserByEmail } from "@/lib/services/auth/local-user-store";
 import { atlasState, ATLAS_FILES } from "@/lib/services/agent/atlas-state-manager";
 import { rateLimit, getClientIP } from "@/lib/rate-limit";
+import { prisma } from "@/lib/db";
+import { sendWelcomeEmail, sendWaitlistEmail } from "@/lib/email";
+
+const BETA_SLOTS_TOTAL = 50;
 
 const REG_LIMIT = 3;            // max registrations
 const REG_WINDOW_MS = 60 * 60 * 1000; // 1 hour
@@ -64,15 +68,28 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const user = await createUser(email, sanitizedName, password);
+    // Determine beta slot availability (exclude admins)
+    const activeUserCount = await prisma.user.count({ where: { role: "USER", status: "ACTIVE" } });
+    const userStatus = activeUserCount < BETA_SLOTS_TOTAL ? "ACTIVE" : "PENDING";
 
-    // Create blank per-user Atlas profile so Atlas never falls back to shared data
-    await atlasState.writeUserText(user.id, ATLAS_FILES.userProfile,
-      `# User Profile: ${sanitizedName}\n\nNo profile yet. Atlas will build this as we talk.\n`
-    );
+    const user = await createUser(email, sanitizedName, password, "USER", userStatus);
+
+    // Only create Atlas profile for active users (pending users get it on approval)
+    if (userStatus === "ACTIVE") {
+      await atlasState.writeUserText(user.id, ATLAS_FILES.userProfile,
+        `# User Profile: ${sanitizedName}\n\nNo profile yet. Atlas will build this as we talk.\n`
+      );
+    }
+
+    // Send appropriate email (fire-and-forget)
+    if (userStatus === "ACTIVE") {
+      void sendWelcomeEmail(email, sanitizedName);
+    } else {
+      void sendWaitlistEmail(email, sanitizedName);
+    }
 
     return NextResponse.json(
-      { id: user.id, email: user.email, name: user.name, role: user.role },
+      { id: user.id, email: user.email, name: user.name, role: user.role, status: user.status, waitlisted: userStatus === "PENDING" },
       { status: 201 },
     );
   } catch (error) {
