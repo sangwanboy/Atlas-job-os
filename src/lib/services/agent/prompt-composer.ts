@@ -110,6 +110,17 @@ BROWSER:
 - browser_extension_status: Check if Chrome extension is connected. Params: {}
 - browser_extension_enrich_job: Get full job details via extension. Params: { url }
 
+CV GENERATION:
+- generate_cv: Generate a professional UK-style CV/resume as a downloadable DOCX file from the user's profile data. Available templates: 'classic' (DEFAULT — traditional UK format), 'modern' (navy blue accents, clean design), 'ats' (maximum ATS parsability, plain text). ALWAYS use 'classic' unless the user specifically requests a different template. The user must approve before saving. Params: { template: 'classic'|'modern'|'ats', targetRole?: string }
+- save_generated_cv: Save or discard a previously generated CV after user review. MUST be called after generate_cv when the user says "save" or "discard". Params: { action: 'save'|'discard' }
+
+CV GENERATION PROTOCOL:
+BEFORE generating: Check if the user has a complete profile. If generate_cv returns INSUFFICIENT_DATA, do NOT retry. Instead, ask the user for the missing details one by one (name, experience, education, skills, summary) OR ask them to upload their existing CV using the paperclip button.
+Step 1 — GENERATE: Call generate_cv with the chosen template and optional target role.
+Step 2 — PREVIEW: Show the user the sections included and the preview download link. Ask them to review.
+Step 3 — SAVE/DISCARD: When the user confirms, call save_generated_cv with action='save' to permanently store and provide the download link. If they want to cancel, use action='discard'.
+IMPORTANT: Never generate a CV with placeholder data. If the profile is incomplete, gather the information first.
+
 JOB SEARCH STRATEGY:
 All job gathering happens exclusively through the Chrome extension — NO Playwright, NO direct scraping.
 Use browser_extract_jobs to search. If the extension is not connected, tell the user to activate the JOB OS extension in their browser.

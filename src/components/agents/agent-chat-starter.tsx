@@ -6,7 +6,7 @@ import ReactMarkdown from "react-markdown";
 import { activeAgent, initialChat, createInitialChat } from "@/lib/mock/data";
 import type { SyncedAgentProfile } from "@/lib/services/agent/agent-profile-sync";
 import type { ChatMessageView } from "@/types/domain";
-import { Eye, Clock, ArrowDownToLine, CheckCircle2, X, FileText, Wrench, DollarSign } from "lucide-react";
+import { Eye, Clock, ArrowDownToLine, CheckCircle2, X, FileText, Wrench, DollarSign, Paperclip, FileImage } from "lucide-react";
 import { ExtensionBanner } from "./extension-banner";
 
 function ScraperTimer({ startedAt, isDone, onHide }: { startedAt: number; isDone: boolean; onHide: () => void }) {
@@ -360,6 +360,9 @@ const JobPreviewBox = ({
               <div className="flex-1 min-w-0">
                 <p className="font-semibold text-sm text-slate-800 dark:text-slate-100 truncate">{job.title}</p>
                 <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">{job.company} • {job.location}</p>
+                {job.descriptionPreview && (
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 line-clamp-2 leading-snug">{job.descriptionPreview}</p>
+                )}
                 <div className="flex items-center gap-2 mt-1.5 flex-wrap">
                   {/* Search relevance score (query+location fit, not profile match) */}
                   {job.score != null && (
@@ -505,6 +508,11 @@ export function AgentChatStarter() {
   const abortControllerRef = useRef<AbortController | null>(null);
   const lastTextDeltaRef = useRef<number>(0);
   const [isTextActive, setIsTextActive] = useState(false);
+  const [attachedFile, setAttachedFile] = useState<File | null>(null);
+  const [pendingUploadFile, setPendingUploadFile] = useState<File | null>(null);
+  const [attachError, setAttachError] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     // History scroll only
@@ -723,7 +731,45 @@ export function AgentChatStarter() {
     }
   }
 
+  const CHAT_CV_MAX_BYTES = 10 * 1024 * 1024;
+  const CHAT_CV_ACCEPT_EXTS = new Set([".pdf", ".doc", ".docx", ".jpg", ".jpeg", ".png", ".webp"]);
+
+  function validateCvFile(file: File): string | null {
+    const ext = file.name.slice(file.name.lastIndexOf(".")).toLowerCase();
+    if (!CHAT_CV_ACCEPT_EXTS.has(ext))
+      return "Please upload a CV or resume only (PDF, DOC, DOCX, or image).";
+    if (file.size > CHAT_CV_MAX_BYTES)
+      return "File exceeds 10 MB limit. Please upload a smaller file.";
+    return null;
+  }
+
   async function sendMessage(overrideMessage?: string) {
+    // If file is confirmed and attached, upload first then trigger Atlas
+    if (attachedFile && !overrideMessage) {
+      setUploading(true);
+      setAttachError(null);
+      const fd = new FormData();
+      fd.append("file", attachedFile);
+      try {
+        const res = await fetch("/api/cv", { method: "POST", body: fd });
+        const json = await res.json();
+        if (!res.ok || !json.success) {
+          setAttachError((json as { error?: string }).error ?? "Upload failed. Please try again.");
+          setUploading(false);
+          return;
+        }
+      } catch {
+        setAttachError("Upload failed. Please check your connection.");
+        setUploading(false);
+        return;
+      }
+      setUploading(false);
+      const uploadedName = attachedFile.name;
+      setAttachedFile(null);
+      void sendMessage(`I've uploaded my CV/resume "${uploadedName}" for review. Please analyze it, give me upgrade suggestions, confirm that the CV has been saved to my CV library, and suggest target job roles that match my profile.`);
+      return;
+    }
+
     const msg = overrideMessage || input.trim();
     if (!msg) return;
     setInitialLoading(false);
@@ -964,7 +1010,7 @@ export function AgentChatStarter() {
       ];
 
   return (
-    <div className="flex h-full min-h-0 w-full gap-3 overflow-hidden xl:flex-row flex-col sm:gap-5 lg:gap-6">
+    <div className="flex h-full min-h-0 w-full gap-2 overflow-hidden xl:flex-row flex-col sm:gap-3">
       <aside className="panel flex-none xl:flex xl:flex-col xl:w-[320px] p-4 sm:p-5 custom-scrollbar scroll-well overflow-y-auto max-h-[150px] sm:max-h-[200px] xl:max-h-full xl:overflow-y-auto">
         {/* Compact mobile header, full profile on xl */}
         <div className="flex items-center gap-3 xl:block xl:pb-4 xl:border-b xl:border-white/10 dark:xl:border-white/10">
@@ -1111,8 +1157,8 @@ export function AgentChatStarter() {
       </aside>
 
       <section className="panel flex min-h-0 flex-1 flex-col overflow-hidden p-3 pb-2 sm:p-4 sm:pb-3 md:p-5 md:pb-4 shadow-well">
-        {/* Chat Header with Session Management */}
-        <div className="mb-3 flex flex-none items-center justify-between gap-2 border-b border-white/20 pb-3 sm:mb-4 sm:gap-4 sm:pb-4">
+        {/* Session selector + New Chat */}
+        <div className="mb-2 flex flex-none items-center justify-between gap-2 border-b border-white/10 pb-2">
           <div className="flex flex-1 items-center gap-2 overflow-hidden min-w-0">
             <select
               value={sessionId || "new"}
@@ -1172,8 +1218,8 @@ export function AgentChatStarter() {
                     onImportSingle={(idx) => handleImportSingleInMessage(messageJobs![idx])}
                     onDismiss={handleDismissJobs}
                     importing={importingJobs}
-                    scraperStartedAt={scraperStartedAt}
-                    scraperDone={scraperDone}
+                    scraperStartedAt={msgIdx === messages.length - 1 ? scraperStartedAt : null}
+                    scraperDone={msgIdx === messages.length - 1 ? scraperDone : false}
                     onScraperHide={() => { setScraperStartedAt(null); setScraperDone(false); }}
                     isStreaming={loading && isTextActive && msgIdx === messages.length - 1 && message.role === "ASSISTANT"}
                   />
@@ -1185,19 +1231,57 @@ export function AgentChatStarter() {
         </div>
 
         <div className="mt-2 flex-none rounded-2xl border border-white/60 dark:border-white/10 bg-white/80 dark:bg-white/5 shadow-sm transition-all duration-300 focus-within:ring-2 focus-within:ring-cyan-500/30 focus-within:border-cyan-400/40">
+          {/* Hidden file input */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.webp"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0] ?? null;
+              if (!file) return;
+              const err = validateCvFile(file);
+              if (err) { setAttachError(err); return; }
+              setAttachError(null);
+              setPendingUploadFile(file);
+              e.target.value = "";
+            }}
+          />
+
           <div className="flex items-end gap-2 p-2 sm:p-3">
-            <input
+            {/* Paperclip attach button */}
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={loading || uploading}
+              title="Attach CV or resume"
+              className="flex h-9 w-9 flex-none items-center justify-center rounded-full text-slate-400 dark:text-slate-500 hover:text-cyan-500 dark:hover:text-cyan-400 hover:bg-slate-100 dark:hover:bg-white/10 transition-colors disabled:opacity-40"
+            >
+              <Paperclip className="h-4 w-4" />
+            </button>
+
+            <textarea
               autoFocus
+              rows={1}
               value={input}
-              onChange={(event) => setInput(event.target.value)}
+              onChange={(event) => {
+                setInput(event.target.value);
+                // Auto-resize: grow to content, max 3 lines (~72px)
+                const el = event.target;
+                el.style.height = "auto";
+                el.style.height = `${Math.min(el.scrollHeight, 72)}px`;
+              }}
               onKeyDown={(event) => {
-                if (event.key === "Enter" && !event.shiftKey && !loading && input.trim()) {
+                if (event.key === "Enter" && !event.shiftKey && !loading && (input.trim() || attachedFile)) {
                   event.preventDefault();
                   void sendMessage();
+                  // Reset height after send
+                  const el = event.target as HTMLTextAreaElement;
+                  setTimeout(() => { el.style.height = "auto"; }, 0);
                 }
               }}
               placeholder="Message Atlas…"
-              className="field flex-1 bg-transparent border-none shadow-none focus:ring-0 min-h-[36px] resize-none placeholder:text-slate-400 dark:placeholder:text-slate-500"
+              className="field flex-1 bg-transparent border-none shadow-none focus:ring-0 min-h-[36px] max-h-[72px] resize-none overflow-y-auto placeholder:text-slate-400 dark:placeholder:text-slate-500 leading-6"
             />
             {loading ? (
               <button
@@ -1210,13 +1294,72 @@ export function AgentChatStarter() {
             ) : (
               <button
                 onClick={() => void sendMessage()}
-                disabled={!input.trim()}
-                className="btn-primary flex-none disabled:opacity-40 transition-all"
+                disabled={(!input.trim() && !attachedFile) || uploading}
+                className="btn-primary flex-none rounded-full disabled:opacity-40 transition-all"
               >
                 Send
               </button>
             )}
           </div>
+
+          {/* Confirmation chip — shown after file is selected, before user approves */}
+          {pendingUploadFile && !attachedFile && (
+            <div className="flex items-center gap-2 px-3 pb-3 flex-wrap">
+              <div className="flex items-center gap-1.5 rounded-lg bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 px-3 py-1.5 text-xs text-amber-800 dark:text-amber-300 flex-1 min-w-0">
+                <FileText className="h-3.5 w-3.5 flex-none text-amber-500" />
+                <span className="truncate font-medium">{pendingUploadFile.name}</span>
+                <span className="text-amber-500 flex-none ml-1">({(pendingUploadFile.size / 1024).toFixed(0)} KB)</span>
+                <span className="text-amber-600 dark:text-amber-400 ml-1.5 hidden sm:inline">— will be saved to your CV library</span>
+              </div>
+              <div className="flex gap-1.5 flex-none">
+                <button
+                  type="button"
+                  onClick={() => { setAttachedFile(pendingUploadFile); setPendingUploadFile(null); }}
+                  className="rounded-lg bg-cyan-500 hover:bg-cyan-600 active:scale-95 text-white px-3 py-1.5 text-xs font-semibold transition-all"
+                >
+                  Save &amp; Analyse
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setPendingUploadFile(null); setAttachError(null); }}
+                  className="rounded-lg bg-slate-100 dark:bg-white/10 hover:bg-slate-200 dark:hover:bg-white/15 active:scale-95 text-slate-600 dark:text-slate-300 px-3 py-1.5 text-xs font-semibold transition-all"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Confirmed file chip — shown after user clicks Save & Analyse */}
+          {attachedFile && (
+            <div className="flex items-center gap-2 px-3 pb-3">
+              <div className="flex items-center gap-1.5 rounded-full bg-cyan-500/10 border border-cyan-500/20 px-2.5 py-1 text-xs text-cyan-700 dark:text-cyan-300 max-w-[280px]">
+                {/\.(jpg|jpeg|png|webp)$/i.test(attachedFile.name)
+                  ? <FileImage className="h-3 w-3 flex-none" />
+                  : <FileText className="h-3 w-3 flex-none" />}
+                <span className="truncate">{attachedFile.name}</span>
+                <span className="text-slate-400 dark:text-slate-500 flex-none text-[10px] ml-1">
+                  {(attachedFile.size / 1024).toFixed(0)} KB
+                </span>
+                <button
+                  type="button"
+                  onClick={() => { setAttachedFile(null); setAttachError(null); }}
+                  className="flex-none ml-0.5 text-slate-400 hover:text-red-500 transition-colors"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+              {uploading && (
+                <span className="text-[10px] text-slate-400 dark:text-slate-500 animate-pulse">Uploading…</span>
+              )}
+            </div>
+          )}
+
+          {/* Inline validation / upload error */}
+          {attachError && (
+            <p className="px-3 pb-3 text-[11px] text-red-500 dark:text-red-400">{attachError}</p>
+          )}
+
           <div className="flex items-center gap-2 px-3 pb-2 text-[10px] text-slate-400 dark:text-slate-600">
             <span>Enter to send</span>
             <span>·</span>

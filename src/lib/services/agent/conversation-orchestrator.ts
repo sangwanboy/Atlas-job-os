@@ -17,7 +17,7 @@ import { syncGmail } from "@/lib/services/integration/gmail/sync-engine";
 import { runtimeSettingsStore } from "@/lib/services/settings/runtime-settings-store";
 import { prisma } from "@/lib/db";
 import { extensionBridge } from "@/lib/services/browser/extension-bridge";
-import { getPendingJobs, setPendingJobs, clearPendingJobs } from "@/lib/redis";
+import { getPendingJobs, setPendingJobs, clearPendingJobs, getPendingCv, setPendingCv, clearPendingCv } from "@/lib/redis";
 import { logger } from "@/lib/logger";
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -275,6 +275,16 @@ const toolDescriptors = [
     name: "enrich_pipeline_jobs",
     description: "Scrape full descriptions, salary, and company for jobs already in the pipeline that are missing this data. Only call this when the user EXPLICITLY asks to enrich, fetch descriptions, or get more details about their saved jobs. Do NOT call automatically after searches or imports. Parameters: { limit?: number (default 10, max 20) }",
     parameters: { limit: "number?" },
+  },
+  {
+    name: "generate_cv",
+    description: "Generate a professional UK-style CV/resume as a downloadable DOCX file from the user's uploaded CV profile data. The user MUST have a complete profile. Available templates: 'classic' (DEFAULT — traditional UK format, Cambria font), 'modern' (navy blue accents, Calibri, 2-column skills), 'ats' (maximum ATS parsability, plain Arial). ALWAYS use 'classic' unless the user requests otherwise. After generating, the user must approve before it is saved permanently. Parameters: { template: 'classic'|'modern'|'ats', targetRole?: string }",
+    parameters: { template: "string", targetRole: "string?" },
+  },
+  {
+    name: "save_generated_cv",
+    description: "Save or discard a previously generated CV after user review. MUST be called after generate_cv. If the user approves, use action='save' to permanently store and get download link. If the user wants to discard, use action='discard'. Parameters: { action: 'save'|'discard' }",
+    parameters: { action: "string" },
   },
 ] as const;
 
@@ -634,16 +644,25 @@ async function executeToolCall(toolCall: ToolCall, sid: string, userId?: string)
       return "No jobs to preview — the list is empty.";
     }
     const params = previewJobsToolSchema.parse(toolCall.parameters);
-    const existing = await getPendingJobs(sid);
     const newJobs = params.jobs;
-    const combined = [...existing, ...newJobs];
+    // Each search previews only its own results — do not accumulate across searches.
+    // Import All / pipeline persistence is handled separately via importJobs.
+    const combined = [...newJobs];
     const uniqueJobsMap = new Map();
     const norm = (s: string) => (s || "").toLowerCase().replace(/[^a-z0-9]/g, "").trim();
     for (const j of combined) {
       // Primary key: normalised title+company — immune to tracking URL differences
       const titleCompanyKey = `${norm(j.title)}::${norm(j.company)}`;
-      if (!uniqueJobsMap.has(titleCompanyKey)) {
+      const existing2 = uniqueJobsMap.get(titleCompanyKey);
+      if (!existing2) {
         uniqueJobsMap.set(titleCompanyKey, j);
+      } else {
+        // Keep whichever version has richer data (longer description wins)
+        const existingDescLen = (existing2.description || "").length;
+        const newDescLen = (j.description || "").length;
+        if (newDescLen > existingDescLen) {
+          uniqueJobsMap.set(titleCompanyKey, { ...existing2, ...j });
+        }
       }
     }
     const finalJobs = Array.from(uniqueJobsMap.values());
@@ -967,6 +986,84 @@ async function executeToolCall(toolCall: ToolCall, sid: string, userId?: string)
     return `✅ Enriched **${enriched}** jobs with full descriptions and salary data. ${failed > 0 ? `(${failed} failed — no URL or scraper blocked)` : ""}`;
   }
 
+  // ── CV Generation (with user approval gate) ──────────────────────────────
+  if (toolCall.tool === "generate_cv") {
+    const params = toolCall.parameters as { template: string; targetRole?: string };
+    if (!userId) return "Error: No user ID available. Please log in first.";
+
+    const validTemplates = ["classic", "modern", "ats"];
+    if (!params.template || !validTemplates.includes(params.template)) {
+      return `Invalid template "${params.template ?? ""}". Choose from: classic, modern, ats.`;
+    }
+
+    try {
+      const { generateCvToTemp } = await import("@/lib/services/cv/cv-docx-generator");
+      const result = await generateCvToTemp(userId, params.template as "classic" | "modern" | "ats", params.targetRole);
+      if (!result.success || !result.filePath || !result.filename) {
+        return `CV generation failed: ${result.error ?? "Unknown error"}. Make sure you have uploaded a CV first.`;
+      }
+
+      // Store in Redis for confirmation — includes userId to prevent cross-user access
+      await setPendingCv(sid, {
+        filename: result.filename,
+        filePath: result.filePath,
+        template: params.template,
+        sections: result.sections ?? [],
+        userId,
+      });
+
+      const sectionList = result.sections?.map(s => `  • ${s}`).join("\n") ?? "";
+      const previewUrl = `/api/cv/export?file=${encodeURIComponent(result.filename)}&preview=true`;
+      return `📄 Your **${params.template}** CV has been generated!\n\n**Sections included:**\n${sectionList}\n${params.targetRole ? `\n**Tailored for:** ${params.targetRole}\n` : ""}\n📥 **Preview:** [${result.filename}](${previewUrl}) — download and review the DOCX before saving.\n\n⚠️ **This CV is not saved yet.** Say **"save"** to keep it permanently, or **"discard"** to cancel.`;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Unknown error";
+      if (msg.startsWith("INSUFFICIENT_DATA:")) {
+        return `⚠️ **Cannot generate CV yet** — ${msg.replace("INSUFFICIENT_DATA: ", "")}\n\nTo build a complete CV, I need at least:\n• Your **full name**\n• **Work experience** (job titles, companies, dates, achievements)\n• **Education** (qualifications, institutions)\n• **Skills** (technical and soft)\n• A brief **personal statement**\n\nYou can either:\n1. **Upload your existing CV** (PDF/DOCX) using the 📎 button — I'll extract everything automatically\n2. **Tell me your details** in chat and I'll build your profile step by step`;
+      }
+      if (msg.startsWith("NO_PROFILE:")) {
+        return `⚠️ ${msg.replace("NO_PROFILE: ", "")}\n\nUse the 📎 button to upload your CV (PDF or DOCX), and I'll extract your details automatically. Then you can generate a professional DOCX CV from it.`;
+      }
+      return `CV generation failed: ${msg}. Make sure your profile is set up by uploading a CV first.`;
+    }
+  }
+
+  if (toolCall.tool === "save_generated_cv") {
+    const params = toolCall.parameters as { action: string };
+    if (!userId) return "Error: No user ID available.";
+
+    const pending = await getPendingCv(sid);
+    if (!pending) {
+      return "No pending CV found. Please generate a CV first using the generate_cv tool.";
+    }
+
+    // Cross-user safety check
+    if (pending.userId !== userId) {
+      await clearPendingCv(sid);
+      return "Error: Session mismatch. Please generate a new CV.";
+    }
+
+    if (params.action === "discard") {
+      const { discardTempCv } = await import("@/lib/services/cv/cv-docx-generator");
+      await discardTempCv(pending.filePath);
+      await clearPendingCv(sid);
+      return "🗑️ CV discarded. You can generate a new one anytime.";
+    }
+
+    if (params.action === "save") {
+      const { saveCvFromTemp } = await import("@/lib/services/cv/cv-docx-generator");
+      const result = await saveCvFromTemp(userId, pending.filePath, pending.filename);
+      await clearPendingCv(sid);
+
+      if (!result.success) {
+        return `Failed to save CV: ${result.error}`;
+      }
+
+      return `✅ Your **${pending.template}** CV has been saved!\n\n📥 **Download:** [${result.filename}](${result.downloadUrl})\n\nClick the link to download your CV. You can generate another one anytime with a different template.`;
+    }
+
+    return `Invalid action "${params.action}". Use "save" or "discard".`;
+  }
+
   if (toolCall.tool === "browser_extract_jobs") {
     const params = toolCall.parameters as any;
     // Atlas may send singular or plural parameter names — normalise both
@@ -981,7 +1078,7 @@ async function executeToolCall(toolCall: ToolCall, sid: string, userId?: string)
       { name: "Indeed",     url: `https://uk.indeed.com/jobs?q=${encodeURIComponent(query)}&l=${encodeURIComponent(location)}` },
       { name: "Reed",       url: `https://www.reed.co.uk/jobs?keywords=${encodeURIComponent(query)}&location=${encodeURIComponent(location)}` },
       { name: "TotalJobs",  url: `https://www.totaljobs.com/jobs/${encodeURIComponent(query.replace(/\s+/g, "-").toLowerCase())}/in-${encodeURIComponent(location.replace(/\s+/g, "-").toLowerCase())}` },
-      { name: "Adzuna",     url: `https://www.adzuna.co.uk/search?q=${encodeURIComponent(query)}&loc=${encodeURIComponent(location)}` },
+      { name: "Adzuna",     url: `https://www.adzuna.co.uk/jobs/search?q=${encodeURIComponent(query)}&where=${encodeURIComponent(location)}` },
       { name: "CV-Library", url: `https://www.cv-library.co.uk/search-jobs?q=${encodeURIComponent(query)}&loc=${encodeURIComponent(location)}&us=1` },
     ];
 

@@ -81,6 +81,43 @@ export async function clearPendingJobs(sid: string): Promise<void> {
   }
 }
 
+/** Pending CV helpers — session-scoped, same pattern as pending jobs */
+export interface PendingCvRedis {
+  filename: string;
+  filePath: string;
+  template: string;
+  sections: string[];
+  userId: string; // stored explicitly to prevent cross-user access
+}
+
+const pendingCvKey = (sid: string) => `pending_cv:${sid}`;
+const PENDING_CV_TTL = 7200; // 2 hours
+
+export async function getPendingCv(sid: string): Promise<PendingCvRedis | null> {
+  try {
+    const raw = await getRedis().get(pendingCvKey(sid));
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function setPendingCv(sid: string, cv: PendingCvRedis): Promise<void> {
+  try {
+    await getRedis().setex(pendingCvKey(sid), PENDING_CV_TTL, JSON.stringify(cv));
+  } catch (err) {
+    console.error('[Redis] setPendingCv failed:', (err as Error).message);
+  }
+}
+
+export async function clearPendingCv(sid: string): Promise<void> {
+  try {
+    await getRedis().del(pendingCvKey(sid));
+  } catch (err) {
+    console.error('[Redis] clearPendingCv failed:', (err as Error).message);
+  }
+}
+
 /** Rate limiting helpers — sliding window counter */
 const RL_WINDOW_SECONDS = 60 * 60; // 1 hour
 const rlKey = (type: string, userId: string) => `ratelimit:${type}:user:${userId}`;

@@ -26,12 +26,24 @@ CRITICAL EXTRACTION RULES:
 Output a SINGLE JSON object with this exact structure (no markdown fences, just raw JSON):
 {
   "name": "Full name of candidate",
+  "email": "email@example.com or empty string if not found",
+  "phone": "+44 1234 567890 or empty string if not found",
+  "linkedIn": "linkedin.com/in/username or empty string if not found",
   "currentRole": "Current or most recent job title",
   "targetRoles": ["role 1", "role 2"],
   "yearsExperience": 5,
   "technicalSkills": ["skill1", "skill2", "skill3"],
   "softSkills": ["skill1", "skill2"],
   "education": "Highest qualification and institution",
+  "educationEntries": [
+    {
+      "qualification": "MSc Engineering Business Management",
+      "institution": "University of Warwick",
+      "startYear": "2025",
+      "endYear": "2026",
+      "grade": "Distinction / First Class / 2:1 or empty if not stated"
+    }
+  ],
   "certifications": ["cert1", "cert2"],
   "preferredLocations": ["London", "Remote"],
   "preferredIndustries": ["Software", "FinTech"],
@@ -39,6 +51,24 @@ Output a SINGLE JSON object with this exact structure (no markdown fences, just 
   "workPreference": "Remote / Hybrid / Onsite",
   "languagesSpoken": ["English", "Hindi"],
   "summary": "2-3 sentence summary of the candidate",
+  "workExperience": [
+    {
+      "title": "Job Title",
+      "company": "Company Name",
+      "location": "City, Country",
+      "startDate": "MMM YYYY",
+      "endDate": "Present or MMM YYYY",
+      "bullets": ["Achievement or responsibility with quantified impact where possible"]
+    }
+  ],
+  "projects": [
+    {
+      "name": "Project Name",
+      "description": "One-line summary of what it does",
+      "technologies": ["Tech1", "Tech2"],
+      "url": ""
+    }
+  ],
   "cvQualityScore": 7,
   "upgradeTips": [
     "Add quantified achievements (e.g., 'Reduced load time by 40%')",
