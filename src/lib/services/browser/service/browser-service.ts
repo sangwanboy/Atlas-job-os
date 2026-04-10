@@ -314,8 +314,7 @@ export class BrowserService extends EventEmitter {
         Object.defineProperty(navigator, "webdriver", { get: () => undefined });
 
         // 2. Mock Chrome Runtime
-        // @ts-expect-error
-        window.chrome = {
+        (window as any).chrome = {
           runtime: {},
           loadTimes: () => {},
           csi: () => {},
@@ -324,8 +323,7 @@ export class BrowserService extends EventEmitter {
 
         // 3. Fake Permissions
         const originalQuery = window.navigator.permissions.query;
-        // @ts-expect-error
-        window.navigator.permissions.query = (parameters) => (
+        (window.navigator.permissions as any).query = (parameters: any) => (
           parameters.name === 'notifications' ?
             Promise.resolve({ state: Notification.permission }) :
             originalQuery(parameters)
@@ -1065,13 +1063,14 @@ Return ONLY a valid JSON array of job objects — no markdown, no explanation.`;
       if (!job.url) { enrichedJobs.push(job); continue; }
       try {
         const detail = await extensionBridge.scrapeJobListing(job.url, `enrich-${input.sessionId}`);
+        const j = job as any;
         enrichedJobs.push({
           ...job,
-          description: detail.description || job.description || "",
-          skills: detail.skills?.length ? detail.skills.join(", ") : (job.skills || ""),
-          salary: detail.salary || job.salary || "",
-          jobType: detail.jobType || job.jobType || "",
-          datePosted: detail.datePosted || job.datePosted || "",
+          description: detail.description || j.description || "",
+          skills: detail.skills?.length ? detail.skills.join(", ") : (j.skills || ""),
+          salary: detail.salary || j.salary || "",
+          jobType: detail.jobType || j.jobType || "",
+          datePosted: detail.datePosted || j.datePosted || "",
         });
       } catch {
         enrichedJobs.push(job); // keep original on failure, don't drop

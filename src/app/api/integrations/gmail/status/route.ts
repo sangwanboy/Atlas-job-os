@@ -8,8 +8,7 @@ export async function GET() {
   const userId = session?.user?.id;
 
   try {
-    // @ts-expect-error
-    const account = userId ? await prisma.integrationAccount.findUnique({
+    const account = userId ? await (prisma as any).integrationAccount.findUnique({
       where: {
         userId_provider: {
           userId,
@@ -18,13 +17,9 @@ export async function GET() {
       },
       select: {
         status: true,
-        // @ts-expect-error
         email: true,
-        // @ts-expect-error
         syncStatus: true,
-        // @ts-expect-error
         lastSyncedAt: true,
-        // @ts-expect-error
         syncError: true,
       },
     }) : null;
@@ -32,34 +27,24 @@ export async function GET() {
     if (account) {
       return NextResponse.json({
         connected: true,
-        // @ts-expect-error
-        email: account.email,
+        email: (account as any).email,
         status: account.status,
-        // @ts-expect-error
-        syncStatus: account.syncStatus,
-        // @ts-expect-error
-        lastSyncedAt: account.lastSyncedAt,
-        // @ts-expect-error
-        syncError: account.syncError,
+        syncStatus: (account as any).syncStatus,
+        lastSyncedAt: (account as any).lastSyncedAt,
+        syncError: (account as any).syncError,
       });
     }
 
     // Check local fallback
     const local = cache.get();
-    // @ts-expect-error
-    if (local.account) {
+    if ((local as any).account) {
       return NextResponse.json({
         connected: true,
-        // @ts-expect-error
-        email: local.account.email,
-        // @ts-expect-error
-        status: local.account.status,
-        // @ts-expect-error
-        syncStatus: local.account.syncStatus,
-        // @ts-expect-error
-        lastSyncedAt: local.account.lastSyncedAt,
-        // @ts-expect-error
-        syncError: local.account.syncError,
+        email: (local as any).account.email,
+        status: (local as any).account.status,
+        syncStatus: (local as any).account.syncStatus,
+        lastSyncedAt: (local as any).account.lastSyncedAt,
+        syncError: (local as any).account.syncError,
         isLocal: true
       });
     }
@@ -68,20 +53,14 @@ export async function GET() {
   } catch (error) {
     console.warn("[Gmail Status API] Prisma unreachable, checking local fallback.");
     const local = cache.get();
-    // @ts-expect-error
-    if (local.account) {
+    if ((local as any).account) {
       return NextResponse.json({
         connected: true,
-        // @ts-expect-error
-        email: local.account.email,
-        // @ts-expect-error
-        status: local.account.status,
-        // @ts-expect-error
-        syncStatus: local.account.syncStatus,
-        // @ts-expect-error
-        lastSyncedAt: local.account.lastSyncedAt,
-        // @ts-expect-error
-        syncError: local.account.syncError,
+        email: (local as any).account.email,
+        status: (local as any).account.status,
+        syncStatus: (local as any).account.syncStatus,
+        lastSyncedAt: (local as any).account.lastSyncedAt,
+        syncError: (local as any).account.syncError,
         isLocal: true,
         dbOffline: true
       });

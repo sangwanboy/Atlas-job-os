@@ -19,8 +19,7 @@ export async function POST(request: Request) {
 
     // 1. Get Integration Account (Try Prisma, fallback to local cache)
     try {
-      // @ts-expect-error
-      account = await prisma.integrationAccount.findUnique({
+      account = await (prisma as any).integrationAccount.findUnique({
         where: { userId_provider: { userId, provider: "google" } }
       });
     } catch (e) {

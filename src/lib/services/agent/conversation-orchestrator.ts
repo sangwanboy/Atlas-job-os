@@ -16,6 +16,7 @@ import { atlasState } from "@/lib/services/agent/atlas-state-manager";
 import { syncGmail } from "@/lib/services/integration/gmail/sync-engine";
 import { runtimeSettingsStore } from "@/lib/services/settings/runtime-settings-store";
 import { prisma } from "@/lib/db";
+import { extensionBridge } from "@/lib/services/browser/extension-bridge";
 import { getPendingJobs, setPendingJobs, clearPendingJobs } from "@/lib/redis";
 import { logger } from "@/lib/logger";
 import fs from "node:fs/promises";
@@ -857,8 +858,7 @@ async function executeToolCall(toolCall: ToolCall, sid: string, userId?: string)
     if (!userId) return "Cannot retrieve threads: no user session.";
     const limit = Number(toolCall.parameters.limit) || 10;
     try {
-      // @ts-expect-error
-      const threads = await prisma.emailThread.findMany({
+      const threads = await (prisma as any).emailThread.findMany({
         where: { userId },
         orderBy: { lastMessageAt: "desc" },
         take: limit,
@@ -1024,8 +1024,8 @@ async function executeToolCall(toolCall: ToolCall, sid: string, userId?: string)
             url: j.link || j.url, salary: j.salary || undefined,
             description: j.description || "",
             skills: Array.isArray(j.skills) ? j.skills.join(", ") : (j.skills || j.requirements || ""),
-            datePosted: j.datePosted || j.date_posted || "",
-            jobType: j.jobType || j.job_type || "",
+            date_posted: j.datePosted || j.date_posted || "",
+            job_type: j.jobType || j.job_type || "",
             _platform: j._platform,
           });
         }

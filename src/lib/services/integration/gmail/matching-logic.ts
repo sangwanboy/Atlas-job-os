@@ -22,8 +22,7 @@ export async function matchThreadToJob(
   let jobs: any[] = [];
   if (!skipPrisma) {
     try {
-      // @ts-expect-error
-      jobs = await prisma.job.findMany({
+      jobs = await (prisma as any).job.findMany({
         where: { userId },
         select: { id: true, title: true, company: { select: { name: true, website: true } } }
       });

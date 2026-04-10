@@ -179,6 +179,7 @@ export type BrowserToolInputMap = {
   browser_extension_status: Record<string, never>;
   browser_extension_extract_jobs: { searchUrl: string; query?: string; location?: string };
   browser_extension_enrich_job: { url: string };
+  browser_scrape_job_listing: { url: string; sessionId?: string };
 };
 
 export type BrowserToolResultMap = {

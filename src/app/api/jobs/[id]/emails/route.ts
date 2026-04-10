@@ -7,8 +7,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   try {
     const { id: jobId } = await params;
 
-    // @ts-expect-error
-    const threads = await prisma.emailThread.findMany({
+    const threads = await (prisma as any).emailThread.findMany({
       where: {
         userId: HARDCODED_USER_ID,
         jobId: jobId,

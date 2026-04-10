@@ -9,21 +9,26 @@ import type { ChatMessageView } from "@/types/domain";
 import { Eye, Clock, ArrowDownToLine, CheckCircle2, X, FileText, Wrench, DollarSign } from "lucide-react";
 import { ExtensionBanner } from "./extension-banner";
 
-function ScraperTimer({ startedAt }: { startedAt: number }) {
-  const [elapsed, setElapsed] = useState(Math.floor((Date.now() - startedAt) / 1000));
+function ScraperTimer({ startedAt, isDone, onHide }: { startedAt: number; isDone: boolean; onHide: () => void }) {
+  const [pct, setPct] = useState(0);
 
   useEffect(() => {
+    if (isDone) {
+      setPct(100);
+      const timeout = setTimeout(onHide, 700);
+      return () => clearTimeout(timeout);
+    }
+
     const id = setInterval(() => {
-      setElapsed(Math.floor((Date.now() - startedAt) / 1000));
-    }, 1000);
+      const elapsed = (Date.now() - startedAt) / 1000;
+      // Asymptotic easing: fast early, slows near 95%, never reaches 100% until done
+      // 100 * (1 - e^(-elapsed/30)) → ~28% at 10s, ~63% at 30s, ~86% at 60s, caps at 95%
+      const newPct = Math.min(98, 100 * (1 - Math.exp(-elapsed / 30)));
+      setPct(newPct);
+    }, 250);
+
     return () => clearInterval(id);
-  }, [startedAt]);
-
-  const estimated = 60;
-  if (elapsed >= estimated) return null;
-
-  const pct = Math.round((elapsed / estimated) * 100);
-  const remaining = estimated - elapsed;
+  }, [startedAt, isDone, onHide]);
 
   return (
     <div className="mt-2 rounded-lg border border-cyan-200 dark:border-cyan-500/30 bg-cyan-50/80 dark:bg-cyan-500/10 px-3 py-2 text-xs text-cyan-800 dark:text-cyan-300 space-y-1.5">
@@ -33,11 +38,10 @@ function ScraperTimer({ startedAt }: { startedAt: number }) {
       </div>
       <div className="h-1.5 w-full rounded-full bg-cyan-200 overflow-hidden">
         <div
-          className="h-full rounded-full bg-gradient-to-r from-cyan-500 to-cyan-400 transition-all duration-1000"
+          className="h-full rounded-full bg-gradient-to-r from-cyan-500 to-cyan-400 transition-all duration-500"
           style={{ width: `${pct}%` }}
         />
       </div>
-      <p className="text-[10px] text-cyan-600/80">~{remaining}s remaining (typical: ~60s)</p>
     </div>
   );
 }
@@ -51,6 +55,8 @@ const ChatMessageItem = React.memo(({
   onDismiss,
   importing,
   scraperStartedAt,
+  scraperDone,
+  onScraperHide,
   isStreaming,
 }: {
   message: ChatMessageView;
@@ -61,6 +67,8 @@ const ChatMessageItem = React.memo(({
   onDismiss?: () => void;
   importing?: boolean;
   scraperStartedAt?: number | null;
+  scraperDone?: boolean;
+  onScraperHide?: () => void;
   isStreaming?: boolean;
 }) => {
   const content = useMemo(() => {
@@ -169,14 +177,20 @@ const ChatMessageItem = React.memo(({
                 )}
               </div>
             )}
-            {/* Scraper progress — always visible when active, even if content is present */}
-            {scraperStartedAt && activeToolLog?.tool === "browser_extract_jobs" && (
+            {/* Scraper progress — visible while active and during completion animation */}
+            {scraperStartedAt !== null && scraperStartedAt !== undefined && (
               <div className="space-y-1.5">
-                <ScraperTimer startedAt={scraperStartedAt} />
-                <p className="text-[10px] text-cyan-600/80 dark:text-cyan-400/70 flex items-center gap-1">
-                  <Eye className="h-3 w-3 flex-shrink-0" />
-                  Watch the live search in your browser tab above
-                </p>
+                <ScraperTimer
+                  startedAt={scraperStartedAt}
+                  isDone={!!scraperDone}
+                  onHide={onScraperHide ?? (() => {})}
+                />
+                {!scraperDone && (
+                  <p className="text-[10px] text-cyan-600/80 dark:text-cyan-400/70 flex items-center gap-1">
+                    <Eye className="h-3 w-3 flex-shrink-0" />
+                    Watch the live search in your browser tab above
+                  </p>
+                )}
               </div>
             )}
             {/* Final response */}
@@ -221,6 +235,7 @@ const ChatMessageItem = React.memo(({
   prev.showToolUse === next.showToolUse &&
   prev.importing === next.importing &&
   prev.scraperStartedAt === next.scraperStartedAt &&
+  prev.scraperDone === next.scraperDone &&
   prev.message.content === next.message.content &&
   prev.previewJobs?.length === next.previewJobs?.length &&
   prev.previewJobs?.filter(j => j.isAlreadyImported).length === next.previewJobs?.filter(j => j.isAlreadyImported).length &&
@@ -483,6 +498,7 @@ export function AgentChatStarter() {
   const [importingJobs, setImportingJobs] = useState(false);
   const [loadingTextIndex, setLoadingTextIndex] = useState(0);
   const [scraperStartedAt, setScraperStartedAt] = useState<number | null>(null);
+  const [scraperDone, setScraperDone] = useState(false);
   const [importedJobUrls, setImportedJobUrls] = useState<Set<string>>(new Set());
   const chatBottomRef = useRef<HTMLDivElement>(null);
   const newChatRef = useRef(false);
@@ -798,14 +814,14 @@ export function AgentChatStarter() {
               ));
             } else if (update.type === "tool_start") {
               setIsTextActive(false);
-              if (update.tool === "browser_extract_jobs") setScraperStartedAt(Date.now());
+              if (update.tool === "browser_extract_jobs") { setScraperStartedAt(Date.now()); setScraperDone(false); }
               setMessages(prev => prev.map(m =>
                 m.id === assistantMessageId
                 ? { ...m, toolLogs: [...((m as any).toolLogs || []), { tool: update.tool, parameters: update.parameters, result: "Executing..." }] } as any
                 : m
               ));
             } else if (update.type === "tool_end") {
-              if (update.tool === "browser_extract_jobs") setScraperStartedAt(null);
+              if (update.tool === "browser_extract_jobs") setScraperDone(true);
               setMessages(prev => prev.map(m => {
                 if (m.id !== assistantMessageId) return m;
                 const toolLogs = (m as any).toolLogs || [];
@@ -1157,6 +1173,8 @@ export function AgentChatStarter() {
                     onDismiss={handleDismissJobs}
                     importing={importingJobs}
                     scraperStartedAt={scraperStartedAt}
+                    scraperDone={scraperDone}
+                    onScraperHide={() => { setScraperStartedAt(null); setScraperDone(false); }}
                     isStreaming={loading && isTextActive && msgIdx === messages.length - 1 && message.role === "ASSISTANT"}
                   />
                 );

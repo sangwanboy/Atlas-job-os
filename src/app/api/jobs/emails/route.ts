@@ -17,8 +17,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: "jobId and threadId required" }, { status: 400 });
     }
 
-    // @ts-expect-error
-    await prisma.emailThread.update({
+    await (prisma as any).emailThread.update({
       where: { externalId: threadId },
       data: { jobId, status: "MATCHED" },
     });
@@ -41,8 +40,7 @@ export async function GET(req: Request) {
   const jobId = searchParams.get("jobId");
 
   try {
-    // @ts-expect-error
-    const threads = await prisma.emailThread.findMany({
+    const threads = await (prisma as any).emailThread.findMany({
       where: { userId: session.user.id, ...(jobId ? { jobId } : {}) },
       orderBy: { lastMessageAt: "desc" },
       take: 20,

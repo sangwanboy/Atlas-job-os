@@ -139,6 +139,7 @@ const schemaMap: { [K in BrowserToolName]: z.ZodType<BrowserToolInputMap[K]> } =
     location: z.string().optional(),
   }),
   browser_extension_enrich_job: z.object({ url: z.string().url() }),
+  browser_scrape_job_listing: z.object({ url: z.string().url(), sessionId: z.string().optional() }),
 };
 
 export function validateBrowserToolInput<K extends BrowserToolName>(

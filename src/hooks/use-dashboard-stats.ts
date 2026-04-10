@@ -30,7 +30,6 @@ function getShared(): SharedState {
 async function fetchStats() {
   const shared = getShared();
   if (shared.fetching) return;          // prevent overlapping fetches
-  if (typeof document !== "undefined" && document.visibilityState === "hidden") return; // skip when tab hidden
   shared.fetching = true;
   try {
     const res = await fetch("/api/dashboard/stats");

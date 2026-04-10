@@ -29,10 +29,11 @@ A production-minded, full-stack SaaS application for intelligent job discovery, 
 ## Requirements
 
 ### System
-- Node.js 20+
+- Node.js 18.0.0+ (20 LTS recommended for production)
 - Python 3.10+
-- PostgreSQL (or Docker for DB)
+- PostgreSQL 14+ (15+ recommended for production)
 - Redis 6+ (or Docker — required for pending jobs store, rate limiting, and BullMQ)
+- Chrome/Edge browser with Atlas extension (required for job scraping)
 - Git
 
 ### Environment Variables (`.env` or `.env.local`)
@@ -84,6 +85,9 @@ DATABASE_POOL_TIMEOUT=10
 
 # Browser concurrency pool — max simultaneous Playwright operations
 BROWSER_POOL_SIZE=2
+
+# Browser server URL (set if browser server runs on a different host)
+BROWSER_SERVICE_URL=http://localhost:3001
 
 # Sentry error tracking (optional — app works without it)
 NEXT_PUBLIC_SENTRY_DSN=
@@ -543,3 +547,62 @@ The app sidebar displays a **BETA · v1.0** badge in the lower-left corner (all 
 - **Workers are optional in dev:** `npm run workers` starts BullMQ background processors. In development you can skip this — scraping still works inline. Workers become important at scale to offload scraping from the HTTP thread.
 - **Token budget:** Set `TOKEN_BUDGET_MONTHLY_USD` in `.env` to cap per-user AI spend. Usage is recorded in the `TokenUsage` Prisma table. Default is $10/month. Set to a high value or omit enforcement by setting it very high.
 - **Standalone build:** `next.config.ts` uses `output: "standalone"` — the production build can be containerised with Docker without bundling `node_modules`.
+
+---
+
+## Production Deployment
+
+### Recommended Environment Config
+
+For 25–50 concurrent beta users, set these in your production `.env`:
+
+```env
+# Increase browser pool for concurrent users (default 2 is too low for production)
+BROWSER_POOL_SIZE=4
+
+# Increase DB connection pool (default 10 exhausts at 50 concurrent requests)
+DATABASE_CONNECTION_LIMIT=25
+DATABASE_POOL_TIMEOUT=30
+
+# Error tracking (highly recommended for beta)
+NEXT_PUBLIC_SENTRY_DSN=https://xxx@oXXX.ingest.sentry.io/XXX
+SENTRY_DSN=https://xxx@oXXX.ingest.sentry.io/XXX
+
+# Email notifications (required for waitlist/approval emails)
+RESEND_API_KEY=re_your_key
+
+# Browser server URL (if running on a separate host/container)
+BROWSER_SERVICE_URL=http://localhost:3001
+```
+
+### Concurrent User Capacity Estimates
+
+| Config | Estimated Capacity |
+|--------|-------------------|
+| Default (pool=2, db=10) | 5–10 concurrent users |
+| Beta tuned (pool=4, db=25) | 25–50 concurrent users |
+| Production (pool=8, db=50 + PgBouncer) | 100–200 concurrent users |
+
+### System Requirements
+
+| Component | Minimum | Production |
+|-----------|---------|------------|
+| Node.js | 18.0.0+ | 20 LTS |
+| PostgreSQL | 14+ | 15+ with PgBouncer |
+| Redis | 6.0+ | 7+ |
+| RAM — Next.js | 512 MB | 2 GB |
+| RAM — Browser Server | 2 GB | 8 GB |
+| RAM — Workers | 512 MB | 1 GB |
+| CPU | 2 cores | 4+ cores |
+| Storage | 10 GB | 50 GB+ |
+
+### Pre-Beta Checklist
+
+- [ ] `BROWSER_POOL_SIZE=4` set in production `.env`
+- [ ] `DATABASE_CONNECTION_LIMIT=25` set in production `.env`
+- [ ] `NEXT_PUBLIC_SENTRY_DSN` + `SENTRY_DSN` configured
+- [ ] `RESEND_API_KEY` configured for email notifications
+- [ ] `npx prisma migrate deploy` run on production DB
+- [ ] Admin user seeded (`npm run prisma:seed`)
+- [ ] Chrome/Edge extension loaded and verified connected
+- [ ] `GET /api/health` returns `{"status":"ok","db":"ok","redis":"ok"}`

@@ -77,8 +77,7 @@ export async function getValidTokensHelper(accessToken: string, refreshToken: st
   if (isExpired && refreshToken) {
     console.log("[Gmail OAuth] Token expired or nearing expiry, refreshing...");
     try {
-      // @ts-expect-error
-      const { credentials } = await oauth2Client.refreshAccessToken();
+      const { credentials } = await (oauth2Client as any).refreshAccessToken();
       const newAccessToken = credentials.access_token;
       const newExpiryDate = credentials.expiry_date;
 

@@ -476,6 +476,46 @@ You're in the wrong directory. In PowerShell: `Set-Location D:\Projects\Atlas-jo
 **Rate limit error: "Rate limit exceeded"**
 You've exceeded your hourly request limit. Wait for the `Retry-After` period, or ask your admin to raise the limit.
 
+**Re-fetch Details shows "Chrome extension not connected" even though the extension IS connected**
+The browser server must be running (`npm run browser-server`). Re-fetch routes all extension calls through the browser server's HTTP API (`localhost:3001`) — it does not communicate with the extension directly from the Next.js process. If the browser server is not running, all extension status checks will fail. Start the browser server and retry.
+
+**Dashboard KPI cards stuck showing the loading skeleton**
+Refresh the page. This can occur when the browser tab is not focused during initial page load (a background tab). The stats will load immediately on refresh.
+
+**Job search progress bar never completes**
+The bar uses an asymptotic easing curve — it fills quickly early and slows near 98%. It only completes to 100% when the scraper finishes. If it stays near 98% for more than 2–3 minutes, the browser extension tab may have closed or the browser server may have crashed. Check that the browser server is still running and the extension is connected.
+
+---
+
+## System Requirements
+
+### Development Machine
+| Component | Minimum | Recommended |
+|---|---|---|
+| Node.js | 18.0.0 | 20 LTS |
+| RAM | 4 GB | 8 GB |
+| CPU | 2 cores | 4 cores |
+| Disk | 2 GB free | 5 GB free |
+| OS | Windows 10, macOS 12, Ubuntu 20.04 | Windows 11, macOS 14, Ubuntu 22.04 |
+
+### External Dependencies (must be running)
+| Service | Where | Purpose |
+|---|---|---|
+| PostgreSQL 14+ | Docker (`atlas-db`) | Primary database |
+| Redis 6+ | Docker (`atlas-redis`) | Rate limiting, pending jobs, queues |
+| Chrome/Edge browser | Host machine | Extension + scraping |
+| Atlas Chrome extension | Loaded in browser | Job scraping bridge |
+
+### Production Server (hosting Atlas for multiple users)
+| Users (concurrent) | RAM | CPU | DB connections | Redis |
+|---|---|---|---|---|
+| 1–5 | 2 GB | 2 vCPU | 10 | 128 MB |
+| 5–25 | 4 GB | 4 vCPU | 25 | 256 MB |
+| 25–50 | 8 GB | 8 vCPU | 50 | 512 MB |
+| 50–100 | 16 GB | 16 vCPU | 100 | 1 GB |
+
+Set `BROWSER_POOL_SIZE` to match the number of concurrent browser sessions you expect. Default is `2`.
+
 ---
 
 ## Architecture Overview (for developers)
