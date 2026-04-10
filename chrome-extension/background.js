@@ -49,9 +49,39 @@ function broadcastStatus(connected) {
   chrome.runtime.sendMessage({ type: "status_update", connected }).catch(() => {});
 }
 
-function connect() {
+// Pre-check: ping the HTTP server before attempting WebSocket.
+// This prevents the "WebSocket connection failed" error from appearing in the
+// extension errors page — if the server isn't up we silently retry later.
+const HTTP_HEALTH_URL = "http://localhost:3001/health";
+
+let _connectingLock = false; // prevents concurrent connect() calls during async pre-check
+
+async function isServerReachable() {
+  try {
+    await fetch(HTTP_HEALTH_URL, { signal: AbortSignal.timeout(800) });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function connect() {
   // Clear any pending reconnect timer to avoid double-connect
   if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+  if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return;
+  if (_connectingLock) return; // another connect() is already in the async pre-check
+  _connectingLock = true;
+
+  // Silent pre-check — don't create a WebSocket if the server isn't running.
+  // Without this, every failed WebSocket attempt is logged as an extension error.
+  const reachable = await isServerReachable();
+  _connectingLock = false;
+  if (!reachable) {
+    reconnectTimer = setTimeout(connect, RECONNECT_DELAY_MS);
+    return;
+  }
+
+  // Re-check: another connect() may have succeeded while we were awaiting
   if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return;
 
   console.log("[Atlas] Connecting to bridge at", BRIDGE_URL, "...");
@@ -59,7 +89,9 @@ function connect() {
 
   ws.onopen = () => {
     console.log("[Atlas] Connected to bridge at", BRIDGE_URL);
-    ws.send(JSON.stringify({ type: "register", agent: "chrome-extension" }));
+    if (ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: "register", agent: "chrome-extension" }));
+    }
     broadcastStatus(true);
   };
 
@@ -77,6 +109,7 @@ function connect() {
   ws.onclose = () => {
     console.log("[Atlas] Bridge disconnected. Reconnecting in", RECONNECT_DELAY_MS, "ms...");
     ws = null;
+    _connectingLock = false;
     broadcastStatus(false);
     reconnectTimer = setTimeout(connect, RECONNECT_DELAY_MS);
   };
@@ -172,12 +205,14 @@ async function handleCommand(msg) {
       case "scroll": {
         const key = params.tabKey || "default";
         const tabId = atlasTabs.get(key);
-        if (!tabId) { reply(id, "error", null, "No Atlas tab open for key: " + key); break; }
-        await chrome.scripting.executeScript({
-          target: { tabId },
-          func: (y) => window.scrollBy({ top: y, behavior: "smooth" }),
-          args: [params.y || 500],
-        });
+        if (!tabId) { reply(id, "ok", {}); break; } // no tab — silently skip
+        try {
+          await chrome.scripting.executeScript({
+            target: { tabId },
+            func: (y) => window.scrollBy({ top: y, behavior: "smooth" }),
+            args: [params.y || 500],
+          });
+        } catch { /* frame errors are non-fatal for scrolling */ }
         reply(id, "ok", {});
         break;
       }
@@ -247,24 +282,26 @@ async function handleCommand(msg) {
         await acceptCookieBanners(tabId);
 
         // Wait up to 8s for the content script to auto-scrape and report back
+        // Only accept the result if it has actual content (description > 10 chars) —
+        // the content script can fire early on a cookie-consent overlay and return empty data.
         let detail = null;
         const POLL_INTERVAL = 150;
         const POLL_TIMEOUT = 8000;
         const pollStart = Date.now();
         while (Date.now() - pollStart < POLL_TIMEOUT) {
           const cached = lastScrapedDetail.get(tabId);
-          if (cached && cached.timestamp >= pollStart) {
+          if (cached && cached.timestamp >= pollStart && (cached.data?.description?.length > 10 || cached.data?.title)) {
             detail = cached.data;
             break;
           }
           await sleep(POLL_INTERVAL);
         }
 
-        // Fallback: content script didn't fire (page not matched or too slow)
+        // Fallback: content script timed out or returned empty (cookie overlay, slow render)
         if (!detail) {
-          console.warn("[Atlas] scrapeJobListing: content script timeout — falling back to executeScript");
+          console.warn("[Atlas] scrapeJobListing: content script timeout/empty — falling back to executeScript");
           const [fallbackResult] = await safeExecuteScript(tabId, { func: scrapeJobDetail });
-          detail = fallbackResult.result || {};
+          detail = fallbackResult?.result || {};
         }
 
         reply(id, "ok", { detail });
@@ -372,15 +409,21 @@ function scrapeJobCards() {
       "article[data-qa='job-card'], [data-qa='jobResult'], .job-result, article[class*='job'], li[class*='job']"
     ).forEach(el => {
       const titleEl = qs(el, "[data-qa='job-card-title']", "h2[data-qa='job-card-title'] a", ".job-result__title a", "h2 a", "h3 a");
-      const companyEl = qs(el, "[data-qa='job-card-recruiter']", "[data-qa='job-card-school']", ".job-result__details--company", "[class*='company']");
-      const locationEl = qs(el, "[data-qa='job-card-location']", ".job-result__details--location", "[class*='location']");
+      const _postedByEl = qs(el, "[data-qa='job-posted-by']");
+      const _postedByRaw = _postedByEl?.innerText?.trim() || "";
+      // "Yesterday by Accenture" → "Accenture"; fall back to other selectors if no "by" prefix
+      const companyEl = _postedByRaw.includes(" by ") ? null : qs(el, "[data-qa='company-name-link']", "[data-qa='job-card-recruiter']", ".job-result__details--company", "[class*='company']");
+      const _company = _postedByRaw.includes(" by ")
+        ? _postedByRaw.replace(/^.+\bby\s+/i, "").trim()
+        : (companyEl?.innerText?.trim() || "");
+      const locationEl = qs(el, "[data-qa='job-metadata-location']", "[data-qa='job-card-location']", ".job-result__details--location", "[class*='location']");
       const linkEl = qs(el, "a[data-qa='job-card-title']", ".job-result__title a", "h2 a", "h3 a", "a[href*='/jobs/']");
       const title = titleEl?.innerText?.trim();
       let jobUrl = linkEl?.href;
       if (jobUrl && !jobUrl.startsWith("http")) jobUrl = "https://www.reed.co.uk" + jobUrl;
       if (title && jobUrl && !seen.has(jobUrl) && !isReedJunk(jobUrl)) {
         seen.add(jobUrl);
-        cards.push({ title, company: companyEl?.innerText?.trim() || "", location: locationEl?.innerText?.trim() || "", url: jobUrl });
+        cards.push({ title, company: _company, location: locationEl?.innerText?.trim() || "", url: jobUrl });
       }
     });
     // Fallback: only grab links that are real Reed job detail pages (slug + numeric ID)
@@ -544,7 +587,58 @@ function scrapeJobCards() {
 
 // ─── Job Detail Scraper (injected into listing page) ────────────────────────
 
-function scrapeJobDetail() {
+async function scrapeJobDetail() {
+  // ── Click "Show More" / "See More" expand buttons before scraping ──────────
+  const _url = window.location.href;
+  const _siteSelectors = [];
+  if (_url.includes("linkedin.com")) {
+    _siteSelectors.push(
+      "button.jobs-description__footer-button",
+      ".jobs-description__footer button",
+      "button[aria-label*='more']",
+    );
+  } else if (_url.includes("indeed.com") || _url.includes("indeed.co.uk")) {
+    _siteSelectors.push(
+      "#descriptionToggle",
+      "button[data-testid='jobsearch-ShowMoreText-button']",
+      "button[data-testid*='show-more']",
+    );
+  } else if (_url.includes("glassdoor.com")) {
+    _siteSelectors.push(
+      "button[data-test='job-description-toggle']",
+      "[class*='showMore'] button",
+      "[class*='JobDetails_showMore'] button",
+    );
+  } else if (_url.includes("reed.co.uk")) {
+    _siteSelectors.push(".btn-show-more", "button.expand-description");
+  } else if (_url.includes("totaljobs.com")) {
+    _siteSelectors.push("[data-at='job-description-toggle']", "button[class*='expand']");
+  }
+  const _genericSelectors = [
+    "button[class*='show-more']", "button[class*='showMore']",
+    "button[class*='see-more']", "button[class*='seeMore']",
+    "button[class*='read-more']", "[data-testid*='show-more']",
+  ];
+  let _clicked = false;
+  for (const sel of [..._siteSelectors, ..._genericSelectors]) {
+    try {
+      const el = document.querySelector(sel);
+      if (el && el.offsetParent !== null) { el.click(); _clicked = true; }
+    } catch {}
+  }
+  if (!_clicked) {
+    const _textPatterns = ["show more", "see more", "read more", "view more", "show full description", "expand"];
+    const _candidates = document.querySelectorAll("button, a[role='button'], span[role='button']");
+    for (const el of _candidates) {
+      const _t = el.innerText?.toLowerCase().trim();
+      if (_t && _textPatterns.some(p => _t === p || _t.startsWith(p + " "))) {
+        if (el.offsetParent !== null) { el.click(); _clicked = true; break; }
+      }
+    }
+  }
+  if (_clicked) await new Promise(r => setTimeout(r, 900));
+  // ── End expand ────────────────────────────────────────────────────────────
+
   const url = window.location.href;
   const getText = (selectors) => {
     for (const sel of selectors) {
@@ -573,11 +667,13 @@ function scrapeJobDetail() {
     description = getText(["#jobDescriptionText", ".jobsearch-jobDescriptionText"]);
 
   } else if (url.includes("reed.co.uk")) {
-    company     = getText([".col-company-header h2 a", ".employer-name a", "span[itemprop='name']"]);
-    salary      = getText(["[data-qa='salaryLabel']", ".salary span", "[itemprop='baseSalary']"]);
-    jobType     = getText(["[data-qa='jobTypeLabel']", ".contract-type"]);
+    // company: strip date prefix from "Yesterday by Accenture" or "Today by X"
+    const _postedBy = getText(["[data-qa='job-posted-by']"]);
+    company = _postedBy ? _postedBy.replace(/^(today|yesterday|\d+\s+\w+\s+ago|just now|posted)[\s:,]+by\s+/i, "").trim() : getText(["[data-qa='company-name-link']", ".col-company-header h2 a", ".employer-name a", "span[itemprop='name']"]);
+    salary      = getText(["[data-qa='job-metadata-salary']", "[data-qa='salaryLabel']", ".salary span", "[itemprop='baseSalary']"]);
+    jobType     = getText(["[data-qa='job-metadata']"]).split(/\n|,/).find(s => /full.?time|part.?time|contract|temp|perm|freelance/i.test(s))?.trim() || getText(["[data-qa='jobTypeLabel']", ".contract-type"]);
     datePosted  = getText(["[data-qa='datePostedLabel']", ".date-posted"]);
-    description = getText(["[itemprop='description']", "#job-description", ".description"]);
+    description = getText(["[data-qa='job-description']", "[itemprop='description']", "#job-description", ".description"]);
 
   } else if (url.includes("totaljobs.com")) {
     company     = getText(["[data-at='metadata-company-name']", ".job-header__company a", ".company-name a"]);
@@ -591,9 +687,18 @@ function scrapeJobDetail() {
     description = getText(["[class*='Description']", ".job-ad-display__body", "section.adp-body"]);
 
   } else if (url.includes("cv-library.co.uk")) {
-    company     = getText([".job-header__company", ".company-name"]);
-    salary      = getText([".job-header__salary", ".salary"]);
-    description = getText(["#job-description", ".job-description__content"]);
+    company     = getText(["article a[href*='/list-jobs/']"]);
+    // Location/salary/jobType from DT+DD pairs
+    document.querySelectorAll("dt").forEach(dt => {
+      const text = dt.innerText?.trim().toLowerCase();
+      const dd = dt.nextElementSibling;
+      if (!dd || dd.tagName !== "DD") return;
+      const val = dd.innerText?.trim();
+      if (text.includes("location") && !location) location = val;
+      else if (text.includes("salary") && !salary) salary = val;
+      else if (text.includes("type") && !jobType) jobType = val;
+    });
+    description = getText([".job__description", "#job-description", ".job-description__content"]);
 
   } else if (url.includes("glassdoor.com")) {
     company     = getText(["[data-test='employer-name']", ".EmployerProfile_compactEmployerName__9MGcV"]);
@@ -607,8 +712,13 @@ function scrapeJobDetail() {
     description = getText(["[class*='description']", "[id*='description']", "article", "main"]);
   }
 
-  // Cap description at 5000 chars (enough for full detail, avoids huge payloads)
-  if (description.length > 5000) description = description.slice(0, 5000) + "…";
+  // Last-resort description fallback: if still empty, try main content containers
+  if (!description) {
+    description = getText(["main", "article", "[role='main']", "#content", ".content"]);
+  }
+
+  // Cap description at 8000 chars (full detail for LLM cleaning)
+  if (description.length > 8000) description = description.slice(0, 8000) + "…";
 
   // Extract skills from description text
   const skills = extractSkillsFromText(description);
@@ -726,6 +836,20 @@ async function acceptCookieBanners(tabId) {
     // Ignore — cookie banner acceptance is best-effort
   }
 }
+
+// ─── Tab Lifecycle ───────────────────────────────────────────────────────────
+
+// When Chrome removes a tab (closed/crashed), evict it from atlasTabs so the
+// next command opens a fresh tab rather than hitting "No tab with id: X".
+chrome.tabs.onRemoved.addListener((tabId) => {
+  for (const [key, id] of atlasTabs) {
+    if (id === tabId) {
+      atlasTabs.delete(key);
+      lastScrapedDetail.delete(tabId);
+      console.log(`[Atlas] Tab ${tabId} removed — cleared key "${key}"`);
+    }
+  }
+});
 
 // ─── Content Script Messages ─────────────────────────────────────────────────
 

@@ -1,0 +1,167 @@
+{
+  "name": "Tushar Sangwan",
+  "email": "tusharsangwan83@gmail.com",
+  "phone": "07887 150250",
+  "linkedIn": "",
+  "currentRole": "Postgraduate Student & Web Developer Intern",
+  "targetRoles": [
+    "Full Stack Developer",
+    "AI Engineer",
+    "Software Engineer",
+    "Web Developer"
+  ],
+  "yearsExperience": 1,
+  "technicalSkills": [
+    "Next.js 15",
+    "React 19",
+    "TypeScript",
+    "HTML5",
+    "CSS3",
+    "Tailwind CSS v4",
+    "Gemini",
+    "Vertex AI",
+    "Claude",
+    "OpenAI",
+    "Ollama",
+    "ChromaDB",
+    "Claude Code",
+    "Cursor",
+    "Windsurf",
+    "Python 3.12",
+    "FastAPI",
+    "Node.js",
+    "PostgreSQL",
+    "Redis",
+    "BullMQ",
+    "Prisma",
+    "SQLAlchemy",
+    "Playwright",
+    "REST APIs",
+    "Google Ads",
+    "Meta Ads",
+    "Instagram",
+    "Facebook",
+    "SEO",
+    "SEM",
+    "Chrome Extension",
+    "OCR",
+    "Pino",
+    "Zustand",
+    "ReactFlow",
+    "SQLite",
+    "Gmail API",
+    "Prompt Engineering",
+    "RAG pipelines",
+    "AI agent design",
+    "Vibe coding",
+    "Agent orchestration",
+    "Browser automation"
+  ],
+  "softSkills": [
+    "Cross-functional collaboration",
+    "Analytical problem-solving",
+    "Written and verbal communication",
+    "Project management",
+    "Agile working"
+  ],
+  "education": "MSc in Engineering Business Management, University of Warwick",
+  "educationEntries": [
+    {
+      "qualification": "MSc in Engineering Business Management",
+      "institution": "University of Warwick",
+      "startYear": "2025",
+      "endYear": "2026",
+      "grade": ""
+    },
+    {
+      "qualification": "B.Tech in Computer Science",
+      "institution": "Bennett University",
+      "startYear": "2020",
+      "endYear": "2024",
+      "grade": "First Class Honours"
+    }
+  ],
+  "certifications": [],
+  "preferredLocations": [
+    "United Kingdom",
+    "London",
+    "Remote"
+  ],
+  "preferredIndustries": [
+    "Software",
+    "FinTech",
+    "AI & Machine Learning"
+  ],
+  "salaryExpectation": "£35k-£45k",
+  "workPreference": "Hybrid / Remote",
+  "languagesSpoken": [
+    "English"
+  ],
+  "summary": "Postgraduate student at the University of Warwick with a First Class B.Tech in Computer Science and hands-on experience in full-stack development and AI integration. Expert in building agentic AI workflows and production-grade SaaS platforms using modern frameworks like Next.js, FastAPI, and various LLM providers.",
+  "workExperience": [
+    {
+      "title": "Web Developer Intern",
+      "company": "Nurilos",
+      "location": "Remote",
+      "startDate": "Aug 2024",
+      "endDate": "July 2025",
+      "bullets": [
+        "Led end-to-end development and launch of a D2C e-commerce platform for women's nightwear, driving transition from B2B to direct-to-consumer model.",
+        "Monitored daily website traffic and performance metrics, implementing optimisations that improved page load times and reduced bounce rates.",
+        "Planned and executed paid advertising campaigns on Instagram, Facebook, and Google Ads, tracking conversion funnels and ROI."
+      ]
+    },
+    {
+      "title": "Web Developer & Digital Marketing Intern",
+      "company": "Key4You",
+      "location": "Remote",
+      "startDate": "May 2024",
+      "endDate": "July 2024",
+      "bullets": [
+        "Designed and maintained a real estate company website to present property listings in a conversion-optimised layout.",
+        "Delivered comprehensive SEO improvements including on-page optimisation, technical audits, and structured keyword research.",
+        "Built a backlink acquisition strategy and ran Google Ads/social media campaigns that generated a measurable uplift in qualified inbound leads."
+      ]
+    }
+  ],
+  "projects": [
+    {
+      "name": "Atlas Job OS — AI Job Intelligence Dashboard",
+      "description": "Full-stack SaaS for AI-driven job discovery, automated fit scoring, and stateful AI agent chat interface.",
+      "technologies": [
+        "Next.js 15",
+        "React 19",
+        "TypeScript",
+        "PostgreSQL",
+        "Gemini (Vertex AI)",
+        "Playwright",
+        "BullMQ",
+        "Redis",
+        "Gmail API"
+      ],
+      "url": "github.com/sangwanboy"
+    },
+    {
+      "name": "Assistante — Multi-LLM AI Assistant Platform",
+      "description": "Multi-LLM platform with visual workflow builder and vector-based memory.",
+      "technologies": [
+        "Python 3.12",
+        "FastAPI",
+        "ChromaDB",
+        "React 19",
+        "TypeScript",
+        "Tailwind CSS v4",
+        "ReactFlow",
+        "Zustand"
+      ],
+      "url": "github.com/sangwanboy"
+    }
+  ],
+  "cvQualityScore": 8,
+  "upgradeTips": [
+    "Quantify achievements in internships (e.g., 'Increased traffic by X%' or 'Generated X leads')",
+    "Add a LinkedIn profile link to the header for professional networking",
+    "Include specific modules or projects from the current MSc at Warwick to show academic relevance"
+  ],
+  "profileMarkdown": "# User Profile: Tushar Sangwan\n\n## Overview\nTushar is a highly technical postgraduate student at the University of Warwick with a strong foundation in Computer Science. He specializes in full-stack development and the integration of Agentic AI workflows. With a background that bridges technical development and digital marketing, he brings a unique commercial awareness to engineering roles. He is currently focused on building production-grade AI SaaS tools and is eligible to work in the UK.\n\n## Technical Skills\n- **Frontend:** Next.js 15, React 19, TypeScript, Tailwind CSS v4, ReactFlow, Zustand\n- **Backend:** Python 3.12, FastAPI, Node.js, PostgreSQL, Redis, BullMQ, Prisma, SQLAlchemy, SQLite\n- **AI & Automation:** Gemini (Vertex AI), Claude, OpenAI, Ollama, ChromaDB, Playwright, Prompt Engineering, RAG pipelines, AI Agent Design\n- **Tools:** Claude Code, Cursor, Windsurf, Chrome Extensions, Gmail API, Pino Logging\n- **Marketing Tech:** Google Ads, Meta Ads, SEO/SEM, Analytics\n\n## Experience\n### Web Developer Intern | Nurilos\n*August 2024 – July 2025*\n- Developed a D2C e-commerce platform, facilitating a major business model shift.\n- Optimized site performance and managed multi-channel paid ad campaigns.\n\n### Web Developer & Digital Marketing Intern | Key4You\n*May 2024 – July 2024*\n- Built a conversion-focused real estate site and executed a comprehensive SEO/backlink strategy.\n\n## Education\n- **MSc Engineering Business Management**, University of Warwick (2025-2026)\n- **B.Tech Computer Science**, Bennett University (2020-2024) - First Class Honours\n\n## Projects\n- **Atlas Job OS:** A sophisticated AI job-search agent featuring stealth browser automation and LLM-powered OCR.\n- **Assistante:** A visual AI pipeline builder supporting multiple LLM providers with persistent context retrieval."
+}

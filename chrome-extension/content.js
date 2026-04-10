@@ -69,13 +69,14 @@ function scrapeJobDetail() {
     description = getText(["#jobDescriptionText", ".jobsearch-jobDescriptionText"]);
 
   } else if (url.includes("reed.co.uk")) {
-    title       = getText(["h1.job-header__title", "h1[itemprop='title']"]) || title;
-    company     = getText([".col-company-header h2 a", ".employer-name a", "span[itemprop='name']"]);
-    location    = getText(["[data-qa='locationLabel']", ".job-header__location"]);
-    salary      = getText(["[data-qa='salaryLabel']", ".salary span", "[itemprop='baseSalary']"]);
-    jobType     = getText(["[data-qa='jobTypeLabel']", ".contract-type"]);
-    datePosted  = getText(["[data-qa='datePostedLabel']"]);
-    description = getText(["[itemprop='description']", "#job-description", ".description"]);
+    title       = getText(["[data-qa='job-title']", "h1.job-header__title", "h1[itemprop='title']", "h1"]) || title;
+    const _postedBy = getText(["[data-qa='job-posted-by']"]);
+    company = _postedBy ? _postedBy.replace(/^(today|yesterday|\d+\s+\w+\s+ago|just now|posted)[\s:,]+by\s+/i, "").trim() : getText(["[data-qa='company-name-link']", ".col-company-header h2 a", ".employer-name a", "span[itemprop='name']"]);
+    location    = getText(["[data-qa='job-metadata-location']", "[data-qa='locationLabel']", ".job-header__location"]);
+    salary      = getText(["[data-qa='job-metadata-salary']", "[data-qa='salaryLabel']", ".salary span", "[itemprop='baseSalary']"]);
+    jobType     = getText(["[data-qa='job-metadata']"]).split(/\n|,/).find(s => /full.?time|part.?time|contract|temp|perm|freelance/i.test(s))?.trim() || getText(["[data-qa='jobTypeLabel']", ".contract-type"]);
+    datePosted  = getText(["[data-qa='datePostedLabel']", ".date-posted"]);
+    description = getText(["[data-qa='job-description']", "[itemprop='description']", "#job-description", ".description"]);
 
   } else if (url.includes("totaljobs.com")) {
     company     = getText(["[data-at='metadata-company-name']", ".job-header__company a"]);
@@ -91,10 +92,19 @@ function scrapeJobDetail() {
     description = getText(["[class*='Description']", ".job-ad-display__body", "section.adp-body"]);
 
   } else if (url.includes("cv-library.co.uk")) {
-    company     = getText([".job-header__company", ".company-name"]);
-    location    = getText([".job-header__location", ".location"]);
-    salary      = getText([".job-header__salary", ".salary"]);
-    description = getText(["#job-description", ".job-description__content"]);
+    title       = getText(["h1.job__title", "h1"]) || title;
+    company     = getText(["article a[href*='/list-jobs/']", "h2.search-filters__title"]);
+    // Location/jobType/salary come from DT+DD pairs
+    document.querySelectorAll("dt").forEach(dt => {
+      const text = dt.innerText?.trim().toLowerCase();
+      const dd = dt.nextElementSibling;
+      if (!dd || dd.tagName !== "DD") return;
+      const val = dd.innerText?.trim();
+      if (text.includes("location") && !location) location = val;
+      else if (text.includes("salary") && !salary) salary = val;
+      else if (text.includes("type") && !jobType) jobType = val;
+    });
+    description = getText([".job__description", "#job-description", ".job-description__content"]);
 
   } else if (url.includes("glassdoor.com")) {
     company     = getText(["[data-test='employer-name']", ".EmployerProfile_compactEmployerName__9MGcV"]);
@@ -109,8 +119,8 @@ function scrapeJobDetail() {
     description = getText(["[class*='description']", "[id*='description']", "article", "main"]);
   }
 
-  // Cap description at 5000 chars
-  if (description.length > 5000) description = description.slice(0, 5000) + "…";
+  // Cap description at 8000 chars (full detail for LLM cleaning)
+  if (description.length > 8000) description = description.slice(0, 8000) + "…";
 
   // Fallback: extract structured fields from description text when DOM selectors miss them
   if (description) {
@@ -183,12 +193,98 @@ function extractSkillsFromText(text) {
   return [...found].slice(0, 25);
 }
 
+// ─── Show More / Expand Button Clicker ───────────────────────────────────────
+
+async function clickExpandButtons() {
+  const url = window.location.href;
+
+  // Site-specific expand selectors (highest priority)
+  const siteSelectors = [];
+  if (url.includes("linkedin.com")) {
+    siteSelectors.push(
+      "button.jobs-description__footer-button",
+      ".jobs-description__footer button",
+      "button[aria-label*='more']",
+      "button[aria-label*='Show more']",
+    );
+  } else if (url.includes("indeed.com") || url.includes("indeed.co.uk")) {
+    siteSelectors.push(
+      "#descriptionToggle",
+      "button[data-testid='jobsearch-ShowMoreText-button']",
+      "button[data-testid*='show-more']",
+    );
+  } else if (url.includes("glassdoor.com")) {
+    siteSelectors.push(
+      "button[data-test='job-description-toggle']",
+      "[class*='showMore'] button",
+      "[class*='JobDetails_showMore'] button",
+    );
+  } else if (url.includes("reed.co.uk")) {
+    siteSelectors.push(".btn-show-more", "button.expand-description");
+  } else if (url.includes("totaljobs.com")) {
+    siteSelectors.push(
+      "[data-at='job-description-toggle']",
+      "button[class*='expand']",
+    );
+  }
+
+  // Generic text-based selectors as fallback
+  const genericSelectors = [
+    "button[class*='show-more']",
+    "button[class*='showMore']",
+    "button[class*='see-more']",
+    "button[class*='seeMore']",
+    "button[class*='read-more']",
+    "button[class*='readMore']",
+    "a[class*='show-more']",
+    "[data-testid*='show-more']",
+    "[data-testid*='expand']",
+  ];
+
+  let clicked = false;
+
+  // Try site-specific first
+  for (const sel of [...siteSelectors, ...genericSelectors]) {
+    try {
+      const el = document.querySelector(sel);
+      if (el && el.offsetParent !== null) {
+        el.click();
+        clicked = true;
+      }
+    } catch {}
+  }
+
+  // Text-based scan as final fallback
+  if (!clicked) {
+    const textPatterns = ["show more", "see more", "read more", "view more", "show full description", "expand"];
+    const candidates = document.querySelectorAll("button, a[role='button'], span[role='button'], [tabindex='0']");
+    for (const el of candidates) {
+      const text = el.innerText?.toLowerCase().trim();
+      if (text && textPatterns.some(p => text === p || text.startsWith(p + " "))) {
+        if (el.offsetParent !== null) {
+          el.click();
+          clicked = true;
+          break;
+        }
+      }
+    }
+  }
+
+  if (clicked) {
+    // Wait for DOM to update after expand animation
+    await new Promise(r => setTimeout(r, 900));
+  }
+
+  return clicked;
+}
+
 // ─── Auto-Scrape on Job Listing Pages ────────────────────────────────────────
 
 if (isJobListingPage(window.location.href)) {
-  // Wait for JS-rendered content, then scrape and report to background
-  const doScrape = () => {
+  // Wait for JS-rendered content, click expand buttons, then scrape
+  const doScrape = async () => {
     try {
+      await clickExpandButtons();
       const data = scrapeJobDetail();
       chrome.runtime.sendMessage({
         type: "job_detail_scraped",

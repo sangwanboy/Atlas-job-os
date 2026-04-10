@@ -27,12 +27,15 @@ export function ExtensionBanner() {
     }
   };
 
+  // Initial check on mount
+  useEffect(() => { void checkStatus(); }, []);
+
+  // Poll every 30s only while disconnected — stops automatically once connected
   useEffect(() => {
-    void checkStatus();
-    // Re-check every 30s
+    if (status !== "disconnected") return;
     const interval = setInterval(() => void checkStatus(), 30_000);
     return () => clearInterval(interval);
-  }, []);
+  }, [status]);
 
   // Auto-show again if it was dismissed but is still disconnected
   // Don't show if connected or loading

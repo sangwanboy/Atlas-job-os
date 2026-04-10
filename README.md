@@ -300,13 +300,15 @@ Atlas supports two job extraction modes depending on whether the Chrome extensio
 
 **Mode 1 — Chrome Extension (preferred)**
 Uses the user's real logged-in Chrome browser via a WebSocket bridge. No bot detection, no auth walls.
-- **Phase 1**: Navigate to job search results → DOM scrape job cards (title, location, URL)
-- **Phase 2**: Visit each job URL → full-page screenshot → Vertex AI multimodal OCR → structured data
-- Runs on LinkedIn and Indeed via the Atlas-managed dedicated tab
+- **Phase 1**: Navigate to job search results → DOM scrape job cards (title, company, location, URL)
+- **Phase 2**: Visit each job detail page → DOM scrape full description → Vertex AI LLM cleanup → structured data with skills extraction
+- Searches **6 UK platforms** in parallel: LinkedIn, Indeed, Reed, TotalJobs, Adzuna, CV-Library
+- Each platform gets its own dedicated Chrome tab (reused across detail scrapes)
 - Clicking **Stop** in chat closes the Atlas tab immediately
+- Auto-expands "Show more" buttons before scraping to capture full descriptions
 
-**Mode 2 — Playwright / Scrapling (fallback)**
-Used when extension is not connected. Stealth Chromium with Bezier mouse curves, randomized fingerprints, warm-up navigation. Searches 8 UK platforms in parallel (LinkedIn, Indeed, Reed, TotalJobs, Adzuna, CV-Library, Monster, CWJobs).
+**Mode 2 — Playwright / Patchright (fallback)**
+Used when extension is not connected. Stealth Chromium with Bezier mouse curves, randomized fingerprints, warm-up navigation. Searches the same 6 UK platforms via headless browser.
 
 **Common flow:**
 1. User asks Atlas to find jobs

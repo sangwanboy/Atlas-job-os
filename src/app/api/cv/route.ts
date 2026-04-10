@@ -29,7 +29,7 @@ async function writeMetadata(userId: string, data: Record<string, { tag?: CvTag;
 }
 
 const ALLOWED_EXTENSIONS = new Set([
-  ".pdf", ".doc", ".docx", ".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp",
+  ".pdf", ".doc", ".docx", ".jpg", ".jpeg", ".png", ".webp",
 ]);
 
 const ALLOWED_TYPES = new Set([
@@ -40,8 +40,6 @@ const ALLOWED_TYPES = new Set([
   "image/jpg",
   "image/png",
   "image/webp",
-  "image/gif",
-  "image/bmp",
 ]);
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB

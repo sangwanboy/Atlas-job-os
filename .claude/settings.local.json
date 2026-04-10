@@ -52,7 +52,36 @@
       "Bash(cp -r \"C:/Users/Tushar/.claude/plugins/marketplaces/thedotmack/openclaw/\"* \"C:/Users/Tushar/.claude/plugins/cache/claude-mem/claude-mem/10.4.1/\")",
       "Bash(start cmd:*)",
       "Bash(cmd /c \"start \"\"Next.js\"\" cmd /k \"\"cd /d D:\\\\Projects\\\\Atlas-job-os && npm run dev\"\"\")",
-      "Bash(cmd /c \"start \"\"Browser Server\"\" cmd /k \"\"cd /d D:\\\\Projects\\\\Atlas-job-os && npm run browser-server\"\"\")"
+      "Bash(cmd /c \"start \"\"Browser Server\"\" cmd /k \"\"cd /d D:\\\\Projects\\\\Atlas-job-os && npm run browser-server\"\"\")",
+      "Bash(ls D:/Projects/Atlas-job-os/README*)",
+      "Bash(ls D:/Projects/Atlas-job-os/USER_MANUAL*)",
+      "Bash(docker run:*)",
+      "Bash(docker stop:*)",
+      "Bash(docker rm:*)",
+      "Bash(docker exec:*)",
+      "mcp__code-review-graph__get_architecture_overview_tool",
+      "mcp__code-review-graph__list_graph_stats_tool",
+      "mcp__code-review-graph__semantic_search_nodes_tool",
+      "mcp__code-review-graph__embed_graph_tool",
+      "mcp__code-review-graph__detect_changes_tool",
+      "mcp__code-review-graph__build_or_update_graph_tool",
+      "Bash(git -C \"D:/Projects/Atlas-job-os\" status)",
+      "mcp__code-review-graph__get_minimal_context_tool",
+      "Bash(cmd /c \"taskkill /PID 43496 /F\")",
+      "WebSearch",
+      "Bash(mkdir -p \"C:/Users/Tushar/.claude/skills/autoresearch\")",
+      "Bash(mkdir -p \"C:/Users/Tushar/.claude/skills/claude-code\")",
+      "Bash(xargs sed:*)",
+      "Bash(npx next:*)",
+      "Bash(echo \"Exit: $?\")",
+      "Bash(echo \"Workers started in background \\(PID: $!\\)\")",
+      "Bash(npm test:*)",
+      "Bash(curl -s http://localhost:3000/api/health)",
+      "Bash(NODE_OPTIONS=\"--max-old-space-size=4096\" npx tsc --noEmit --pretty)"
     ]
-  }
+  },
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": [
+    "code-review-graph"
+  ]
 }

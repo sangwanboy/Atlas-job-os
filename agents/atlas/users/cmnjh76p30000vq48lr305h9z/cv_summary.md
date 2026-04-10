@@ -1,27 +1,26 @@
 # CV Analysis: Tushar Sangwan
-*Source file: 1775394532677_Tushar_CV_Professional__1_.pdf*
-*Generated: 2026-04-05T13:09:25.544Z*
+*Source file: 1775846817809_Tushar_CV_UK.pdf*
+*Generated: 2026-04-10T21:00:47.363Z*
 
 ## CV Quality Score
-**6 / 10**
+**8 / 10**
 
 ## Key Strengths
-- Full-stack web development
-- E-commerce platforms
-- Website optimization
-- SEO
-- SEM
-- Google Ads
-- Social media advertising
-- Campaign management
+- Next.js 15
+- React 19
+- TypeScript
+- HTML5
+- CSS3
+- Tailwind CSS v4
+- Gemini
+- Vertex AI
 
 ## Upgrade Recommendations
-- 🔼 Explicitly list programming languages (e.g., JavaScript, Python, HTML/CSS) and frameworks (e.g., React, Node.js) used in full-stack development.
-- 🔼 Quantify achievements with metrics, such as percentage increase in website traffic or conversion rates from ad campaigns.
-- 🔼 Add a dedicated 'Technical Skills' section to the top of the CV for better ATS readability.
-- 🔼 Include specific SEO tools used, such as SEMrush, Ahrefs, or Google Analytics.
+- 🔼 Quantify achievements in internships (e.g., 'Increased traffic by X%' or 'Generated X leads')
+- 🔼 Add a LinkedIn profile link to the header for professional networking
+- 🔼 Include specific modules or projects from the current MSc at Warwick to show academic relevance
 
 ## Career Goals
-**Target roles:** Full-stack Developer, Web Developer, Digital Marketing Specialist, Technical Product Manager, SEO Specialist
-**Preferred locations:** United Kingdom, Remote
-**Salary expectation:** £30k-£45k
+**Target roles:** Full Stack Developer, AI Engineer, Software Engineer, Web Developer
+**Preferred locations:** United Kingdom, London, Remote
+**Salary expectation:** £35k-£45k

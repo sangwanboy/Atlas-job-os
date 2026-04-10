@@ -1,32 +1,32 @@
 # User Profile: Tushar Sangwan
 
 ## Overview
-Tushar Sangwan is a tech-driven professional currently pursuing an MSc in Engineering Business Management at the University of Warwick. He possesses a strong technical foundation with a B.Tech in Computer Science and practical experience in full-stack web development and digital marketing. Tushar is passionate about leveraging technology to solve business challenges, particularly within the Tech and FinTech sectors. He is eligible to work in the UK and open to relocation.
+Tushar is a highly technical postgraduate student at the University of Warwick with a strong foundation in Computer Science. He specializes in full-stack development and the integration of Agentic AI workflows. With a background that bridges technical development and digital marketing, he brings a unique commercial awareness to engineering roles. He is currently focused on building production-grade AI SaaS tools and is eligible to work in the UK.
+
+## Technical Skills
+- **Frontend:** Next.js 15, React 19, TypeScript, Tailwind CSS v4, ReactFlow, Zustand
+- **Backend:** Python 3.12, FastAPI, Node.js, PostgreSQL, Redis, BullMQ, Prisma, SQLAlchemy, SQLite
+- **AI & Automation:** Gemini (Vertex AI), Claude, OpenAI, Ollama, ChromaDB, Playwright, Prompt Engineering, RAG pipelines, AI Agent Design
+- **Tools:** Claude Code, Cursor, Windsurf, Chrome Extensions, Gmail API, Pino Logging
+- **Marketing Tech:** Google Ads, Meta Ads, SEO/SEM, Analytics
 
 ## Experience
-
 ### Web Developer Intern | Nurilos
 *August 2024 – July 2025*
-- Architected and deployed a full-stack e-commerce platform for a B2B to D2C transition.
-- Optimized site performance, achieving a 40% reduction in load latency.
-- Managed multi-channel ad campaigns (Meta/Google) with a focus on ROI and CAC reduction.
+- Developed a D2C e-commerce platform, facilitating a major business model shift.
+- Optimized site performance and managed multi-channel paid ad campaigns.
 
 ### Web Developer & Digital Marketing Intern | Key4You
 *May 2024 – July 2024*
-- Engineered a real estate portal with automated listing features.
-- Drove a 35% increase in organic traffic via technical SEO and backlink strategies.
-- Generated 50+ qualified leads/month through SEM and social media campaigns.
-
-## Technical Skills
-- **Web Development:** React.js, Node.js, Express.js, Python, JavaScript (ES6+), SQL, REST APIs, E-commerce Architecture.
-- **Digital Marketing:** Technical SEO, SEM, Google Ads, Meta Ads, Keyword Research, Backlink Strategy.
-- **Tools & Analytics:** Google Analytics, Search Console, SEMrush, Ahrefs, Git/GitHub.
+- Built a conversion-focused real estate site and executed a comprehensive SEO/backlink strategy.
 
 ## Education
-- **MSc in Engineering Business Management**, University of Warwick (2025 – 2026)
-- **B.Tech in Computer Science (First Class)**, Bennett University (2020 – 2024)
+- **MSc Engineering Business Management**, University of Warwick (2025-2026)
+- **B.Tech Computer Science**, Bennett University (2020-2024) - First Class Honours
 
-## Preferences
-- **Target Roles:** Full-stack Developer, Web Developer, Digital Marketing Specialist, Technical Marketing Manager.
-- **Industries:** Tech, FinTech, E-commerce.
-- **Work Preference:** Remote / Hybrid / Onsite (Open to relocation within the UK).
+## Projects
+- **Atlas Job OS:** A sophisticated AI job-search agent featuring stealth browser automation and LLM-powered OCR.
+- **Assistante:** A visual AI pipeline builder supporting multiple LLM providers with persistent context retrieval.
+
+---
+*Profile last updated from CV: 1775846817809_Tushar_CV_UK.pdf at 2026-04-10T21:00:47.358Z*

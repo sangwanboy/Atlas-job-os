@@ -11,7 +11,7 @@ import {
 } from "../session-manager/browser-session-manager";
 import { callVertexMultimodal } from "../../ai/vertex-client";
 import { extensionBridge } from "../extension-bridge";
-import { extractJobFromScreenshot } from "../llm-ocr-extractor";
+import { extractJobFromScreenshot, extractJobFromText } from "../llm-ocr-extractor";
 import type {
   BrowserActionResult,
   BrowserConfirmationHook,
@@ -975,6 +975,8 @@ Return ONLY a valid JSON array of job objects — no markdown, no explanation.`;
 
     // Phase 1 — Navigate to search results, DOM scrape for job cards
     extensionBridge.resetCancel();
+    // Close any stale tab for this key to ensure a fresh load (avoids hung executeScript)
+    await extensionBridge.closeNamedTab(key).catch(() => {});
     console.log(`[ExtensionExtract:${key}] Phase 1: navigating to search URL`);
     await extensionBridge.navigate(searchUrl, key);
 
@@ -982,9 +984,10 @@ Return ONLY a valid JSON array of job objects — no markdown, no explanation.`;
     await new Promise((r) => setTimeout(r, jitter()));
 
     // Scroll to load lazy-loaded cards (human-like random scroll amounts + intervals)
+    // Scrolls are non-fatal — some sites block scrolling via CSP or debugger issues
     for (let i = 0; i < 4; i++) {
       if (extensionBridge.isCancelled()) return [];
-      await extensionBridge.scroll(300 + Math.round(Math.random() * 500), key);
+      await extensionBridge.scroll(300 + Math.round(Math.random() * 500), key).catch(() => {});
       await new Promise((r) => setTimeout(r, jitter()));
     }
 
@@ -1005,17 +1008,39 @@ Return ONLY a valid JSON array of job objects — no markdown, no explanation.`;
       if (extensionBridge.isCancelled()) break;
       try {
         const detail = await extensionBridge.scrapeJobListing(card.url, key);
+
+        // LLM cleanup: remove noise, fill missing fields from raw description text
+        let cleaned = null;
+        if (detail.description && detail.description.length > 30) {
+          cleaned = await extractJobFromText(
+            {
+              title: card.title,
+              company: detail.company || card.company,
+              location: card.location,
+              salary: detail.salary,
+              jobType: detail.jobType,
+              datePosted: detail.datePosted,
+              description: detail.description,
+            },
+            card.url,
+          ).catch(() => null);
+        }
+
+        // Prefer the final redirect URL from the scraped page (e.g. viewjob?jk=... for Indeed)
+        // over the click-tracking URL from the search results card (e.g. pagead/clk)
+        const finalUrl = detail.url && detail.url !== card.url && !detail.url.includes("pagead/clk") ? detail.url : card.url;
         enriched.push({
-          id: Buffer.from(`${card.title}-${card.url}`).toString("base64"),
-          title: card.title || "Untitled Role",
-          company: detail.company || card.company || "",
-          location: card.location || "",
-          link: card.url,
-          url: card.url,
-          salary: detail.salary || null,
-          jobType: detail.jobType || null,
-          datePosted: detail.datePosted || null,
-          description: detail.description || "",
+          id: Buffer.from(`${card.title}-${finalUrl}`).toString("base64"),
+          title: cleaned?.title || card.title || "Untitled Role",
+          company: cleaned?.company || detail.company || card.company || "",
+          location: cleaned?.location || card.location || "",
+          link: finalUrl,
+          url: finalUrl,
+          salary: cleaned?.salary || detail.salary || null,
+          jobType: cleaned?.jobType || detail.jobType || null,
+          datePosted: cleaned?.datePosted || detail.datePosted || null,
+          description: cleaned?.description || detail.description || "",
+          requirements: cleaned?.requirements || "",
           skills: detail.skills || [],
           source: "Extension+DOM",
         });
@@ -1064,13 +1089,35 @@ Return ONLY a valid JSON array of job objects — no markdown, no explanation.`;
       try {
         const detail = await extensionBridge.scrapeJobListing(job.url, `enrich-${input.sessionId}`);
         const j = job as any;
+
+        // LLM cleanup: strip noise, fill all fields from raw description
+        let cleaned = null;
+        if (detail.description && detail.description.length > 30) {
+          cleaned = await extractJobFromText(
+            {
+              title: j.title,
+              company: detail.company || j.company,
+              location: j.location,
+              salary: detail.salary || j.salary,
+              jobType: detail.jobType || j.jobType,
+              datePosted: detail.datePosted || j.datePosted,
+              description: detail.description,
+            },
+            job.url,
+          ).catch(() => null);
+        }
+
         enrichedJobs.push({
           ...job,
-          description: detail.description || j.description || "",
+          title: cleaned?.title || j.title || "",
+          company: cleaned?.company || detail.company || j.company || "",
+          location: cleaned?.location || j.location || "",
+          description: cleaned?.description || detail.description || j.description || "",
+          requirements: cleaned?.requirements || j.requirements || "",
           skills: detail.skills?.length ? detail.skills.join(", ") : (j.skills || ""),
-          salary: detail.salary || j.salary || "",
-          jobType: detail.jobType || j.jobType || "",
-          datePosted: detail.datePosted || j.datePosted || "",
+          salary: cleaned?.salary || detail.salary || j.salary || "",
+          jobType: cleaned?.jobType || detail.jobType || j.jobType || "",
+          datePosted: cleaned?.datePosted || detail.datePosted || j.datePosted || "",
         });
       } catch {
         enrichedJobs.push(job); // keep original on failure, don't drop
