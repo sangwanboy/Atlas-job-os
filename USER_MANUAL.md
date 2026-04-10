@@ -102,6 +102,44 @@ You can upload multiple CVs with different tags. Atlas uses the active profile w
 
 ---
 
+### 1b. Generate a New CV (DOCX)
+
+Once you've uploaded a CV and Atlas has built your profile, you can ask Atlas to generate a professional UK-style CV as a downloadable Word document.
+
+**In the Agent Workspace chat, say:**
+
+> "Generate my CV using the classic template"
+> "Create my CV for Software Engineer roles"
+> "Make me an ATS-optimised CV"
+
+**Three templates available:**
+
+| Template | Style | Best For |
+|----------|-------|----------|
+| **Classic** (default) | Traditional single-column, Cambria font, horizontal rules | Most UK employers |
+| **Modern** | Navy blue accents, 2-column skills grid, Calibri font | Creative/tech roles |
+| **ATS** | Plain text only, Arial font, no tables or borders | Maximum ATS parsability |
+
+**How it works:**
+
+1. Atlas generates a draft DOCX and shows you what's included (sections, target role)
+2. A **preview download link** lets you open the DOCX before committing
+3. Say **"save"** to store it permanently and get a final download link
+4. Say **"discard"** to cancel and try a different template
+
+**What's included in the CV:**
+- Your name, email, phone number (extracted from uploaded CV)
+- Personal statement (tailored to target role if specified)
+- Key skills (top 20 technical + 5 soft skills)
+- Professional experience with achievement bullets
+- Education with qualifications, institutions, dates, and grades
+- Key projects with technology stacks
+- Certifications
+
+**If your profile is incomplete**, Atlas will tell you exactly what's missing and guide you to either upload a CV or provide the details in chat.
+
+---
+
 ### 2. Chat with Atlas
 
 Go to **Agent Workspace** in the left sidebar.

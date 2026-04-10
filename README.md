@@ -22,7 +22,7 @@ A production-minded, full-stack SaaS application for intelligent job discovery, 
 | Job Queue | BullMQ (Redis-backed background workers) |
 | Cache / Session Store | Redis (ioredis) — pending jobs, rate limiting |
 | Logging | Pino (structured JSON logs, pretty-printed in dev) |
-| Export | ExcelJS (XLSX) |
+| Export | ExcelJS (XLSX), docx (DOCX CV generation) |
 
 ---
 
@@ -348,7 +348,7 @@ Used when extension is not connected. Stealth Chromium with Bezier mouse curves,
 - **Extension status banner** — the Agent Profile sidebar shows a live banner indicating whether the Chrome extension is connected or disconnected, with a direct link to setup instructions when not connected
 - **Scraper progress timer** — an animated progress bar with elapsed-time counter is shown in the chat during job searches and remains visible while Atlas streams its response (does not disappear when the assistant starts typing)
 - **Live streaming** — tokens emitted in real-time via Gemini SSE with proper `system_instruction` separation
-- **Full tool registry** — all 20 tools are described in the system prompt (PIPELINE, GMAIL, MEMORY, BROWSER groups). Atlas reasons from descriptions alone — no hardcoded trigger phrases. New tools are auto-available once added to the registry.
+- **Full tool registry** — all tools are described in the system prompt (PIPELINE, GMAIL, MEMORY, BROWSER, CV GENERATION groups). Atlas reasons from descriptions alone — no hardcoded trigger phrases. New tools are auto-available once added to the registry.
 - **Fast-path for simple messages** — greetings and conversational messages use a lightweight prompt (skips tool definitions, search guidelines, CV context) for ~3s response time instead of 30s+
 - **Stop button** — cyan circular abort button cancels in-flight generation instantly
 - Internal `<continuity_update>` blocks stripped from stream in real-time (never shown to user)
@@ -359,6 +359,37 @@ Used when extension is not connected. Stealth Chromium with Bezier mouse curves,
 - Context memory logged to `agents/atlas/context_memory.md` (agent-only log, not injected into LLM prompt)
 - Automatic model fallback on rate-limits — app stays responsive even if quota is exhausted
 - Parallelised orchestrator setup (auth + agent lookup, history + continuity in parallel)
+
+### CV/Resume Generation (DOCX)
+
+Atlas can generate professional UK-style CV/resume documents as downloadable DOCX files, built from the user's uploaded CV profile data.
+
+**Three templates:**
+
+| Template | Font | Style | Best For |
+|----------|------|-------|----------|
+| Classic (default) | Cambria 11pt | Single column, ALL CAPS headers, horizontal rules | Traditional UK employers |
+| Modern | Calibri 10.5pt | Navy blue accents, 2-column skills table, generous whitespace | Creative/tech roles |
+| ATS-Optimized | Arial 11pt | Zero tables/borders, plain text, comma-separated skills | Maximum ATS parsability |
+
+**How it works:**
+1. User asks Atlas: *"Generate my CV using the classic template for Software Engineer"*
+2. Atlas calls `generate_cv` tool → generates DOCX to temp location
+3. Atlas shows sections preview + **preview download link** (user can open DOCX before committing)
+4. User says **"save"** → Atlas calls `save_generated_cv` → moves to permanent storage, returns final download link
+5. User says **"discard"** → temp file deleted, user can try a different template
+
+**Insufficient data guard:** If the user's profile is missing 2+ critical fields (name, skills, experience, education, summary), Atlas refuses to generate and guides the user to either upload a CV or provide details in chat.
+
+**UK CV conventions:** No photo, no date of birth, A4 format, personal statement at top, reverse chronological experience, capped at 20 technical + 5 soft skills for readability.
+
+**Data sources:** `user_profile.json` (structured — name, email, phone, skills, education entries with dates/grades, work experience with bullets, projects with tech stacks) + `user_profile.md` (markdown fallback for older profiles).
+
+**Files:**
+- Generator service: `src/lib/services/cv/cv-docx-generator.ts`
+- Download endpoint: `src/app/api/cv/export/route.ts` (auth-protected, path-traversal guarded, per-user isolation)
+- Tools: `generate_cv` + `save_generated_cv` in conversation orchestrator
+- Redis: `setPendingCv/getPendingCv/clearPendingCv` for confirmation flow
 
 ### Background Workers (BullMQ)
 
@@ -432,6 +463,7 @@ src/
 │   │   └── admin/users/    # Admin-only user management
 │   ├── api/
 │   │   ├── agents/chat/    # Chat streaming endpoint (ndjson)
+│   │   ├── cv/             # CV upload, processing, export (DOCX download)
 │   │   ├── jobs/           # Jobs CRUD
 │   │   ├── admin/users/    # Admin user management API
 │   │   ├── register/       # Registration endpoint
@@ -445,7 +477,7 @@ src/
 │   ├── jobs/               # Jobs table + review drawer
 │   └── layout/             # Sidebar + top nav (includes BETA v1.0 badge)
 ├── lib/
-│   ├── redis.ts            # ioredis singleton + pending jobs helpers + rate limiting
+│   ├── redis.ts            # ioredis singleton + pending jobs/CV helpers + rate limiting
 │   ├── logger.ts           # Pino structured logger (pretty in dev, JSON in prod)
 │   ├── server/
 │   │   └── auth-helpers.ts # requireAuth() + isNextResponse() shared helpers
