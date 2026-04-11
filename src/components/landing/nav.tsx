@@ -42,6 +42,9 @@ export function LandingNav({ slotsRemaining: _slotsRemaining, isWaitlist }: Land
             <a href="#how-it-works" className="text-sm text-white/50 hover:text-white transition-colors">
               How it works
             </a>
+            <a href="#platforms" className="text-sm text-white/50 hover:text-white transition-colors">
+              Platforms
+            </a>
             <a href="#features" className="text-sm text-white/50 hover:text-white transition-colors">
               Features
             </a>
@@ -87,14 +90,14 @@ export function LandingNav({ slotsRemaining: _slotsRemaining, isWaitlist }: Land
             className="fixed inset-x-0 top-[65px] z-40 border-b border-white/[0.08] bg-[rgba(13,17,28,0.97)] backdrop-blur-xl md:hidden"
           >
             <nav className="flex flex-col gap-1 px-6 py-4">
-              {["#how-it-works", "#features", "#faq"].map((href, i) => (
+              {["#how-it-works", "#platforms", "#features", "#faq"].map((href, i) => (
                 <a
                   key={href}
                   href={href}
                   onClick={() => setMobileOpen(false)}
                   className="rounded-xl px-3 py-3 text-sm font-semibold text-white/60 hover:bg-white/5 hover:text-white transition-colors"
                 >
-                  {["How it works", "Features", "FAQ"][i]}
+                  {["How it works", "Platforms", "Features", "FAQ"][i]}
                 </a>
               ))}
               <div className="mt-2 border-t border-white/[0.08] pt-3 flex flex-col gap-2">

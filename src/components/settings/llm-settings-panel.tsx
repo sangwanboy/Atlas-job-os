@@ -508,7 +508,7 @@ export function LlmSettingsPanel() {
           </div>
         </div>
 
-        <div className="mt-5 grid gap-4 md:grid-cols-3">
+        <div className="mt-5 grid items-start gap-4 md:grid-cols-3">
           <label className="space-y-1 text-sm">
             <span className="font-semibold">Monthly Token Budget</span>
             <input

@@ -77,7 +77,9 @@
       "Bash(echo \"Workers started in background \\(PID: $!\\)\")",
       "Bash(npm test:*)",
       "Bash(curl -s http://localhost:3000/api/health)",
-      "Bash(NODE_OPTIONS=\"--max-old-space-size=4096\" npx tsc --noEmit --pretty)"
+      "Bash(NODE_OPTIONS=\"--max-old-space-size=4096\" npx tsc --noEmit --pretty)",
+      "Bash(python -c \"import graphify; print\\('graphify installed'\\)\")",
+      "Bash(python -c ':*)"
     ]
   },
   "enableAllProjectMcpServers": true,

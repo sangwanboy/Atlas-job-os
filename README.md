@@ -77,11 +77,13 @@ BROWSER_MODE=headed
 REDIS_URL=redis://localhost:6379
 
 # Token budget — monthly USD cap per user before LLM requests are blocked
+# This is the fallback default. Admins can override this from the Settings UI without
+# changing this env var — the admin-set value takes precedence immediately for all users.
 TOKEN_BUDGET_MONTHLY_USD=10.00
 
 # Database connection pool (appended to DATABASE_URL automatically)
-DATABASE_CONNECTION_LIMIT=10
-DATABASE_POOL_TIMEOUT=10
+DATABASE_CONNECTION_LIMIT=35
+DATABASE_POOL_TIMEOUT=20
 
 # Browser concurrency pool — max simultaneous Playwright operations
 BROWSER_POOL_SIZE=2
@@ -279,11 +281,13 @@ Atlas serves an animated public landing page at `/` — the first thing visitors
 - **Hero section** — typewriter headline cycling through Atlas capabilities, animated gradient mesh background with floating particles, 3 glassmorphism UI mockup cards (searching, job score, pipeline kanban)
 - **Live beta counter** — fetches from `/api/beta-slots`, shows "X of 50 spots remaining" with real-time animation. First 50 users get instant access; after that, new users are placed on a waitlist
 - **Social proof** — infinite-scroll marquee of beta tester quotes
-- **How it works** — 3-step scroll-reveal (Upload CV → Agent searches → Approve outreach)
-- **Feature grid** — 6 animated cards covering all major capabilities
-- **Demo preview** — browser-chrome-wrapped replica of the Atlas dashboard
-- **FAQ accordion** — 7 common questions with animated expand/collapse
-- **Footer CTA** — final conversion section with beta counter + registration link
+- **How it works** — 4-step scroll-reveal: Upload CV → Agent searches → Approve outreach → Generate & Download CV
+- **Feature grid** — 8 animated cards covering all major capabilities (including CV Generation, Chrome Extension, Analytics, and Privacy)
+- **Platforms section** — logos of all 6 supported UK job boards (LinkedIn, Indeed, Reed, TotalJobs, Adzuna, CV-Library)
+- **Stats section** — animated counters: 6 Platforms, 3 CV Templates, ~90s search, 24/7 availability
+- **Demo preview** — browser-chrome-wrapped replica of the Atlas dashboard, including a UK company demo (Barclays, BBC, Revolut, Deliveroo) with salary column and "CVs Generated" KPI card
+- **FAQ accordion** — 10 common questions with animated expand/collapse
+- **Footer CTA** — final conversion section with beta counter, registration link, and trust signals row
 
 **Beta mechanics:** Admin accounts are excluded from the 50-slot count. The CTA dynamically switches between "Claim Your Spot" and "Join Waitlist" based on remaining slots.
 
@@ -342,6 +346,7 @@ Used when extension is not connected. Stealth Chromium with Bezier mouse curves,
 - Job application funnel
 - Activity trends
 - Score distribution charts
+- All chart tooltips use glassmorphism dark styling (no white tooltip backgrounds)
 
 ### Agent Chat (Atlas)
 - Stateful multi-turn AI chat powered by Gemini (`gemini-3-flash-preview` default)
@@ -351,6 +356,7 @@ Used when extension is not connected. Stealth Chromium with Bezier mouse curves,
 - **Full tool registry** — all tools are described in the system prompt (PIPELINE, GMAIL, MEMORY, BROWSER, CV GENERATION groups). Atlas reasons from descriptions alone — no hardcoded trigger phrases. New tools are auto-available once added to the registry.
 - **Fast-path for simple messages** — greetings and conversational messages use a lightweight prompt (skips tool definitions, search guidelines, CV context) for ~3s response time instead of 30s+
 - **Stop button** — cyan circular abort button cancels in-flight generation instantly
+- **First-time user startup protocol** — when a user sends their very first ever message, Atlas detects `historyMessageCount === 0` and follows a structured welcome sequence: warm greeting, Chrome extension setup with a clickable download link and install steps, CV upload prompt, and offer to start searching
 - Internal `<continuity_update>` blocks stripped from stream in real-time (never shown to user)
 - Live tool execution shown inside the chat bubble (tool names animate as they run)
 - Session history with persistent memory across conversations
@@ -397,15 +403,16 @@ Two BullMQ workers run in a separate process (`npm run workers`) backed by Redis
 
 | Queue | Purpose |
 |-------|---------|
-| `job-scrape` | Background job scraping (decoupled from HTTP thread, 2 concurrent, 3 retry attempts) |
-| `gmail-sync` | Background Gmail polling (1 concurrent, 2 retry attempts) |
+| `job-scrape` | Background job scraping (decoupled from HTTP thread, 15 concurrent, 3 retry attempts) |
+| `gmail-sync` | Background Gmail polling (5 concurrent, 2 retry attempts) |
 
 Workers are defined in `src/lib/queue/workers/` and started via `src/lib/queue/start-workers.ts`. SIGTERM/SIGINT handled for graceful shutdown.
 
 ### Rate Limiting & Token Budget
 
 - **Rate limiting:** 100 LLM calls per user per hour enforced at `/api/agents/chat` via Redis sliding window. Returns `429 Too Many Requests` with `Retry-After` header.
-- **Monthly token budget:** Configurable per-deployment via `TOKEN_BUDGET_MONTHLY_USD`. Token usage is recorded to the `TokenUsage` DB table after each Atlas response. Requests are blocked (429) when the monthly budget is exceeded.
+- **Monthly token budget:** Admin-configurable from the Settings UI without requiring an env var change. The admin sets a global USD budget in the Token Usage & Runtime Controls panel — this is stored as the `"global"` key in `RuntimeSettingsRecord` and applies to all users immediately. Per-user budget overrides can be set from the Token Usage tab in `/admin/users`. The `TOKEN_BUDGET_MONTHLY_USD` env var is only the initial fallback default.
+- **Token usage tracking:** Usage is recorded to the `TokenUsage` DB table after each Atlas response. Cost is calculated in USD using Gemini Flash pricing and visible in the admin Token Usage tab.
 
 ### Health Check
 
@@ -421,7 +428,7 @@ Every user has completely isolated data:
 - **Atlas agent** — auto-created per user on first chat, seeded from admin's template
 - **Chat history** — sessions and messages scoped to userId
 - **User profile** — `user_profile.md`, `mind.md`, `preferences.json` stored in `agents/atlas/users/{userId}/` (not shared)
-- **Settings** — stored in `RuntimeSettingsRecord` table keyed by userId
+- **Settings** — all platform-wide settings (token budget, rate limits, model, caps) are stored under the `"global"` key in `RuntimeSettingsRecord` and read globally by all users, ensuring admin-configured values apply uniformly across the platform
 
 ### Email Notifications (Resend)
 
@@ -440,9 +447,13 @@ HTML template uses Atlas brand colours (dark card, cyan BETA badge). Configured 
 - **Waitlist management** — approve or reject waitlist users from `/admin/users`. Approving sends a Resend approval email and activates the account immediately.
 - **Max Jobs Per Search** — global scraper pool cap, stored under `"global"` key, applies to all users (default: 20)
 - **Output Per Prompt** — global preview box cap, how many top-scored jobs appear in chat (default: 10)
-- **Monthly Token Budget**, **Per Response Token Cap**, **Soft Limit Percent** — runtime budget controls
+- **Monthly Token Budget**, **Per Response Token Cap**, **Soft Limit Percent** — runtime budget controls; admin sets these from the Settings UI and they apply to all users instantly without env var changes
 - **AI Provider & Model** — global default model for all users
 - **API Keys** — per-provider key management
+- **Token Usage tab** — new third tab in `/admin/users` showing per-user token consumption, USD cost (Gemini Flash pricing), limit vs. usage progress bars (green <60%, amber 60–80%, red ≥80%), rows highlighted red when at or over limit, and inline "Set Limit" controls for setting per-user monthly USD budget overrides
+- **Per-user token limits** — admin can set a custom monthly USD budget per user from the Token Usage tab, overriding the global budget for that user
+- **Extension download** — `GET /api/extension/download` packages the `chrome-extension/` folder as a zip file for one-click download; Atlas provides a clickable link in chat during the first-time user setup
+- **Gmail API Configuration** — the "API Configuration (Developer Setup)" accordion in Settings is hidden from regular users and visible to admin only
 - All runtime settings persisted to PostgreSQL `RuntimeSettingsRecord` table (multi-instance safe)
 
 ---
@@ -466,6 +477,9 @@ src/
 │   │   ├── cv/             # CV upload, processing, export (DOCX download)
 │   │   ├── jobs/           # Jobs CRUD
 │   │   ├── admin/users/    # Admin user management API
+│   │   ├── admin/token-usage/  # Admin: per-user token usage and costs
+│   │   ├── admin/user-limit/   # Admin: set per-user monthly USD budget
+│   │   ├── extension/download/ # Chrome extension zip download
 │   │   ├── register/       # Registration endpoint
 │   │   ├── feedback/           # Beta feedback submission
 │   │   └── integrations/   # Gmail, exports
@@ -475,7 +489,7 @@ src/
 │   ├── landing/            # Public landing page (hero, nav, features, FAQ, etc.)
 │   ├── agents/             # Atlas chat UI
 │   ├── jobs/               # Jobs table + review drawer
-│   └── layout/             # Sidebar + top nav (includes BETA v1.0 badge)
+│   └── layout/             # Sidebar + top nav (includes BETA v1.0 badge, Feedback button)
 ├── lib/
 │   ├── redis.ts            # ioredis singleton + pending jobs/CV helpers + rate limiting
 │   ├── logger.ts           # Pino structured logger (pretty in dev, JSON in prod)
@@ -526,8 +540,10 @@ prisma/
 | POST | `/api/register` | Create new user account |
 | GET/POST | `/api/admin/users` | Admin user management |
 | POST | `/api/admin/push-atlas-config` | Push admin's Atlas soul/identity to all users |
+| GET | `/api/admin/token-usage` | Admin: all users' monthly token usage and costs |
+| PUT | `/api/admin/user-limit` | Admin: set per-user monthly USD budget override |
 | GET | `/api/agents/sessions` | Chat session list |
-| GET/PUT | `/api/settings/runtime` | Runtime settings (admin=global, user=own) |
+| GET/PUT | `/api/settings/runtime` | Runtime settings (reads/writes "global" key — applies to all users) |
 | GET | `/api/dashboard/stats` | Per-user dashboard stats |
 | GET | `/api/health` | Health check (DB + Redis ping) — 200 ok / 503 degraded |
 | POST | `/api/integrations/gmail/sync` | Sync Gmail inbox |
@@ -536,6 +552,7 @@ prisma/
 | POST | `/api/feedback` | Submit beta feedback (saves to data/feedback.jsonl) |
 | POST | `/api/admin/users/[id]/approve` | Approve a waitlist user (sends approval email) |
 | POST | `/api/admin/users/[id]/reject` | Reject and delete a waitlist user |
+| GET | `/api/extension/download` | Download chrome-extension folder as zip file |
 
 ---
 
@@ -552,7 +569,7 @@ SENTRY_DSN=https://xxx@oXXX.ingest.sentry.io/XXX
 Create a free project at [sentry.io](https://sentry.io) to get your DSN. Every unhandled exception and API crash is captured automatically with stack trace + user context.
 
 ### Manual Feedback
-Beta users can submit feedback via the Admin > Beta Feedback tab. Submissions are:
+Beta users can submit feedback via the Feedback button in the app sidebar. Submissions are:
 - Saved to `data/feedback.jsonl` (one JSON entry per line)
 - Optionally pinged to a Slack/Discord channel via webhook:
 ```env
@@ -579,7 +596,7 @@ The app sidebar displays a **BETA · v1.0** badge in the lower-left corner (all 
 - **Mobile responsive:** Full mobile support with hamburger sidebar, responsive tables, and adaptive layouts.
 - **Redis required:** Redis must be running for pending jobs persistence, rate limiting, and BullMQ workers. Start with `docker start atlas-redis`. If Redis is unavailable, the app degrades gracefully — rate limits fail open, pipeline count shows 0, pending jobs are lost on restart.
 - **Workers are optional in dev:** `npm run workers` starts BullMQ background processors. In development you can skip this — scraping still works inline. Workers become important at scale to offload scraping from the HTTP thread.
-- **Token budget:** Set `TOKEN_BUDGET_MONTHLY_USD` in `.env` to cap per-user AI spend. Usage is recorded in the `TokenUsage` Prisma table. Default is $10/month. Set to a high value or omit enforcement by setting it very high.
+- **Token budget:** The monthly USD cap is set by the admin via the Settings UI (stored as the `"global"` key in `RuntimeSettingsRecord`). No env var change is needed — updates apply to all users immediately. The `TOKEN_BUDGET_MONTHLY_USD` env var is the initial seed default only. Per-user overrides can be set from the Token Usage tab in `/admin/users`. Usage is recorded in the `TokenUsage` Prisma table.
 - **Standalone build:** `next.config.ts` uses `output: "standalone"` — the production build can be containerised with Docker without bundling `node_modules`.
 
 ---
@@ -588,15 +605,15 @@ The app sidebar displays a **BETA · v1.0** badge in the lower-left corner (all 
 
 ### Recommended Environment Config
 
-For 25–50 concurrent beta users, set these in your production `.env`:
+For 30+ concurrent chat users and 15 concurrent scrapers, set these in your production `.env`:
 
 ```env
 # Increase browser pool for concurrent users (default 2 is too low for production)
 BROWSER_POOL_SIZE=4
 
-# Increase DB connection pool (default 10 exhausts at 50 concurrent requests)
-DATABASE_CONNECTION_LIMIT=25
-DATABASE_POOL_TIMEOUT=30
+# DB connection pool (default 35 — increase further with PgBouncer in prod)
+DATABASE_CONNECTION_LIMIT=35
+DATABASE_POOL_TIMEOUT=20
 
 # Error tracking (highly recommended for beta)
 NEXT_PUBLIC_SENTRY_DSN=https://xxx@oXXX.ingest.sentry.io/XXX
@@ -611,11 +628,13 @@ BROWSER_SERVICE_URL=http://localhost:3001
 
 ### Concurrent User Capacity Estimates
 
-| Config | Estimated Capacity |
-|--------|-------------------|
-| Default (pool=2, db=10) | 5–10 concurrent users |
-| Beta tuned (pool=4, db=25) | 25–50 concurrent users |
-| Production (pool=8, db=50 + PgBouncer) | 100–200 concurrent users |
+| Config | Chat users | Concurrent scrapers |
+|--------|-----------|---------------------|
+| Default (db=35, scrape=15, gmail=5) | ~30 | 15 |
+| Production (db=50 + PgBouncer, scrape=20) | ~60 | 20 |
+| Scaled (multiple instances + Redis-backed state) | 100+ | 40+ |
+
+Agent state (memory, onboarding, loop guard, personality, continuity, profile) is stored in Redis with TTLs — no in-process Maps, no OOM risk, safe for horizontal scaling.
 
 ### System Requirements
 
@@ -633,7 +652,7 @@ BROWSER_SERVICE_URL=http://localhost:3001
 ### Pre-Beta Checklist
 
 - [ ] `BROWSER_POOL_SIZE=4` set in production `.env`
-- [ ] `DATABASE_CONNECTION_LIMIT=25` set in production `.env`
+- [ ] `DATABASE_CONNECTION_LIMIT=35` set in production `.env`
 - [ ] `NEXT_PUBLIC_SENTRY_DSN` + `SENTRY_DSN` configured
 - [ ] `RESEND_API_KEY` configured for email notifications
 - [ ] `npx prisma migrate deploy` run on production DB

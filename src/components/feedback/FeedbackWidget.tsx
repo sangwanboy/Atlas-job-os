@@ -38,9 +38,19 @@ const TYPES: {
 const MIN_CHARS = 10;
 const MAX_CHARS = 600;
 
-export function FeedbackWidget() {
+interface FeedbackWidgetProps {
+  externalOpen?: boolean;
+  onClose?: () => void;
+}
+
+export function FeedbackWidget({ externalOpen, onClose }: FeedbackWidgetProps = {}) {
   const [open, setOpen] = useState(false);
   const [visible, setVisible] = useState(false); // controls animation
+
+  // Sync with external open state
+  useEffect(() => {
+    if (externalOpen !== undefined) setOpen(externalOpen);
+  }, [externalOpen]);
   const [type, setType] = useState<FeedbackType>("bug");
   const [description, setDescription] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -77,7 +87,7 @@ export function FeedbackWidget() {
 
   const handleClose = () => {
     setVisible(false);
-    setTimeout(() => { setOpen(false); resetForm(); }, 250);
+    setTimeout(() => { setOpen(false); onClose?.(); resetForm(); }, 250);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -135,30 +145,6 @@ export function FeedbackWidget() {
           animation: fb-check 0.5s ease 0.1s forwards;
         }
       `}</style>
-
-      {/* ── Floating button ── */}
-      {mounted && (
-        <button
-          onClick={() => setOpen(true)}
-          aria-label="Give feedback"
-          className={`
-            fb-bounce fixed bottom-5 right-5 z-50
-            flex items-center gap-2 rounded-full
-            pl-3.5 pr-4 py-2.5
-            text-[13px] font-semibold text-white
-            bg-gradient-to-br from-indigo-500 via-violet-500 to-purple-600
-            shadow-lg shadow-violet-500/25
-            hover:shadow-xl hover:shadow-violet-500/35
-            hover:scale-[1.04]
-            active:scale-[0.97]
-            transition-all duration-200
-            focus:outline-none focus:ring-2 focus:ring-violet-400 focus:ring-offset-2
-          `}
-        >
-          <MessageCircle className="h-4 w-4 flex-shrink-0" />
-          <span className="hidden sm:inline">Feedback</span>
-        </button>
-      )}
 
       {/* ── Backdrop + Modal ── */}
       {open && (

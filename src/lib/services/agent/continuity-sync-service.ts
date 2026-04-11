@@ -4,6 +4,7 @@ import { HydratedLayers } from "./prompt-composer";
 import { localJobsCache } from "@/lib/services/jobs/local-jobs-cache";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
+import { getRedis } from "@/lib/redis";
 
 // ─── Layers & Types ─────────────────────────────────────────────────────────
 
@@ -49,8 +50,30 @@ const TRIGGER_LAYER_MAP: Record<TaskTrigger, LayerKey[]> = {
 // ─── Per-Layer Cache ─────────────────────────────────────────────────────────
 
 type LayerCacheEntry = { value: string; expiresAt: number };
-const _layerCache = new Map<string, LayerCacheEntry>();
-const LAYER_CACHE_TTL_MS = 30_000; // 30 seconds
+const LAYER_CACHE_TTL_MS = 30_000; // 30 seconds in-process freshness window
+const LAYER_REDIS_TTL = 7200; // 2 hours Redis TTL
+
+function layerRedisKey(agentId: string, userKey: string, layerKey: string): string {
+  return `continuity:cache:${agentId}:${userKey}:${layerKey}`;
+}
+
+async function getLayerFromRedis(agentId: string, userKey: string, layerKey: string): Promise<LayerCacheEntry | null> {
+  try {
+    const raw = await getRedis().get(layerRedisKey(agentId, userKey, layerKey));
+    if (!raw) return null;
+    return JSON.parse(raw) as LayerCacheEntry;
+  } catch {
+    return null;
+  }
+}
+
+async function setLayerInRedis(agentId: string, userKey: string, layerKey: string, entry: LayerCacheEntry): Promise<void> {
+  try {
+    await getRedis().setex(layerRedisKey(agentId, userKey, layerKey), LAYER_REDIS_TTL, JSON.stringify(entry));
+  } catch {
+    // fail-open
+  }
+}
 
 // ─── Selective Hydration Service ────────────────────────────────────────────
 
@@ -141,16 +164,18 @@ export class ContinuitySyncService {
 
     const userKey = userId ?? "shared";
 
-    // Per-layer cache loader: bypasses cache on first turn or if this layer is in the trigger set
+    // Per-layer cache loader: bypasses cache on first turn or if this layer is in the trigger set.
+    // Uses Redis as the shared cache store (TTL 2h), with a 30s freshness window.
     const loadLayer = async (key: LayerKey, loader: () => Promise<string>): Promise<string> => {
-      const cacheKey = `${agentId}:${userKey}:${key}`;
-      const cached = _layerCache.get(cacheKey);
       const forceRefresh = isFirstTurn || triggeredLayers.has(key);
-      if (!forceRefresh && cached && cached.expiresAt > Date.now()) {
-        return cached.value;
+      if (!forceRefresh) {
+        const cached = await getLayerFromRedis(agentId, userKey, key);
+        if (cached && cached.expiresAt > Date.now()) {
+          return cached.value;
+        }
       }
       const value = await loader().catch(() => "");
-      _layerCache.set(cacheKey, { value, expiresAt: Date.now() + LAYER_CACHE_TTL_MS });
+      void setLayerInRedis(agentId, userKey, key, { value, expiresAt: Date.now() + LAYER_CACHE_TTL_MS }).catch(() => {});
       return value;
     };
 

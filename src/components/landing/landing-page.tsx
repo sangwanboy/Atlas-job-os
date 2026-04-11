@@ -3,9 +3,11 @@
 import { useEffect, useState } from "react";
 import { LandingNav } from "./nav";
 import { Hero } from "./hero";
+import { Platforms } from "./platforms";
 import { SocialProof } from "./social-proof";
 import { HowItWorks } from "./how-it-works";
 import { Features } from "./features";
+import { Stats } from "./stats";
 import { DemoPreview } from "./demo-preview";
 import { Faq } from "./faq";
 import { FooterCta } from "./footer-cta";
@@ -44,9 +46,11 @@ export function LandingPage({ initialSlotsUsed }: LandingPageProps) {
     <div className="min-h-screen overflow-x-hidden bg-[hsl(218_32%_8%)] font-sans text-white">
       <LandingNav slotsRemaining={slotsRemaining} isWaitlist={isWaitlist} />
       <Hero slotsRemaining={slotsRemaining} isWaitlist={isWaitlist} />
+      <Platforms />
       <SocialProof />
       <HowItWorks />
       <Features />
+      <Stats />
       <DemoPreview />
       <Faq />
       <FooterCta slotsRemaining={slotsRemaining} isWaitlist={isWaitlist} />

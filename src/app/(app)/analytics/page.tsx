@@ -50,6 +50,23 @@ const fallbackOutreach: OutreachPoint[] = [
 
 const sourceColors = ["#0891b2", "#14b8a6", "#f59e0b", "#8b5cf6"];
 
+const tooltipStyle = {
+  contentStyle: {
+    backgroundColor: "hsl(220, 26%, 14%)",
+    border: "1px solid rgba(255,255,255,0.1)",
+    borderRadius: "12px",
+    color: "#e2e8f0",
+    fontSize: "13px",
+    boxShadow: "0 8px 30px rgba(0,0,0,0.3)",
+  },
+  itemStyle: { color: "#e2e8f0" },
+  labelStyle: { color: "#94a3b8", fontWeight: 600, marginBottom: 4 },
+  cursor: { stroke: "rgba(255,255,255,0.15)" },
+};
+
+const GRID_STROKE = "rgba(255,255,255,0.08)";
+const AXIS_TICK = { fill: "#94a3b8", fontSize: 12 };
+
 export default function AnalyticsPage() {
   const [funnel, setFunnel] = useState<FunnelPoint[]>(fallbackFunnel);
   const [sources, setSources] = useState<SourcePoint[]>(fallbackSources);
@@ -113,10 +130,10 @@ export default function AnalyticsPage() {
               {isMounted && (
                 <ResponsiveContainer width="100%" height={300}>
                   <AreaChart data={funnel} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#cbd5e1" />
-                    <XAxis dataKey="week" />
-                    <YAxis />
-                    <Tooltip />
+                    <CartesianGrid strokeDasharray="3 3" stroke={GRID_STROKE} />
+                    <XAxis dataKey="week" tick={AXIS_TICK} />
+                    <YAxis tick={AXIS_TICK} />
+                    <Tooltip {...tooltipStyle} />
                     <Legend iconType="circle" />
                     <Area name="Applications" type="monotone" dataKey="applications" stroke="#0891b2" fill="#0891b233" strokeWidth={2} />
                     <Area name="Replies" type="monotone" dataKey="replies" stroke="#14b8a6" fill="#14b8a633" strokeWidth={2} />
@@ -147,12 +164,12 @@ export default function AnalyticsPage() {
               {isMounted && (
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
-                    <Pie data={sources} dataKey="count" nameKey="source" outerRadius={110} label>
+                    <Pie data={sources} dataKey="count" nameKey="source" outerRadius={110} label={{ fill: "#94a3b8", fontSize: 12 }}>
                       {sources.map((entry, index) => (
                         <Cell key={entry.source} fill={sourceColors[index % sourceColors.length]} />
                       ))}
                     </Pie>
-                    <Tooltip />
+                    <Tooltip {...tooltipStyle} />
                   </PieChart>
                 </ResponsiveContainer>
               )}
@@ -168,11 +185,11 @@ export default function AnalyticsPage() {
               {isMounted && (
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={outreach}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#cbd5e1" />
-                    <XAxis dataKey="day" />
-                    <YAxis domain={[0, 100]} />
-                    <Tooltip />
-                    <Line type="monotone" dataKey="replyRate" stroke="#0891b2" strokeWidth={3} />
+                    <CartesianGrid strokeDasharray="3 3" stroke={GRID_STROKE} />
+                    <XAxis dataKey="day" tick={AXIS_TICK} />
+                    <YAxis domain={[0, 100]} tick={AXIS_TICK} />
+                    <Tooltip {...tooltipStyle} />
+                    <Line type="monotone" dataKey="replyRate" stroke="#0891b2" strokeWidth={3} dot={{ fill: "#0891b2", r: 4 }} activeDot={{ r: 6, fill: "#0891b2", stroke: "#fff", strokeWidth: 2 }} />
                   </LineChart>
                 </ResponsiveContainer>
               )}
@@ -186,13 +203,13 @@ export default function AnalyticsPage() {
               {isMounted && (
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={runtime?.usage.byProvider ?? []}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#cbd5e1" />
-                    <XAxis dataKey="provider" />
-                    <YAxis />
-                    <Tooltip />
-                    <Legend />
-                    <Bar dataKey="requests" fill="#14b8a6" />
-                    <Bar dataKey="totalTokens" fill="#0891b2" />
+                    <CartesianGrid strokeDasharray="3 3" stroke={GRID_STROKE} />
+                    <XAxis dataKey="provider" tick={AXIS_TICK} />
+                    <YAxis tick={AXIS_TICK} />
+                    <Tooltip {...tooltipStyle} />
+                    <Legend wrapperStyle={{ color: "#94a3b8", fontSize: 12 }} />
+                    <Bar dataKey="requests" fill="#14b8a6" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="totalTokens" fill="#0891b2" radius={[4, 4, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               )}

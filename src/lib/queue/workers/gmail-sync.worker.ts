@@ -23,7 +23,7 @@ export function startGmailSyncWorker() {
     },
     {
       connection: createBullMQConnection(),
-      concurrency: 1,
+      concurrency: 5,
     }
   );
 

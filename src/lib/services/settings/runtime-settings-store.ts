@@ -80,7 +80,11 @@ async function loadFromDb(key: string): Promise<RuntimeState> {
     return migrate(record.data as unknown as RuntimeState);
   }
   const defaults = createDefaultState();
-  await prisma.runtimeSettingsRecord.create({ data: { key, data: defaults as any } });
+  await prisma.runtimeSettingsRecord.upsert({
+    where: { key },
+    create: { key, data: defaults as any },
+    update: {},
+  });
   return defaults;
 }
 

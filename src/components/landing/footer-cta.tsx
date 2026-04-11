@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, Cloud, CreditCard, CalendarX2, ShieldCheck } from "lucide-react";
 import { GradientMesh } from "./gradient-mesh";
 import { BetaCounter } from "./beta-counter";
 
@@ -10,6 +10,13 @@ interface FooterCtaProps {
   slotsRemaining: number;
   isWaitlist: boolean;
 }
+
+const TRUST = [
+  { icon: Cloud, label: "Cloud-hosted" },
+  { icon: CreditCard, label: "No credit card" },
+  { icon: CalendarX2, label: "Cancel anytime" },
+  { icon: ShieldCheck, label: "Data encrypted" },
+];
 
 export function FooterCta({ slotsRemaining, isWaitlist }: FooterCtaProps) {
   return (
@@ -54,9 +61,25 @@ export function FooterCta({ slotsRemaining, isWaitlist }: FooterCtaProps) {
               {isWaitlist ? "Join the Waitlist" : "Claim Your Beta Spot"}
               <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
             </Link>
-            <p className="text-xs text-white/30">
-              No credit card required · Free beta access
-            </p>
+
+            {/* Trust signals */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              whileInView={{ opacity: 1 }}
+              viewport={{ once: true }}
+              transition={{ delay: 0.4 }}
+              className="mt-4 flex flex-wrap items-center justify-center gap-6"
+            >
+              {TRUST.map((t) => {
+                const Icon = t.icon;
+                return (
+                  <div key={t.label} className="flex items-center gap-1.5">
+                    <Icon className="h-3.5 w-3.5 text-white/25" />
+                    <span className="text-xs text-white/30">{t.label}</span>
+                  </div>
+                );
+              })}
+            </motion.div>
           </motion.div>
         </div>
       </section>
@@ -69,12 +92,13 @@ export function FooterCta({ slotsRemaining, isWaitlist }: FooterCtaProps) {
             <span className="rounded-full border border-cyan-500/30 bg-cyan-500/10 px-2 py-0.5 text-[9px] font-bold tracking-widest text-cyan-400">
               BETA
             </span>
-            <span className="text-sm text-white/30">· Built with ❤️ in London</span>
+            <span className="text-sm text-white/30">· Built in London</span>
           </div>
           <nav className="flex items-center gap-6">
             {[
-              { label: "Features", href: "#features" },
               { label: "How it Works", href: "#how-it-works" },
+              { label: "Platforms", href: "#platforms" },
+              { label: "Features", href: "#features" },
               { label: "FAQ", href: "#faq" },
               { label: "Sign In", href: "/login" },
             ].map((link) => (
@@ -87,7 +111,7 @@ export function FooterCta({ slotsRemaining, isWaitlist }: FooterCtaProps) {
               </a>
             ))}
           </nav>
-          <p className="text-xs text-white/25">© 2026 Atlas Job OS</p>
+          <p className="text-xs text-white/25">&copy; 2026 Atlas Job OS</p>
         </div>
       </div>
     </footer>

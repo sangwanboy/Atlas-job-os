@@ -13,6 +13,8 @@ const PHRASES = [
   "scores every opportunity.",
   "sends outreach for you.",
   "manages your pipeline.",
+  "generates your CV.",
+  "searches 6 platforms at once.",
 ];
 
 function useTypewriter(phrases: string[]) {
@@ -105,8 +107,9 @@ export function Hero({ slotsRemaining, isWaitlist }: HeroProps) {
             variants={fadeUp}
             className="mt-6 max-w-lg text-lg leading-relaxed text-white/55"
           >
-            Atlas autonomously searches 100+ job boards, scores each role against your CV, and
-            handles outreach via Gmail — while you focus on what matters.
+            Atlas autonomously searches LinkedIn, Indeed, Reed, TotalJobs, Adzuna &amp; CV-Library,
+            scores each role against your CV, generates tailored CVs, and handles outreach
+            via Gmail — while you focus on what matters.
           </motion.p>
 
           {/* Beta counter */}

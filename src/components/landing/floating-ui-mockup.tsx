@@ -2,12 +2,12 @@
 
 import { motion } from "framer-motion";
 
-const COMPANIES = ["GG", "MS", "AM", "AP", "LI"];
+const PLATFORMS = ["Li", "In", "Re", "TJ", "Az"];
 
 const PIPELINE_COLS = [
-  { label: "Applied", jobs: ["Stripe", "Linear"] },
-  { label: "Interview", jobs: ["Vercel"] },
-  { label: "Offer", jobs: ["Arc"] },
+  { label: "Applied", jobs: ["Barclays", "Revolut"] },
+  { label: "Interview", jobs: ["BBC"] },
+  { label: "Offer", jobs: ["Monzo"] },
 ];
 
 export function FloatingUiMockup() {
@@ -34,9 +34,9 @@ export function FloatingUiMockup() {
             />
           ))}
         </div>
-        {/* Company chips */}
+        {/* Platform chips */}
         <div className="flex gap-2">
-          {COMPANIES.map((abbr) => (
+          {PLATFORMS.map((abbr) => (
             <div
               key={abbr}
               className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 bg-white/10 text-[9px] font-black text-white/60"
@@ -56,7 +56,7 @@ export function FloatingUiMockup() {
         <div className="flex items-start justify-between">
           <div>
             <p className="text-sm font-black text-white">Senior Engineer</p>
-            <p className="mt-0.5 text-xs text-white/50">Stripe · Remote · £90k–£120k</p>
+            <p className="mt-0.5 text-xs text-white/50">Barclays · London · {"\u00A3"}75k{"\u2013"}{"\u00A3"}95k</p>
           </div>
           <span className="rounded-full border border-emerald-500/40 bg-emerald-500/20 px-2 py-0.5 text-xs font-black text-emerald-400">
             94%

@@ -147,7 +147,7 @@ export default function AdminFeedbackPage() {
         <button
           onClick={() => void fetchFeedback(true)}
           disabled={refreshing}
-          className="flex items-center gap-2 rounded-xl border border-white/60 bg-white/75 px-3 py-2 text-sm font-semibold text-muted transition hover:bg-white hover:text-text disabled:opacity-50"
+          className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm font-semibold text-slate-400 transition hover:bg-white/10 hover:text-slate-200 disabled:opacity-40"
         >
           <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
           Refresh

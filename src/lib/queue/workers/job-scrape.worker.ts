@@ -23,7 +23,7 @@ export function startJobScrapeWorker() {
     },
     {
       connection: createBullMQConnection(),
-      concurrency: 2,
+      concurrency: 15,
     }
   );
 

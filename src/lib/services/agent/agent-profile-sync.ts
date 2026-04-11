@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db";
 import { activeAgent } from "@/lib/mock/data";
+import { getRedis } from "@/lib/redis";
 
 export type SyncedAgentProfile = {
   agentId: string;
@@ -17,21 +18,31 @@ export type SyncedAgentProfile = {
   memoryAnchors: string;
 };
 
-const state = globalThis as unknown as {
-  syncedAgentProfiles?: Map<string, SyncedAgentProfile>;
-  syncedAgentProfilesHydrated?: boolean;
-};
+const PROFILE_TTL = 3600; // 1 hour
 
-const syncedAgentProfiles = state.syncedAgentProfiles ?? new Map<string, SyncedAgentProfile>();
-state.syncedAgentProfiles = syncedAgentProfiles;
+function redisKey(agentId: string): string {
+  return `profile:synced:${agentId}`;
+}
+
+async function readProfileFromRedis(agentId: string): Promise<SyncedAgentProfile | null> {
+  try {
+    const raw = await getRedis().get(redisKey(agentId));
+    if (!raw) return null;
+    return JSON.parse(raw) as SyncedAgentProfile;
+  } catch {
+    return null;
+  }
+}
+
+async function writeProfileToRedis(profile: SyncedAgentProfile): Promise<void> {
+  try {
+    await getRedis().setex(redisKey(profile.agentId), PROFILE_TTL, JSON.stringify(profile));
+  } catch {
+    // fail-open
+  }
+}
 
 async function hydrateLatestSnapshotsFromDb(): Promise<void> {
-  if (state.syncedAgentProfilesHydrated) {
-    return;
-  }
-
-  state.syncedAgentProfilesHydrated = true;
-
   try {
     const snapshots = await prisma.agentProfileSnapshot.findMany({
       orderBy: { createdAt: "desc" },
@@ -39,11 +50,11 @@ async function hydrateLatestSnapshotsFromDb(): Promise<void> {
     });
 
     for (const snapshot of snapshots) {
-      if (syncedAgentProfiles.has(snapshot.agentId)) {
-        continue;
-      }
+      // Only seed if not already in Redis
+      const existing = await readProfileFromRedis(snapshot.agentId);
+      if (existing) continue;
 
-      syncedAgentProfiles.set(snapshot.agentId, {
+      await writeProfileToRedis({
         agentId: snapshot.agentId,
         name: "Atlas",
         roleTitle: snapshot.role,
@@ -78,7 +89,7 @@ async function persistSnapshot(profile: SyncedAgentProfile): Promise<void> {
       },
     });
   } catch {
-    // Fallback to in-memory only when DB write fails.
+    // Fallback to Redis-only when DB write fails.
   }
 }
 
@@ -103,22 +114,26 @@ function atlasDefaultProfile(): SyncedAgentProfile {
 }
 
 export class AgentProfileSyncStore {
+  // Kept synchronous for callers that don't await; returns default as fail-open.
+  // Use getProfileAsync for callers that can await.
   getProfile(agentId: string): SyncedAgentProfile {
-    void hydrateLatestSnapshotsFromDb();
+    // Trigger async hydration in background; sync callers get default
+    void hydrateLatestSnapshotsFromDb().catch(() => {});
+    return atlasDefaultProfile();
+  }
 
-    const existing = syncedAgentProfiles.get(agentId);
-    if (existing) {
-      return existing;
-    }
-
+  async getProfileAsync(agentId: string): Promise<SyncedAgentProfile> {
+    void hydrateLatestSnapshotsFromDb().catch(() => {});
+    const existing = await readProfileFromRedis(agentId);
+    if (existing) return existing;
     const seeded = atlasDefaultProfile();
-    syncedAgentProfiles.set(agentId, seeded);
+    void writeProfileToRedis(seeded).catch(() => {});
     return seeded;
   }
 
   upsertProfile(profile: SyncedAgentProfile): SyncedAgentProfile {
-    syncedAgentProfiles.set(profile.agentId, profile);
-    void persistSnapshot(profile);
+    void writeProfileToRedis(profile).catch(() => {});
+    void persistSnapshot(profile).catch(() => {});
     return profile;
   }
 }

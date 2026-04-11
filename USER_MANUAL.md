@@ -65,11 +65,13 @@ When you visit Atlas for the first time at `http://localhost:3000`, you'll see t
 **What's on the landing page:**
 - **Hero section** — animated headline showing what Atlas does, a live beta counter, and floating glass cards previewing Atlas's search, scoring, and pipeline features
 - **Social proof** — scrolling quotes from beta testers
-- **How It Works** — 3 simple steps: Upload CV → Agent searches → Review & approve outreach
-- **Features** — 6 feature cards covering all major Atlas capabilities
+- **How It Works** — 4 steps: Upload CV → Agent searches → Review & approve outreach → Generate & Download CV
+- **Features** — 8 feature cards covering all major Atlas capabilities (including CV Generation, Chrome Extension, Analytics, and Privacy)
+- **Platforms section** — logos of all 6 supported UK job boards (LinkedIn, Indeed, Reed, TotalJobs, Adzuna, CV-Library)
+- **Stats section** — animated counters showing 6 Platforms, 3 CV Templates, ~90s average search time, and 24/7 availability
 - **Demo Preview** — an animated replica of the Atlas dashboard
-- **FAQ** — answers to common questions (click to expand)
-- **Sign up CTA** — "Claim Your Spot" button (or "Join Waitlist" if all 50 beta slots are taken)
+- **FAQ** — 10 common questions (click to expand)
+- **Sign up CTA** — "Claim Your Spot" button (or "Join Waitlist" if all 50 beta slots are taken) with a trust signals row
 
 **Beta access:** The first 50 users who register get instant access and receive a welcome email. After that, new registrations are added to a waitlist and receive a waitlist confirmation email. Admin accounts are not counted toward the 50-slot limit.
 
@@ -80,6 +82,23 @@ When you visit Atlas for the first time at `http://localhost:3000`, you'll see t
 ---
 
 ## Getting Started
+
+### 0. Install the Chrome Extension
+
+**First-time users:** When you send your very first message to Atlas, it automatically provides a warm welcome, a download link for the extension, step-by-step install instructions, and a prompt to upload your CV. You do not need to go looking for the extension — Atlas brings it to you.
+
+**One-click download:** Click the `[Download Atlas Extension]` link Atlas provides in chat. This downloads `atlas-extension.zip` directly. You can also navigate to `/api/extension/download` in your browser at any time.
+
+**Install steps after downloading:**
+1. Unzip `atlas-extension.zip` to a folder on your machine
+2. Open Chrome → `chrome://extensions` (or Edge → `edge://extensions`)
+3. Enable **Developer mode** (top-right toggle in Chrome; bottom-left in Edge)
+4. Click **Load unpacked** → select the unzipped folder
+5. Verify: click **service worker** on the Atlas extension card → confirm `[Atlas] Connected to bridge at ws://localhost:3002`
+
+The browser server (`npm run browser-server`) must be running for the extension to connect.
+
+---
 
 ### 1. Upload Your CV
 
@@ -280,7 +299,9 @@ Go to **Settings** in the left sidebar.
 
 - **Active AI Model** — shows the current global provider and model (set by admin)
 - **Your token usage** — monthly usage bar showing how many tokens you've used
-- **Gmail Integration** — connect/disconnect your Gmail account
+- **Gmail Integration** — connect/disconnect your Gmail account and sync options
+
+Regular users do not see the "API Configuration (Developer Setup)" accordion — that section is admin-only.
 
 ### Admin-Only Settings
 
@@ -293,14 +314,16 @@ Admins see additional sections (regular users do not see these):
 - Model Selection Window — enable/disable specific models per provider
 
 **Token Usage & Runtime Controls**
-- Monthly Token Budget and Soft Limit
+- Monthly Token Budget and Soft Limit — set a global USD cap that applies to all users immediately (no env var change needed)
 - Per Response Token Cap
 - Max Jobs Per Search (pool size, default 20)
 - Output Per Prompt (how many jobs appear in preview box, default 10)
 - Rate Limit (requests/hour per user)
-- Monthly Budget (USD) per user
 - Safety toggles: auto-summarize, strict loop protection, strict agent response, provider fallback, PII redaction
 - Usage by provider breakdown
+
+**API Configuration (Developer Setup)**
+- Gmail OAuth credentials and redirect URI — admin-only, not visible to regular users
 
 ---
 
@@ -368,8 +391,26 @@ After customising your Atlas agent (go to **Agent Workspace** and send a message
 3. Go to **Admin → Users → Push Atlas Config**
 4. All users' Atlas agents are updated with your configuration
 
+### Token Usage Tab
+
+The **Token Usage** tab is the third tab in `/admin/users` (alongside Users and Feedback).
+
+**Summary cards at the top:**
+- Total tokens consumed (all users, current month)
+- Total cost in USD (Gemini Flash pricing)
+- Global monthly USD limit (as currently configured)
+- Number of users near or over their limit
+
+**Per-user table:**
+Each row shows one user's name and email, input tokens, output tokens, cost in USD, configured limit, and a usage percentage progress bar. Progress bars are colour-coded: green when below 60%, amber from 60–80%, red at 80% and above. Rows are highlighted red when the user is at or over their limit.
+
+**Setting a per-user limit:**
+Click the **Set Limit** button on any row to open an inline input. Enter a monthly USD budget for that user and confirm. This overrides the global budget for that specific user immediately.
+
+**Refresh:** Use the refresh button (dark glassmorphism styling) to reload live data without a full page reload.
+
 ### Beta Feedback (`/admin/feedback`)
-View all beta feedback submitted via the 💬 Feedback button. Feedback is stored in `data/feedback.jsonl` and optionally forwarded to a Slack/Discord webhook via `FEEDBACK_WEBHOOK_URL` in `.env.local`.
+View all beta feedback submitted via the Feedback button in the sidebar. Feedback is stored in `data/feedback.jsonl` and optionally forwarded to a Slack/Discord webhook via `FEEDBACK_WEBHOOK_URL` in `.env.local`.
 
 ---
 
@@ -388,17 +429,21 @@ The banner refreshes automatically — no page reload needed.
 
 The extension works in both **Chrome** and **Edge** (Chromium-based). It gives Atlas full control of your real logged-in browser sessions, bypassing LinkedIn and Indeed auth walls entirely.
 
+**One-click download:** When you first chat with Atlas, it provides a `[Download Atlas Extension]` link in its welcome message — click it to download `atlas-extension.zip` directly. You can also go to `/api/extension/download` in your browser at any time to get the zip without navigating the project folder.
+
+After downloading, unzip the file and follow the Load unpacked steps below.
+
 **Installing in Chrome:**
 1. Open Chrome → `chrome://extensions`
 2. Enable **Developer mode** (top-right toggle)
-3. Click **Load unpacked** → select the `chrome-extension` folder inside the project
+3. Click **Load unpacked** → select the unzipped `chrome-extension` folder
 4. Start the browser server: `npm run browser-server` (keep the terminal open)
 5. The extension auto-connects — click **service worker** on the extension card to confirm: `[Atlas] Connected to bridge at ws://localhost:3002`
 
 **Installing in Edge:**
 1. Open Edge → `edge://extensions`
 2. Enable **Developer mode** (bottom-left toggle)
-3. Click **Load unpacked** → select the `chrome-extension` folder inside the project
+3. Click **Load unpacked** → select the unzipped `chrome-extension` folder
 4. Start the browser server: `npm run browser-server`
 5. Click **service worker** on the extension card → confirm `[Atlas] Connected to bridge at ws://localhost:3002`
 
@@ -462,9 +507,13 @@ Upload a hospitality CV tagged **Part-time** and a tech CV tagged **Professional
 
 ## Sending Feedback (Beta)
 
-See the **💬 Feedback** button in the bottom-right corner of every page.
+The **Feedback** button is in the **sidebar** — at the bottom of the left navigation panel.
 
-1. **Choose a type** — Bug 🐛, Suggestion 💡, or Other 💬
+- On desktop with the sidebar expanded: shows a "Feedback" label with an icon (violet hover highlight)
+- On desktop with the sidebar collapsed: shows the icon only
+- On mobile: available in the mobile sidebar
+
+1. **Choose a type** — Bug, Suggestion, or Other
 2. **Describe the issue** — What happened? What did you expect?
 3. **Hit Send** — Goes directly to the team
 
@@ -523,6 +572,12 @@ Refresh the page. This can occur when the browser tab is not focused during init
 **Job search progress bar never completes**
 The bar uses an asymptotic easing curve — it fills quickly early and slows near 98%. It only completes to 100% when the scraper finishes. If it stays near 98% for more than 2–3 minutes, the browser extension tab may have closed or the browser server may have crashed. Check that the browser server is still running and the extension is connected.
 
+**Extension download link not working**
+Make sure the browser server is running (`npm run browser-server`). If the link in chat doesn't respond, navigate to `/api/extension/download` directly in your browser — this downloads `atlas-extension.zip` without going through the chat interface.
+
+**Token budget exceeded — requests blocked**
+Your monthly USD budget has been reached and LLM requests are being blocked. Contact your admin to raise your per-user limit via the Token Usage tab in `/admin/users`, or wait for the budget to reset at the start of the next calendar month.
+
 ---
 
 ## System Requirements
@@ -540,17 +595,19 @@ The bar uses an asymptotic easing curve — it fills quickly early and slows nea
 | Service | Where | Purpose |
 |---|---|---|
 | PostgreSQL 14+ | Docker (`atlas-db`) | Primary database |
-| Redis 6+ | Docker (`atlas-redis`) | Rate limiting, pending jobs, queues |
+| Redis 6+ | Docker (`atlas-redis`) | Rate limiting, pending jobs, queues, agent state (memory, onboarding, loop guard, personality, continuity) |
 | Chrome/Edge browser | Host machine | Extension + scraping |
 | Atlas Chrome extension | Loaded in browser | Job scraping bridge |
 
 ### Production Server (hosting Atlas for multiple users)
-| Users (concurrent) | RAM | CPU | DB connections | Redis |
-|---|---|---|---|---|
-| 1–5 | 2 GB | 2 vCPU | 10 | 128 MB |
-| 5–25 | 4 GB | 4 vCPU | 25 | 256 MB |
-| 25–50 | 8 GB | 8 vCPU | 50 | 512 MB |
-| 50–100 | 16 GB | 16 vCPU | 100 | 1 GB |
+| Concurrent chat users | Concurrent scrapers | RAM | CPU | DB connections | Redis |
+|---|---|---|---|---|---|
+| up to 10 | up to 5 | 2 GB | 2 vCPU | 35 | 256 MB |
+| up to 30 | up to 15 | 4 GB | 4 vCPU | 35 | 512 MB |
+| up to 60 | up to 20 | 8 GB | 8 vCPU | 50 + PgBouncer | 1 GB |
+| 100+ | 40+ | 16 GB | 16 vCPU | PgBouncer + read replica | 2 GB |
+
+Agent state (memory, onboarding, loop guard, personality, continuity, profile sync) is stored in Redis — no in-process Maps. Multiple Next.js instances can share state safely.
 
 Set `BROWSER_POOL_SIZE` to match the number of concurrent browser sessions you expect. Default is `2`.
 

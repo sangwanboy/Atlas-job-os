@@ -16,7 +16,10 @@ import {
   CheckCircle,
   XCircle,
   Clock,
+  Coins,
+  Save,
 } from "lucide-react";
+import type { UserUsageSummary } from "@/lib/services/agent/token-budget-manager";
 
 type UserEntry = {
   id: string;
@@ -63,7 +66,7 @@ function timeAgo(iso: string) {
 export default function AdminUsersPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<"users" | "feedback">("users");
+  const [activeTab, setActiveTab] = useState<"users" | "feedback" | "tokens">("users");
 
   // Users state
   const [users, setUsers] = useState<UserEntry[]>([]);
@@ -82,6 +85,16 @@ export default function AdminUsersPage() {
   const [feedbackRefreshing, setFeedbackRefreshing] = useState(false);
   const [feedbackFilter, setFeedbackFilter] = useState<FeedbackFilterKey>("all");
   const [feedbackSearch, setFeedbackSearch] = useState("");
+
+  // Token usage state
+  const [tokenUsers, setTokenUsers] = useState<UserUsageSummary[]>([]);
+  const [tokenTotals, setTokenTotals] = useState({ inputTokens: 0, outputTokens: 0, costUsd: 0 });
+  const [globalLimit, setGlobalLimit] = useState(10);
+  const [tokenLoading, setTokenLoading] = useState(false);
+  const [tokenRefreshing, setTokenRefreshing] = useState(false);
+  const [editingLimit, setEditingLimit] = useState<string | null>(null);
+  const [editLimitValue, setEditLimitValue] = useState("");
+  const [savingLimit, setSavingLimit] = useState(false);
 
   const isAdmin = session?.user?.role === "ADMIN";
 
@@ -112,6 +125,54 @@ export default function AdminUsersPage() {
       setFeedbackRefreshing(false);
     }
   }, []);
+
+  const fetchTokenUsage = useCallback(async (showSpinner = false) => {
+    if (showSpinner) setTokenRefreshing(true);
+    else setTokenLoading(true);
+    try {
+      const res = await fetch("/api/admin/token-usage");
+      if (res.ok) {
+        const data = await res.json();
+        setTokenUsers(data.users ?? []);
+        setTokenTotals(data.totals ?? { inputTokens: 0, outputTokens: 0, costUsd: 0 });
+        setGlobalLimit(data.globalLimit ?? 10);
+      }
+    } catch { /* ignore */ } finally {
+      setTokenLoading(false);
+      setTokenRefreshing(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === "tokens" && tokenUsers.length === 0 && !tokenLoading) {
+      void fetchTokenUsage();
+    }
+  }, [activeTab, tokenUsers.length, tokenLoading, fetchTokenUsage]);
+
+  const handleSetLimit = async (userId: string) => {
+    const val = parseFloat(editLimitValue);
+    if (isNaN(val) || val <= 0) return;
+    setSavingLimit(true);
+    try {
+      const res = await fetch("/api/admin/user-limit", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId, monthlyBudgetUsd: val }),
+      });
+      if (res.ok) {
+        showToast("User limit updated", "success");
+        setEditingLimit(null);
+        setEditLimitValue("");
+        await fetchTokenUsage(true);
+      } else {
+        showToast("Failed to update limit", "error");
+      }
+    } catch {
+      showToast("Network error", "error");
+    } finally {
+      setSavingLimit(false);
+    }
+  };
 
   useEffect(() => {
     if (status === "loading") return;
@@ -199,7 +260,7 @@ export default function AdminUsersPage() {
             Admin
           </h2>
           <p className="mt-1 hidden text-sm text-muted sm:block">
-            Manage users and review beta feedback.
+            Manage users, review feedback, and monitor token usage.
           </p>
         </div>
         {activeTab === "users" && (
@@ -231,9 +292,19 @@ export default function AdminUsersPage() {
           <button
             onClick={() => void fetchFeedback(true)}
             disabled={feedbackRefreshing}
-            className="flex items-center gap-2 rounded-xl border border-white/60 bg-white/75 px-3 py-2 text-sm font-semibold text-muted transition hover:bg-white hover:text-text disabled:opacity-50"
+            className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm font-semibold text-slate-400 transition hover:bg-white/10 hover:text-slate-200 disabled:opacity-40"
           >
             <RefreshCw className={`h-4 w-4 ${feedbackRefreshing ? "animate-spin" : ""}`} />
+            Refresh
+          </button>
+        )}
+        {activeTab === "tokens" && (
+          <button
+            onClick={() => void fetchTokenUsage(true)}
+            disabled={tokenRefreshing}
+            className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm font-semibold text-slate-400 transition hover:bg-white/10 hover:text-slate-200 disabled:opacity-40"
+          >
+            <RefreshCw className={`h-4 w-4 ${tokenRefreshing ? "animate-spin" : ""}`} />
             Refresh
           </button>
         )}
@@ -260,12 +331,21 @@ export default function AdminUsersPage() {
           }`}
         >
           <MessageSquare className="h-3.5 w-3.5" />
-          Beta Feedback
+          Feedback
           {feedbackTotal > 0 && (
             <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${activeTab === "feedback" ? "bg-white/20 text-white" : "bg-cyan-100 dark:bg-cyan-500/20 text-cyan-700 dark:text-cyan-300"}`}>
               {feedbackTotal}
             </span>
           )}
+        </button>
+        <button
+          onClick={() => setActiveTab("tokens")}
+          className={`flex items-center gap-1.5 rounded-lg px-4 py-1.5 text-sm font-semibold transition ${
+            activeTab === "tokens" ? "bg-cyan-500 text-white shadow-sm" : "text-muted hover:text-text"
+          }`}
+        >
+          <Coins className="h-3.5 w-3.5" />
+          Token Usage
         </button>
       </div>
 
@@ -453,6 +533,159 @@ export default function AdminUsersPage() {
               </div>
             )}
           </div>
+        </div>
+      )}
+
+      {/* ── Token Usage Tab ── */}
+      {activeTab === "tokens" && (
+        <div className="flex-1 overflow-y-auto min-h-0 pb-6">
+          {tokenLoading ? (
+            <div className="space-y-3">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="panel animate-pulse p-4">
+                  <div className="h-6 w-48 rounded bg-slate-200 dark:bg-white/10 mb-2" />
+                  <div className="h-4 w-full rounded bg-slate-200 dark:bg-white/10" />
+                </div>
+              ))}
+            </div>
+          ) : (
+            <>
+              {/* Summary cards */}
+              <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4">
+                <div className="panel p-4 text-center">
+                  <p className="text-xs text-muted">Total Tokens Used</p>
+                  <p className="mt-1 text-2xl font-extrabold">
+                    {tokenTotals.inputTokens + tokenTotals.outputTokens >= 1000
+                      ? `${((tokenTotals.inputTokens + tokenTotals.outputTokens) / 1000).toFixed(1)}k`
+                      : tokenTotals.inputTokens + tokenTotals.outputTokens}
+                  </p>
+                  <p className="text-[10px] text-muted">This month</p>
+                </div>
+                <div className="panel p-4 text-center">
+                  <p className="text-xs text-muted">Total Cost</p>
+                  <p className="mt-1 text-2xl font-extrabold text-cyan-600">${tokenTotals.costUsd.toFixed(4)}</p>
+                  <p className="text-[10px] text-muted">All users combined</p>
+                </div>
+                <div className="panel p-4 text-center">
+                  <p className="text-xs text-muted">Global Limit</p>
+                  <p className="mt-1 text-2xl font-extrabold">${globalLimit.toFixed(2)}</p>
+                  <p className="text-[10px] text-muted">Per user/month</p>
+                </div>
+                <div className="panel p-4 text-center">
+                  <p className="text-xs text-muted">Over 80% Budget</p>
+                  <p className="mt-1 text-2xl font-extrabold text-amber-600">
+                    {tokenUsers.filter((u) => u.usagePercent >= 80).length}
+                  </p>
+                  <p className="text-[10px] text-muted">Users at risk</p>
+                </div>
+              </div>
+
+              {/* Per-user table */}
+              <div className="panel overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-white/10 text-left text-xs font-bold uppercase tracking-wider text-muted">
+                        <th className="px-4 py-3">User</th>
+                        <th className="px-4 py-3 text-right">Input</th>
+                        <th className="px-4 py-3 text-right">Output</th>
+                        <th className="px-4 py-3 text-right">Cost</th>
+                        <th className="px-4 py-3 text-right">Limit</th>
+                        <th className="px-4 py-3 w-40">Usage</th>
+                        <th className="px-4 py-3">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {tokenUsers.map((u) => {
+                        const barColor =
+                          u.usagePercent >= 100 ? "bg-red-500" :
+                          u.usagePercent >= 80 ? "bg-amber-500" :
+                          u.usagePercent >= 60 ? "bg-yellow-500" :
+                          "bg-emerald-500";
+                        const rowBg =
+                          u.usagePercent >= 100 ? "bg-red-500/5" :
+                          u.usagePercent >= 80 ? "bg-amber-500/5" :
+                          "";
+                        return (
+                          <tr key={u.userId} className={`border-b border-white/5 ${rowBg}`}>
+                            <td className="px-4 py-3">
+                              <p className="font-semibold truncate max-w-[180px]">{u.name || "—"}</p>
+                              <p className="text-[11px] text-muted truncate max-w-[180px]">{u.email}</p>
+                            </td>
+                            <td className="px-4 py-3 text-right font-mono text-xs">
+                              {u.inputTokens >= 1000 ? `${(u.inputTokens / 1000).toFixed(1)}k` : u.inputTokens}
+                            </td>
+                            <td className="px-4 py-3 text-right font-mono text-xs">
+                              {u.outputTokens >= 1000 ? `${(u.outputTokens / 1000).toFixed(1)}k` : u.outputTokens}
+                            </td>
+                            <td className="px-4 py-3 text-right font-mono text-xs font-bold">
+                              ${u.costUsd.toFixed(4)}
+                            </td>
+                            <td className="px-4 py-3 text-right font-mono text-xs">
+                              ${u.limitUsd.toFixed(2)}
+                            </td>
+                            <td className="px-4 py-3">
+                              <div className="flex items-center gap-2">
+                                <div className="h-1.5 flex-1 rounded-full bg-white/10 overflow-hidden">
+                                  <div className={`h-full rounded-full transition-all ${barColor}`} style={{ width: `${Math.min(u.usagePercent, 100)}%` }} />
+                                </div>
+                                <span className={`text-[11px] font-bold tabular-nums ${
+                                  u.usagePercent >= 100 ? "text-red-400" :
+                                  u.usagePercent >= 80 ? "text-amber-400" :
+                                  "text-muted"
+                                }`}>
+                                  {u.usagePercent}%
+                                </span>
+                              </div>
+                            </td>
+                            <td className="px-4 py-3">
+                              {editingLimit === u.userId ? (
+                                <div className="flex items-center gap-1">
+                                  <span className="text-xs text-muted">$</span>
+                                  <input
+                                    type="number"
+                                    step="0.5"
+                                    min="0.5"
+                                    value={editLimitValue}
+                                    onChange={(e) => setEditLimitValue(e.target.value)}
+                                    className="w-16 rounded-lg border border-white/20 bg-white/5 px-2 py-1 text-xs font-mono focus:border-cyan-500 focus:outline-none"
+                                    autoFocus
+                                    onKeyDown={(e) => { if (e.key === "Enter") handleSetLimit(u.userId); if (e.key === "Escape") setEditingLimit(null); }}
+                                  />
+                                  <button
+                                    onClick={() => handleSetLimit(u.userId)}
+                                    disabled={savingLimit}
+                                    className="rounded-lg bg-cyan-500/20 p-1 text-cyan-400 hover:bg-cyan-500/30 disabled:opacity-50"
+                                  >
+                                    <Save className="h-3 w-3" />
+                                  </button>
+                                  <button onClick={() => setEditingLimit(null)} className="rounded-lg p-1 text-muted hover:text-text">
+                                    <X className="h-3 w-3" />
+                                  </button>
+                                </div>
+                              ) : (
+                                <button
+                                  onClick={() => { setEditingLimit(u.userId); setEditLimitValue(String(u.limitUsd)); }}
+                                  className="rounded-lg border border-white/10 px-2.5 py-1 text-[11px] font-semibold text-muted hover:border-cyan-500/30 hover:text-cyan-400 transition"
+                                >
+                                  Set Limit
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                      {tokenUsers.length === 0 && (
+                        <tr>
+                          <td colSpan={7} className="px-4 py-8 text-center text-sm text-muted">No usage data for this month.</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </>
+          )}
         </div>
       )}
 

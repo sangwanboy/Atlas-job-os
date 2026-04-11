@@ -5,8 +5,9 @@ import type { Route } from "next";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { Bot, BriefcaseBusiness, ChartNoAxesCombined, FileText, LayoutDashboard, Megaphone, Settings, Users, PanelLeftClose, PanelLeftOpen, X } from "lucide-react";
+import { Bot, BriefcaseBusiness, ChartNoAxesCombined, FileText, LayoutDashboard, Megaphone, MessageSquareHeart, Settings, Users, PanelLeftClose, PanelLeftOpen, X } from "lucide-react";
 import type { RuntimeSettingsResponse } from "@/types/settings";
+import { FeedbackWidget } from "@/components/feedback/FeedbackWidget";
 
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -32,6 +33,7 @@ export function AppSidebar({ mobileOpen, onClose, collapsed, onToggleCollapse }:
   const [runtime, setRuntime] = useState<RuntimeSettingsResponse | null>(null);
   const [sidebarTokens, setSidebarTokens] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -144,8 +146,18 @@ export function AppSidebar({ mobileOpen, onClose, collapsed, onToggleCollapse }:
                 </>
               )}
             </nav>
+            {/* Feedback — collapsed */}
+            <div className="mt-auto pt-4 w-full">
+              <button
+                onClick={() => setFeedbackOpen(true)}
+                title="Send Feedback"
+                className="flex items-center justify-center rounded-xl border border-transparent p-2 w-full text-muted hover:border-violet-500/30 hover:bg-violet-500/10 hover:text-violet-400 transition"
+              >
+                <MessageSquareHeart className="h-4 w-4" />
+              </button>
+            </div>
             {/* Beta badge — collapsed */}
-            <div className="mt-auto pt-4 flex justify-start pl-1">
+            <div className="pt-2 flex justify-start pl-1">
               <span
                 title="Beta v1.0"
                 className="flex h-7 w-7 items-center justify-center rounded-full border border-cyan-500/40 bg-cyan-500/20 text-cyan-400 text-[10px] font-black animate-pulse"
@@ -240,8 +252,18 @@ export function AppSidebar({ mobileOpen, onClose, collapsed, onToggleCollapse }:
                 <p className="mt-1">Draft-first outreach, user-approved actions, token-aware agents.</p>
               </div>
             </div>
+            {/* Feedback — expanded */}
+            <div className="mt-auto pt-4">
+              <button
+                onClick={() => setFeedbackOpen(true)}
+                className="group flex w-full items-center gap-3 rounded-xl border border-transparent px-3 py-2 text-sm font-semibold text-muted transition hover:border-violet-500/30 dark:hover:border-violet-500/20 hover:bg-violet-50 dark:hover:bg-violet-500/10 hover:text-violet-600 dark:hover:text-violet-400"
+              >
+                <MessageSquareHeart className="h-4 w-4" />
+                Feedback
+              </button>
+            </div>
             {/* Beta badge — expanded */}
-            <div className="mt-auto pt-4 flex justify-start">
+            <div className="pt-2 flex justify-start">
               <span className="inline-flex items-center gap-1.5 rounded-full border border-cyan-500/40 bg-cyan-500/10 px-3 py-1 text-[10px] font-bold tracking-widest text-cyan-400 animate-pulse">
                 <span className="h-1.5 w-1.5 rounded-full bg-cyan-400" />
                 BETA · v1.0
@@ -309,14 +331,27 @@ export function AppSidebar({ mobileOpen, onClose, collapsed, onToggleCollapse }:
             </>
           )}
         </nav>
+        {/* Feedback — mobile */}
+        <div className="mt-auto pt-4">
+          <button
+            onClick={() => setFeedbackOpen(true)}
+            className="group flex w-full items-center gap-3 rounded-xl border border-transparent px-3 py-2 text-sm font-semibold text-muted transition hover:border-violet-500/30 dark:hover:border-violet-500/20 hover:bg-violet-50 dark:hover:bg-violet-500/10 hover:text-violet-600 dark:hover:text-violet-400"
+          >
+            <MessageSquareHeart className="h-4 w-4" />
+            Feedback
+          </button>
+        </div>
         {/* Beta badge — mobile */}
-        <div className="mt-auto pt-6 flex justify-start">
+        <div className="pt-2 flex justify-start">
           <span className="inline-flex items-center gap-1.5 rounded-full border border-cyan-500/40 bg-cyan-500/10 px-3 py-1 text-[10px] font-bold tracking-widest text-cyan-400 animate-pulse">
             <span className="h-1.5 w-1.5 rounded-full bg-cyan-400" />
             BETA · v1.0
           </span>
         </div>
       </aside>
+
+      {/* Feedback modal */}
+      <FeedbackWidget externalOpen={feedbackOpen} onClose={() => setFeedbackOpen(false)} />
     </>
   );
 }

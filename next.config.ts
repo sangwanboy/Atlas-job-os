@@ -8,7 +8,7 @@ const nextConfig: NextConfig = {
     ignoreDuringBuilds: true,
   },
   experimental: {
-    optimizePackageImports: ["recharts", "lucide-react", "@radix-ui/react-icons"],
+    optimizePackageImports: ["recharts", "lucide-react", "@radix-ui/react-icons", "framer-motion", "@tanstack/react-table", "next-auth"],
   },
   async headers() {
     return [

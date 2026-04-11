@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { FileText, Search, CheckCircle } from "lucide-react";
+import { FileText, FileOutput, Search, CheckCircle } from "lucide-react";
 
 const STEPS = [
   {
@@ -12,12 +12,18 @@ const STEPS = [
   },
   {
     n: "02",
-    icon: Search,
-    title: "Agent searches 24/7",
-    desc: "Set your preferences and let Atlas loose. It searches LinkedIn, Indeed, and 100+ boards continuously — scoring every role against your CV.",
+    icon: FileOutput,
+    title: "Generate tailored CVs",
+    desc: "Choose from 3 UK-style templates — Classic, Modern, or ATS-Optimised. Download as DOCX, ready for any application.",
   },
   {
     n: "03",
+    icon: Search,
+    title: "Agent searches 6 platforms",
+    desc: "Atlas searches LinkedIn, Indeed, Reed, TotalJobs, Adzuna & CV-Library simultaneously — scoring every role against your CV in real time.",
+  },
+  {
+    n: "04",
     icon: CheckCircle,
     title: "Review & approve outreach",
     desc: "Top matches land in your pipeline. Atlas drafts personalised Gmail outreach — you approve with one click, or it sends automatically.",
@@ -37,7 +43,7 @@ export function HowItWorks() {
       >
         <p className="text-xs font-bold uppercase tracking-widest text-cyan-400">How It Works</p>
         <h2 className="mt-3 text-4xl font-black text-white lg:text-5xl">
-          Three steps. Zero effort.
+          Four steps. Zero effort.
         </h2>
         <p className="mx-auto mt-4 max-w-xl text-lg text-white/50">
           From upload to interview in days, not months.
@@ -45,7 +51,12 @@ export function HowItWorks() {
       </motion.div>
 
       <div className="mt-16 relative">
-        <div className="grid gap-6 lg:grid-cols-3">
+        {/* Connecting line — desktop only */}
+        <div className="absolute top-[140px] left-0 right-0 hidden lg:block">
+          <div className="mx-12 h-px bg-gradient-to-r from-cyan-500/0 via-cyan-500/30 to-cyan-500/0" />
+        </div>
+
+        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
           {STEPS.map((step, i) => {
             const Icon = step.icon;
             return (
@@ -54,7 +65,7 @@ export function HowItWorks() {
                 initial={{ opacity: 0, y: 40 }}
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true, margin: "-60px" }}
-                transition={{ duration: 0.6, delay: i * 0.15 }}
+                transition={{ duration: 0.6, delay: i * 0.12 }}
                 className="relative rounded-2xl border border-white/[0.08] bg-white/[0.04] p-8 backdrop-blur"
               >
                 <p className="text-6xl font-black text-white/10">{step.n}</p>
@@ -63,6 +74,13 @@ export function HowItWorks() {
                 </div>
                 <h3 className="mt-4 text-lg font-bold text-white">{step.title}</h3>
                 <p className="mt-2 text-sm leading-relaxed text-white/50">{step.desc}</p>
+
+                {/* Step connector dot — desktop only */}
+                {i < STEPS.length - 1 && (
+                  <div className="absolute -right-[13px] top-[140px] z-10 hidden lg:block">
+                    <div className="h-[10px] w-[10px] rounded-full border-2 border-cyan-500/40 bg-[hsl(218_32%_8%)]" />
+                  </div>
+                )}
               </motion.div>
             );
           })}

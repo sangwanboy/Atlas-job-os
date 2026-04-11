@@ -4,13 +4,10 @@ import { agentStore } from "@/lib/services/agent/agent-store";
 import { getAiProvider } from "@/lib/services/ai/provider";
 import { agentProfileSyncStore, type SyncedAgentProfile } from "@/lib/services/agent/agent-profile-sync";
 import type { AgentRuntimeContext } from "@/lib/services/agent/types";
+import { getRedis } from "@/lib/redis";
 
-const globalState = globalThis as unknown as {
-  onboardingStateMap?: Map<string, boolean>;
-};
-
-const onboardingState = globalState.onboardingStateMap ?? new Map<string, boolean>();
-globalState.onboardingStateMap = onboardingState;
+const ONBOARDING_COMPLETE_TTL = 2592000; // 30 days
+const ONBOARDING_DRAFT_TTL = 604800; // 7 days
 
 type OnboardingProfileDraft = {
   desiredName: string;
@@ -80,12 +77,56 @@ const steps: OnboardingStep[] = [
   },
 ];
 
-const conversationalState = globalThis as unknown as {
-  onboardingDraftMap?: Map<string, OnboardingDraftState>;
-};
+function completeKey(stateKey: string): string {
+  return `onboarding:complete:${stateKey}`;
+}
 
-const onboardingDraftMap = conversationalState.onboardingDraftMap ?? new Map<string, OnboardingDraftState>();
-conversationalState.onboardingDraftMap = onboardingDraftMap;
+function draftKey(stateKey: string): string {
+  return `onboarding:draft:${stateKey}`;
+}
+
+async function getIsComplete(stateKey: string): Promise<boolean> {
+  try {
+    const val = await getRedis().get(completeKey(stateKey));
+    return val === "1";
+  } catch {
+    return false;
+  }
+}
+
+async function setIsComplete(stateKey: string, value: boolean): Promise<void> {
+  try {
+    await getRedis().setex(completeKey(stateKey), ONBOARDING_COMPLETE_TTL, value ? "1" : "0");
+  } catch {
+    // fail-open
+  }
+}
+
+async function getDraft(stateKey: string): Promise<OnboardingDraftState | null> {
+  try {
+    const raw = await getRedis().get(draftKey(stateKey));
+    if (!raw) return null;
+    return JSON.parse(raw) as OnboardingDraftState;
+  } catch {
+    return null;
+  }
+}
+
+async function setDraft(stateKey: string, draft: OnboardingDraftState): Promise<void> {
+  try {
+    await getRedis().setex(draftKey(stateKey), ONBOARDING_DRAFT_TTL, JSON.stringify(draft));
+  } catch {
+    // fail-open
+  }
+}
+
+async function deleteDraft(stateKey: string): Promise<void> {
+  try {
+    await getRedis().del(draftKey(stateKey));
+  } catch {
+    // fail-open
+  }
+}
 
 function getStateKey(agentId: string, userId?: string): string {
   return `${agentId}::${userId ?? "anonymous"}`;
@@ -153,7 +194,8 @@ export class OnboardingManager {
     userId?: string,
   ): Promise<{ reply: string; completed: boolean; profileSnapshot?: SyncedAgentProfile }> {
     const stateKey = getStateKey(context.agentId, userId);
-    const existing = onboardingDraftMap.get(stateKey) ?? { step: 0, profile: initialDraft() };
+    const existingDraft = await getDraft(stateKey);
+    const existing = existingDraft ?? { step: 0, profile: initialDraft() };
     const normalizedInput = normalizeText(context.message);
 
     if (/(^|\s)(skip onboarding|skip|use defaults)(\s|$)/i.test(normalizedInput)) {
@@ -174,8 +216,8 @@ export class OnboardingManager {
         rememberNotes: existing.profile.rememberNotes || "Prefer high-fit roles and concise updates.",
       };
 
-      onboardingState.set(stateKey, true);
-      onboardingDraftMap.delete(stateKey);
+      void setIsComplete(stateKey, true).catch(() => {});
+      void deleteDraft(stateKey).catch(() => {});
 
       const syncedProfile = await this.synthesizeFinalProfile(context, profile);
       agentProfileSyncStore.upsertProfile(syncedProfile);
@@ -212,8 +254,8 @@ export class OnboardingManager {
 
     const currentStep = steps[existing.step];
     if (!currentStep) {
-      onboardingState.set(stateKey, true);
-      onboardingDraftMap.delete(stateKey);
+      void setIsComplete(stateKey, true).catch(() => {});
+      void deleteDraft(stateKey).catch(() => {});
       return {
         reply: "Onboarding is already complete.",
         completed: true,
@@ -247,10 +289,10 @@ export class OnboardingManager {
 
     const nextStepIndex = existing.step + 1;
     if (nextStepIndex < steps.length) {
-      onboardingDraftMap.set(stateKey, {
+      void setDraft(stateKey, {
         step: nextStepIndex,
         profile: profileAfterDerived,
-      });
+      }).catch(() => {});
 
       return {
         reply: steps[nextStepIndex].question,
@@ -259,8 +301,8 @@ export class OnboardingManager {
       };
     }
 
-    onboardingState.set(stateKey, true);
-    onboardingDraftMap.delete(stateKey);
+    void setIsComplete(stateKey, true).catch(() => {});
+    void deleteDraft(stateKey).catch(() => {});
 
     const syncedProfile = await this.synthesizeFinalProfile(context, profile);
     agentProfileSyncStore.upsertProfile(syncedProfile);
@@ -293,7 +335,7 @@ export class OnboardingManager {
           metadata: { source: "onboarding-chat-llm-synced" },
         });
       } catch {
-        // DB is optional in local fallback mode; onboarding state remains in memory.
+        // DB is optional in local fallback mode; onboarding state remains in Redis.
       }
     }
 

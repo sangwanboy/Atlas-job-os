@@ -205,12 +205,6 @@ const ChatMessageItem = React.memo(({
                 >
                   {content}
                 </ReactMarkdown>
-                {isStreaming && (
-                  <span
-                    aria-hidden="true"
-                    className="inline-block w-[2px] h-[0.85em] rounded-sm bg-slate-500 dark:bg-slate-400 align-middle ml-0.5 opacity-80 animate-[blink_0.9s_step-start_infinite]"
-                  />
-                )}
               </div>
             )}
 

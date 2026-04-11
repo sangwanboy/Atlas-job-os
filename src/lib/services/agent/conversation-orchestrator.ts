@@ -1468,6 +1468,7 @@ export class ConversationOrchestrator {
         systemPrompt,
         userPrompt: [
           `--- AGENT INTERNAL STATE ---\n${internalStateStr}\n----------------------------`,
+          historyMessageCount === 0 ? `[NEW_USER_FIRST_MESSAGE: true] — This is the user's very first message. Follow the New User Startup protocol in your operating rules.` : null,
           formattedHistory ? `Previous history:\n${formattedHistory}` : null,
           `User request: ${context.message}`,
           toolContext ? `Tool results:\n${toolContext}` : null,
@@ -1653,16 +1654,17 @@ export class ConversationOrchestrator {
       void continuitySyncService.syncLayersWithLlm(agent.id, sid, continuityUpdate, effectiveUserId);
     }
 
-    return { 
-      reply: normalizedReply, 
-      shouldWriteSummary: true, 
-      loopPrevented: false, 
-      tokenBudgetWarning: budget.warning, 
-      sessionId: effectiveSessionId, 
-      onboardingCompleted: true, 
-      continuitySynced: true, 
-      rehydrated, 
-      toolLogs, 
+    console.timeEnd("Turn Execution");
+    return {
+      reply: normalizedReply,
+      shouldWriteSummary: true,
+      loopPrevented: false,
+      tokenBudgetWarning: budget.warning,
+      sessionId: effectiveSessionId,
+      onboardingCompleted: true,
+      continuitySynced: true,
+      rehydrated,
+      toolLogs,
       pendingJobs: effectiveSessionId ? await getPendingJobs(effectiveSessionId).catch(() => null) : null
     };
   }

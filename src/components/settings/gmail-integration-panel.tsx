@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Mail, ShieldCheck, MailWarning, RefreshCw, Unplug, CheckCircle2, Key, ChevronDown, ChevronUp, Save } from "lucide-react";
 import { useSearchParams } from "next/navigation";
+import { useSession } from "next-auth/react";
 
 type SyncStatus = "IDLE" | "SYNCING" | "ERROR";
 
@@ -35,6 +36,8 @@ export function GmailIntegrationPanel() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [isDisconnecting, setIsDisconnecting] = useState(false);
   const [showApiConfig, setShowApiConfig] = useState(false);
+  const { data: session } = useSession();
+  const isAdmin = (session?.user as any)?.role === "ADMIN";
   const searchParams = useSearchParams();
   const errorParam = searchParams?.get("error");
   const successParam = searchParams?.get("success");
@@ -153,59 +156,61 @@ export function GmailIntegrationPanel() {
         </div>
       )}
 
-      {/* API Configuration Manual Entry */}
-      <div className="mt-4 overflow-hidden rounded-xl border border-white/20 bg-bg/40 backdrop-blur-md transition-all">
-        <button 
-          onClick={() => setShowApiConfig(!showApiConfig)}
-          className="flex w-full items-center justify-between p-4 text-left hover:bg-white/5"
-        >
-          <div className="flex items-center gap-3">
-            <Key className="h-5 w-5 text-accent" />
-            <span className="font-bold">API Configuration (Developer Setup)</span>
-          </div>
-          {showApiConfig ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-        </button>
-        
-        {showApiConfig && (
-          <div className="border-t border-white/10 p-4 space-y-4">
-            <p className="text-xs text-muted">Paste your Google OAuth Client credentials here. Use <code className="bg-slate-800 px-1 rounded text-accent">http://127.0.0.1:3000/api/integrations/gmail/callback</code> as your redirect URI in Google Cloud Console.</p>
-            
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold uppercase tracking-wider text-muted">Client ID</label>
-                <input 
-                  type="text" 
-                  value={config.googleClientId}
-                  onChange={(e) => setConfig({ ...config, googleClientId: e.target.value })}
-                  placeholder="xxxx-xxxx.apps.googleusercontent.com"
-                  className="w-full rounded-lg border border-white/20 bg-slate-900/50 p-2.5 text-sm font-mono focus:border-accent focus:ring-1 focus:ring-accent"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold uppercase tracking-wider text-muted">Client Secret</label>
-                <input 
-                  type="password" 
-                  value={config.googleClientSecret}
-                  onChange={(e) => setConfig({ ...config, googleClientSecret: e.target.value })}
-                  placeholder="GOCSPX-xxxxxxxx"
-                  className="w-full rounded-lg border border-white/20 bg-slate-900/50 p-2.5 text-sm font-mono focus:border-accent focus:ring-1 focus:ring-accent"
-                />
-              </div>
+      {/* API Configuration — admin only */}
+      {isAdmin && (
+        <div className="mt-4 overflow-hidden rounded-xl border border-white/20 bg-bg/40 backdrop-blur-md transition-all">
+          <button
+            onClick={() => setShowApiConfig(!showApiConfig)}
+            className="flex w-full items-center justify-between p-4 text-left hover:bg-white/5"
+          >
+            <div className="flex items-center gap-3">
+              <Key className="h-5 w-5 text-accent" />
+              <span className="font-bold">API Configuration (Developer Setup)</span>
             </div>
+            {showApiConfig ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+          </button>
 
-            <div className="flex justify-end">
-              <button 
-                onClick={handleSaveConfig}
-                disabled={isSaving}
-                className="rounded-lg bg-glass px-4 py-2 text-sm font-bold flex items-center gap-2 hover:bg-bg/60 disabled:opacity-50"
-              >
-                {isSaving ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
-                Save API Config
-              </button>
+          {showApiConfig && (
+            <div className="border-t border-white/10 p-4 space-y-4">
+              <p className="text-xs text-muted">Paste your Google OAuth Client credentials here. Use <code className="bg-slate-800 px-1 rounded text-accent">http://127.0.0.1:3000/api/integrations/gmail/callback</code> as your redirect URI in Google Cloud Console.</p>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold uppercase tracking-wider text-muted">Client ID</label>
+                  <input
+                    type="text"
+                    value={config.googleClientId}
+                    onChange={(e) => setConfig({ ...config, googleClientId: e.target.value })}
+                    placeholder="xxxx-xxxx.apps.googleusercontent.com"
+                    className="w-full rounded-lg border border-white/20 bg-slate-900/50 p-2.5 text-sm font-mono focus:border-accent focus:ring-1 focus:ring-accent"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold uppercase tracking-wider text-muted">Client Secret</label>
+                  <input
+                    type="password"
+                    value={config.googleClientSecret}
+                    onChange={(e) => setConfig({ ...config, googleClientSecret: e.target.value })}
+                    placeholder="GOCSPX-xxxxxxxx"
+                    className="w-full rounded-lg border border-white/20 bg-slate-900/50 p-2.5 text-sm font-mono focus:border-accent focus:ring-1 focus:ring-accent"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end">
+                <button
+                  onClick={handleSaveConfig}
+                  disabled={isSaving}
+                  className="rounded-lg bg-glass px-4 py-2 text-sm font-bold flex items-center gap-2 hover:bg-bg/60 disabled:opacity-50"
+                >
+                  {isSaving ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                  Save API Config
+                </button>
+              </div>
             </div>
-          </div>
-        )}
-      </div>
+          )}
+        </div>
+      )}
 
       <div className="mt-6 rounded-xl border bg-bg p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xl">
         <div className="flex items-center gap-4">

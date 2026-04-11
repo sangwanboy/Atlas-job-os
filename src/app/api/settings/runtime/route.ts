@@ -8,11 +8,13 @@ export async function GET() {
     const authResult = await requireAuth();
     if (isNextResponse(authResult)) return authResult;
     const { userId, role } = authResult;
-    // Admins read global settings; users read their own (falls back to global)
-    const settingsKey = role === "ADMIN" ? "global" : userId;
-    const settings = await runtimeSettingsStore.getAsync(settingsKey);
+    // All users read global settings — admin controls all caps/limits platform-wide
+    // Users write to their own key for user-specific prefs, but always read the global config
+    void userId;
+    void role;
+    const settings = await runtimeSettingsStore.getAsync("global");
     return NextResponse.json(settings, {
-      headers: { "Cache-Control": "private, max-age=60, stale-while-revalidate=300" },
+      headers: { "Cache-Control": "private, no-store" },
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to load runtime settings";
