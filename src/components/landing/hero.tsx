@@ -83,9 +83,14 @@ export function Hero({ slotsRemaining, isWaitlist }: HeroProps) {
         <motion.div variants={container} initial="hidden" animate="show">
           {/* Label */}
           <motion.div variants={fadeUp}>
-            <span className="inline-flex items-center gap-2 rounded-full border border-cyan-500/25 bg-cyan-500/10 px-3 py-1.5 text-xs font-bold tracking-widest text-cyan-400">
-              <span className="h-1.5 w-1.5 rounded-full bg-cyan-400 animate-pulse" />
-              AI-Powered Job Search Agent
+            <span className="inline-flex flex-col rounded-full border border-cyan-500/25 bg-cyan-500/10 px-4 py-2 text-cyan-400">
+              <span className="inline-flex items-center gap-2 text-xs font-bold tracking-widest">
+                <span className="h-1.5 w-1.5 rounded-full bg-cyan-400 animate-pulse" />
+                AI-Powered Job Search Agent
+              </span>
+              <span className="mt-0.5 pl-3.5 text-[10px] font-medium tracking-wide text-cyan-400/60">
+                (Currently supports desktop &amp; laptop browsers only)
+              </span>
             </span>
           </motion.div>
 
@@ -120,7 +125,11 @@ export function Hero({ slotsRemaining, isWaitlist }: HeroProps) {
           {/* CTAs */}
           <motion.div variants={fadeUp} className="mt-6 flex flex-wrap items-center gap-4">
             <Link
-              href="/register"
+              href={isWaitlist
+                ? "https://docs.google.com/forms/d/e/1FAIpQLSeykVjbix1h-F97RxR6fpuNDvgp-YXIFciUg_NuJt-15cY6nA/viewform?usp=publish-editor"
+                : "/register"}
+              target={isWaitlist ? "_blank" : undefined}
+              rel={isWaitlist ? "noopener noreferrer" : undefined}
               className="group inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-cyan-500 to-cyan-600 px-6 py-3.5 text-base font-bold text-white shadow-xl shadow-cyan-500/25 hover:shadow-cyan-500/40 hover:brightness-110 transition-all"
             >
               {isWaitlist ? "Join Waitlist" : "Claim Your Spot"}

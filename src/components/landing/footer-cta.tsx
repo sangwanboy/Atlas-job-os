@@ -55,7 +55,11 @@ export function FooterCta({ slotsRemaining, isWaitlist }: FooterCtaProps) {
           >
             <BetaCounter slotsRemaining={slotsRemaining} isWaitlist={isWaitlist} />
             <Link
-              href="/register"
+              href={isWaitlist
+                ? "https://docs.google.com/forms/d/e/1FAIpQLSeykVjbix1h-F97RxR6fpuNDvgp-YXIFciUg_NuJt-15cY6nA/viewform?usp=publish-editor"
+                : "/register"}
+              target={isWaitlist ? "_blank" : undefined}
+              rel={isWaitlist ? "noopener noreferrer" : undefined}
               className="group inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-cyan-500 to-cyan-600 px-8 py-4 text-base font-bold text-white shadow-xl shadow-cyan-500/25 hover:shadow-cyan-500/40 hover:brightness-110 transition-all mt-2"
             >
               {isWaitlist ? "Join the Waitlist" : "Claim Your Beta Spot"}

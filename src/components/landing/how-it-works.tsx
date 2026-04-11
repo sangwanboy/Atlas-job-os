@@ -50,12 +50,7 @@ export function HowItWorks() {
         </p>
       </motion.div>
 
-      <div className="mt-16 relative">
-        {/* Connecting line — desktop only */}
-        <div className="absolute top-[140px] left-0 right-0 hidden lg:block">
-          <div className="mx-12 h-px bg-gradient-to-r from-cyan-500/0 via-cyan-500/30 to-cyan-500/0" />
-        </div>
-
+      <div className="mt-16">
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
           {STEPS.map((step, i) => {
             const Icon = step.icon;
@@ -74,13 +69,6 @@ export function HowItWorks() {
                 </div>
                 <h3 className="mt-4 text-lg font-bold text-white">{step.title}</h3>
                 <p className="mt-2 text-sm leading-relaxed text-white/50">{step.desc}</p>
-
-                {/* Step connector dot — desktop only */}
-                {i < STEPS.length - 1 && (
-                  <div className="absolute -right-[13px] top-[140px] z-10 hidden lg:block">
-                    <div className="h-[10px] w-[10px] rounded-full border-2 border-cyan-500/40 bg-[hsl(218_32%_8%)]" />
-                  </div>
-                )}
               </motion.div>
             );
           })}

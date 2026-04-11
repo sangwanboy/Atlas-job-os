@@ -28,8 +28,9 @@ export function Platforms() {
           Searches 6 major UK job platforms simultaneously.
         </h2>
         <p className="mx-auto mt-3 max-w-xl text-sm text-white/45">
-          Real browser-based search with no API limits. Atlas uses your Chrome extension or stealth
-          Playwright to search exactly like a human — no bot detection, no restrictions.
+          We&apos;re a purely agentic job search platform — we don&apos;t store any job listings internally.
+          All job traffic goes directly to the original platforms. We only keep track of the jobs
+          in your personal pipeline, so every application stays yours.
         </p>
       </motion.div>
 
